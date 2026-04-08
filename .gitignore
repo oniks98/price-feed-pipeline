@@ -19,6 +19,10 @@ data/markets/epicenter_feed.xml
 data/markets/epicenter_feed_prev.xml
 data/markets/rozetka_feed.xml
 data/markets/rozetka_feed_prev.xml
+data/viatec/viatec_old.csv
+data/secur/secur_old.csv
+data/viatec/import_products.csv
+data/secur/import_products.csv
 
 # Логи
 *.log
