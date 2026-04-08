@@ -1,0 +1,49 @@
+supplier_name_substring;supplier_attribute;supplier_value_pattern;pattern_type;prom_attribute;prom_attribute_unit_template;prom_value_template;priority;is_active;category_id;rule_kind;notes
+(?i).*\bнеуправляемый\b.*;;;regex;Тип комутатора;;Некерований;1;TRUE;71903;name;Російська назва
+(?i).*\bуправляемый\b.*;;;regex;Тип комутатора;;Керований рівня 2;2;TRUE;71903;name;Російська назва
+(?i).*\bL2\+?\b.*;;;regex;Тип комутатора;;Керований рівня 2+;3;TRUE;71903;name;L2 або L2+
+(?i).*\bL3\b.*;;;regex;Тип комутатора;;Керований рівня 3 і вище;4;TRUE;71903;name;
+(?i).*\bPoE\+?\+?\b.*;;;regex;Підтримка PoE;;Так;5;TRUE;71903;name;PoE, PoE+, PoE++
+(?i).*\b(\d+)\s*порт.*;;;regex;Загальна кількість портів;;$1 ;6;TRUE;71903;name;Екстракція кількості портів російською
+(?i).*\bRM\b.*;;;regex;Можливість монтажу в стійку;;Так;7;TRUE;71903;name;RM вказує на rack mount
+(?i).*\bнастольный\b.*;;;regex;Форм-фактор;;Настільний;8;TRUE;71903;name;Російська назва
+(?i).*\b10G\b.*;;;regex;Тип портів;;10Gigabit Ethernet;9;TRUE;71903;name;10G у назві
+(?i).*\bSFP\+\b.*;;;regex;Наявність портів SFP+;;Так;10;TRUE;71903;name;SFP+ у назві
+(?i).*\b1000M\b.*;;;regex;Тип портів;;Gigabit Ethernet;11;TRUE;71903;name;1000M у назві
+;Порти \(DownLink\);"(\d+)\s*x?\s*RJ45";regex;Загальна кількість портів;;$1 ;12;TRUE;71903;extract;
+;Порти \(Uplink\);.*SFP\+.*;regex;Наявність портів SFP+;;Так;13;TRUE;71903;attribute;
+;Порти \(DownLink\);.*SFP\+.*;regex;Наявність портів SFP+;;Так;14;TRUE;71903;attribute;
+;Порти \(Uplink\);.*SFP(?!\+).*;regex;Наявність портів SFP;;Так;15;TRUE;71903;attribute;
+;Порти \(DownLink\);.*SFP(?!\+).*;regex;Наявність портів SFP;;Так;16;TRUE;71903;attribute;
+;Ethernet порти \(Uplink\);.*SFP\+.*;regex;Наявність портів SFP+;;Так;17;TRUE;71903;attribute;
+;Ethernet порти \(DownLink\);.*SFP\+.*;regex;Наявність портів SFP+;;Так;18;TRUE;71903;attribute;
+;Порти \(DownLink\);.*10/100M.*;regex;Тип портів;;Fast Ethernet;19;TRUE;71903;attribute;
+;Порти \(DownLink\);.*10/100/1000M.*;regex;Тип портів;;Gigabit Ethernet;20;TRUE;71903;attribute;
+;Порти \(DownLink\);.*1000M.*;regex;Тип портів;;Gigabit Ethernet;21;TRUE;71903;attribute;
+;Порти \(DownLink\);.*10G.*;regex;Тип портів;;10Gigabit Ethernet;22;TRUE;71903;attribute;
+;Порти \(DownLink\);.*SFP.*;regex;Тип портів;;SFP;23;TRUE;71903;attribute;
+;Ethernet порти \(DownLink\);.*10/100M.*;regex;Тип портів;;Fast Ethernet;24;TRUE;71903;attribute;
+;Ethernet порти \(DownLink\);.*10/100/1000M.*;regex;Тип портів;;Gigabit Ethernet;25;TRUE;71903;attribute;
+;Ethernet порти \(DownLink\);.*1000M.*;regex;Тип портів;;Gigabit Ethernet;26;TRUE;71903;attribute;
+;Форм-фактор;.*стійку.*;regex;Можливість монтажу в стійку;;Так;27;TRUE;71903;attribute;
+;Форм-фактор;.*настіл.*;regex;Форм-фактор;;Настільний;28;TRUE;71903;attribute;
+;Форм-фактор;.*зовнішн.*;regex;Форм-фактор;;Зовнішній;29;TRUE;71903;attribute;
+;Форм-фактор;.*навісн.*;regex;Форм-фактор;;Навісний;30;TRUE;71903;attribute;
+;Колір;.*біл.*;regex;Колір;;Білий;31;TRUE;71903;attribute;
+;Колір;.*сір.*;regex;Колір;;Сірий;32;TRUE;71903;attribute;
+;Операційна система;.*RouterOS.*;regex;Тип комутатора;;Керований рівня 3 і вище;33;TRUE;71903;attribute;
+;Операційна система;.*SwOS.*;regex;Тип комутатора;;Smart;34;TRUE;71903;attribute;
+;Споживана потужність PoE;.*бюджет.*;regex;Підтримка PoE;;Так;35;TRUE;71903;attribute;
+;Протоколи PoE;.*IEEE\s*802\.3af.*;regex;Підтримка PoE;;Так;36;TRUE;71903;attribute;
+;Протоколи PoE;.*IEEE\s*802\.3at.*;regex;Підтримка PoE;;Так;37;TRUE;71903;attribute;
+;Протоколи PoE;.*802\.3bt.*;regex;Підтримка PoE;;Так;38;TRUE;71903;attribute;
+;Протоколи PoE;.*802\.3af.*;regex;Підтримка PoE;;Так;39;TRUE;71903;attribute;
+;Протоколи PoE;.*802\.3at.*;regex;Підтримка PoE;;Так;40;TRUE;71903;attribute;
+;Живлення від PoE-in;.*;regex;Заживлення від портів (PoE на виході);;Так;41;TRUE;71903;attribute;Будь-яке значення
+;Розміри;^440\s*[xх×].*;regex;Можливість монтажу в стійку;;Так;42;TRUE;71903;attribute;Стандартна ширина 19" rack
+;Розміри;^443\s*[xх×].*;regex;Можливість монтажу в стійку;;Так;43;TRUE;71903;attribute;Стандартна ширина 19" rack
+;Керування;.*Layer\s*2.*;regex;Тип комутатора;;Керований рівня 2;44;TRUE;71903;attribute;
+;Керування;.*Layer\s*3.*;regex;Тип комутатора;;Керований рівня 3 і вище;45;TRUE;71903;attribute;
+;Керування;.*L2(?!\+).*;regex;Тип комутатора;;Керований рівня 2;46;TRUE;71903;attribute;
+;Керування;.*L2\+.*;regex;Тип комутатора;;Керований рівня 2+;47;TRUE;71903;attribute;
+;Керування;.*L3.*;regex;Тип комутатора;;Керований рівня 3 і вище;48;TRUE;71903;attribute;

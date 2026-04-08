@@ -1,0 +1,3 @@
+"""
+Secur spiders package
+"""

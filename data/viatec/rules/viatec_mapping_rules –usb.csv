@@ -1,0 +1,36 @@
+supplier_name_substring;supplier_attribute;supplier_value_pattern;pattern_type;prom_attribute;prom_attribute_unit_template;prom_value_template;priority;is_active;category_id;rule_kind;notes
+.*\b(USB\s*3\.2)\b.*;;;regex;Інтерфейс;;USB 3.2;1;TRUE;70501;name;Визначення USB 3.2 з назви
+.*\b(USB\s*3\.1)\b.*;;;regex;Інтерфейс;;USB 3.1 Gen 1;2;TRUE;70501;name;Визначення USB 3.1 з назви
+.*\b(USB\s*3\.0)\b.*;;;regex;Інтерфейс;;USB 3.0;3;TRUE;70501;name;Визначення USB 3.0 з назви
+.*\b(USB\s*2\.0)\b.*;;;regex;Інтерфейс;;USB 2.0;4;TRUE;70501;name;Визначення USB 2.0 з назви
+.*\b(USB\s*Type-C|USB-C|Type-C)\b.*;;;regex;Інтерфейс;;USB Type-C;5;TRUE;70501;name;Визначення USB Type-C з назви
+.*\b(micro-USB|microUSB)\b.*;;;regex;Інтерфейс;;micro-USB;6;TRUE;70501;name;Визначення micro-USB з назви
+.*\b(\d+)\s*GB\b.*;;;regex;Об'єм пам'яті;GB;$1 ;10;TRUE;70501;name;Екстракція ємності GB з назви
+.*\b(\d+)\s*[ГгGg][БбBb]\b.*;;;regex;Об'єм пам'яті;GB;$1 ;11;TRUE;70501;name;Екстракція ємності Гб/ГБ з назви
+.*\b(Black|Чорний)\b.*;;;regex;Колір;;Чорний;20;TRUE;70501;name;Визначення чорного кольору з назви
+.*\b(White|Білий)\b.*;;;regex;Колір;;Білий;21;TRUE;70501;name;Визначення білого кольору з назви
+.*\b(Red|Червоний)\b.*;;;regex;Колір;;Червоний;22;TRUE;70501;name;Визначення червоного кольору з назви
+.*\b(Blue|Синій)\b.*;;;regex;Колір;;Синій;23;TRUE;70501;name;Визначення синього кольору з назви
+.*\b(Green|Зелений)\b.*;;;regex;Колір;;Зелений;24;TRUE;70501;name;Визначення зеленого кольору з назви
+.*\b(Yellow|Жовтий)\b.*;;;regex;Колір;;Жовтий;25;TRUE;70501;name;Визначення жовтого кольору з назви
+.*\b(Orange|Помаранчевий)\b.*;;;regex;Колір;;Помаранчевий;26;TRUE;70501;name;Визначення помаранчевого кольору з назви
+.*\b(Pink|Рожевий)\b.*;;;regex;Колір;;Рожевий;27;TRUE;70501;name;Визначення рожевого кольору з назви
+.*\b(Gold|Golden|Золотистий)\b.*;;;regex;Колір;;Золотистий;28;TRUE;70501;name;Визначення золотистого кольору з назви
+.*\b(Silver|Сірий|Grey|Gray)\b.*;;;regex;Колір;;Сірий;29;TRUE;70501;name;Визначення сірого кольору з назви
+;Ємність;(\d+)\s*ГБ;regex;Об'єм пам'яті;GB;$1 ;50;TRUE;70501;extract;Екстракція ємності ГБ
+;Ємність;(\d+)\s*Гб;regex;Об'єм пам'яті;GB;$1 ;51;TRUE;70501;extract;Екстракція ємності Гб
+;Ємність;(\d+)\s*GB;regex;Об'єм пам'яті;GB;$1 ;52;TRUE;70501;extract;Екстракція ємності GB
+;Ємність;(\d+)\s*[ГгGg][БбBb];regex;Об'єм пам'яті;GB;$1 ;53;TRUE;70501;extract;Екстракція ємності Гб/ГБ/GB
+;Інтерфейс користувача;USB\s*Type-C;regex;Інтерфейс;;USB Type-C;60;TRUE;70501;attribute;Маппінг USB Type-C
+;Інтерфейс користувача;USB-C;regex;Інтерфейс;;USB Type-C;61;TRUE;70501;attribute;Маппінг USB-C
+;Інтерфейс користувача;Type-C;regex;Інтерфейс;;USB Type-C;62;TRUE;70501;attribute;Маппінг Type-C
+;Інтерфейс користувача;USB\s*3\.2;regex;Інтерфейс;;USB 3.2;63;TRUE;70501;attribute;Маппінг USB 3.2
+;Інтерфейс користувача;USB\s*3\.2\s*Gen\s*1;regex;Інтерфейс;;USB 3.2 Gen 1;64;TRUE;70501;attribute;Маппінг USB 3.2 Gen 1
+;Інтерфейс користувача;USB\s*3\.1;regex;Інтерфейс;;USB 3.1 Gen 1;65;TRUE;70501;attribute;Маппінг USB 3.1
+;Інтерфейс користувача;USB\s*3\.1\s*Gen\s*1;regex;Інтерфейс;;USB 3.1 Gen 1;66;TRUE;70501;attribute;Маппінг USB 3.1 Gen 1
+;Інтерфейс користувача;USB\s*3\.0;regex;Інтерфейс;;USB 3.0;67;TRUE;70501;attribute;Маппінг USB 3.0
+;Інтерфейс користувача;USB\s*2\.0;regex;Інтерфейс;;USB 2.0;68;TRUE;70501;attribute;Маппінг USB 2.0
+;Інтерфейс користувача;micro-USB;regex;Інтерфейс;;micro-USB;69;TRUE;70501;attribute;Маппінг micro-USB
+;Інтерфейс користувача;microUSB;regex;Інтерфейс;;micro-USB;70;TRUE;70501;attribute;Маппінг microUSB
+;Форм-фактор;Брелок;exact;Особливості;;Флешка-брелок;80;TRUE;70501;attribute;Маппінг форм-фактора брелок
+;Форм-фактор;брелок;exact;Особливості;;Флешка-брелок;81;TRUE;70501;attribute;Маппінг форм-фактора брелок (lowercase)

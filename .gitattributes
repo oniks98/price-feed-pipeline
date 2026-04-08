@@ -1,0 +1,6 @@
+# Авто-генеровані великі файли
+*.csv -diff -merge
+*.xml -diff -merge
+
+# JSON — тільки без diff (merge залишаємо для sku_map.json)
+*.json -diff

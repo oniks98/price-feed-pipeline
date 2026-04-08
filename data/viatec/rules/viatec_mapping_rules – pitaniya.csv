@@ -1,0 +1,45 @@
+﻿supplier_name_substring;supplier_attribute;supplier_value_pattern;pattern_type;prom_attribute;prom_attribute_unit_template;prom_value_template;priority;is_active;category_id;rule_kind;notes
+.*\b(імпульсн|импульсн|pulse|switching)\b.*;;;regex;Тип блоку живлення;;Імпульсний;1;TRUE;14191103;extract;Extract from product name
+.*\b(трансформаторн|transformer)\b.*;;;regex;Тип блоку живлення;;Трансформаторний;2;TRUE;14191103;extract;Extract from product name
+.*\bDIN\b.*;;;regex;Тип монтажу;;На DIN рейку;3;TRUE;14191103;extract;Extract DIN mounting from name
+.*\bIP\s*(\d{2})\b.*;;;regex;Ступінь захисту IP;;$1 ;4;TRUE;14191103;extract;Extract IP rating from name
+.*\b(\d+)\s*[ВВ]\s*/?\s*(\d+(?:\.\d+)?)\s*[АA]\b.*;;;regex;Вихідна напруга;В;$1 ;5;TRUE;14191103;extract;Extract voltage from name (e.g. "12В 5А")
+.*\b(\d+)\s*[ВВ]\s*/?\s*(\d+(?:\.\d+)?)\s*[АA]\b.*;;;regex;"Вихідний струм, не більше";А;$2 ;6;TRUE;14191103;extract;Extract current from name (e.g. "12В 5А")
+.*\b(\d+)\s*[ВВ][тТ]\b.*;;;regex;Вихідна потужність;Вт;$1 ;7;TRUE;14191103;extract;Extract power in Watts from name
+.*\bAC/DC\b.*;;;regex;Тип;;Побутової;8;TRUE;14191103;extract;AC/DC indicates consumer type
+;Тип пристрою;.*(?:імпульсн|импульсн|імпульсний блок).*;regex;Тип блоку живлення;;Імпульсний;9;TRUE;14191103;attribute;
+;Тип пристрою;.*трансформаторн.*;regex;Тип блоку живлення;;Трансформаторний;10;TRUE;14191103;attribute;
+;Тип пристрою;.*перфорован.*;regex;Тип корпусу;;Незакритий;11;TRUE;14191103;attribute;
+;Вхідна напруга;.*?(\d+(?:\.\d+)?)\s*(?:В|V)?\s*[\-–—~]\s*(\d+(?:\.\d+)?)\s*(?:В|V).*;regex;Мінімальна вхідна напруга;В;$1 ;12;TRUE;14191103;attribute;Extract min input voltage range
+;Вхідна напруга;.*?(\d+(?:\.\d+)?)\s*(?:В|V)?\s*[\-–—~]\s*(\d+(?:\.\d+)?)\s*(?:В|V).*;regex;Максимальна вхідна напруга;В;$2 ;13;TRUE;14191103;attribute;Extract max input voltage range
+;Вхідна напруга;.*?\b(\d+(?:\.\d+)?)\s*(?:В|V)\b.*;regex;Мінімальна вхідна напруга;В;$1 ;14;TRUE;14191103;attribute;Extract single input voltage as min
+;Вхідна напруга;.*?\b(\d+(?:\.\d+)?)\s*(?:В|V)\b.*;regex;Максимальна вхідна напруга;В;$1 ;15;TRUE;14191103;attribute;Extract single input voltage as max
+;Вихідна напруга;.*?(?:AC|DC)?\s*(\d+(?:\.\d+)?)\s*[\-–—~]\s*(\d+(?:\.\d+)?)\s*(?:В|V).*;regex;Вихідна напруга;В;$2 ;16;TRUE;14191103;attribute;Extract min output voltage
+;Вихідна напруга;.*?(?:AC|DC)?\s*(\d+(?:\.\d+)?)\s*(?:В|V).*;regex;Вихідна напруга;В;$1 ;17;TRUE;14191103;attribute;Extract max output voltage as main
+;Сила струму на виході;.*?(\d+(?:\.\d+)?)\s*[АA]\b.*;regex;"Вихідний струм, не більше";А;$1 ;18;TRUE;14191103;attribute;Extract output current
+;Сила струму на виході;.*не більше\s*(\d+(?:\.\d+)?)\s*[АA].*;regex;"Вихідний струм, не більше";А;$1 ;19;TRUE;14191103;attribute;Extract "not more than" current
+;Потужність;.*?(\d+(?:\.\d+)?)\s*[ВВ][тТ]\b.*;regex;Вихідна потужність;Вт;$1 ;20;TRUE;14191103;attribute;Extract power in Watts
+;Потужність;^\s*(\d+(?:\.\d+)?)\s*$;regex;Вихідна потужність;Вт;$1 ;21;TRUE;14191103;attribute;Extract numeric-only power value
+;Потужність;(\d+\.?\d*)\s*[ВВ][тТ];regex;Вихідна потужність;Вт;$1 ;22;TRUE;14191103;attribute;
+;Робоча температура;(-?\d+)\s*(?:°?\s*C)?\s*(?:-|–|—|~)\s*\+?\d+;regex;Мінімальна робоча температура;град.;$1 ;23;TRUE;14191103;attribute;Extract min operating temperature
+;Робоча температура;-?\d+\s*(?:°?\s*C)?\s*(?:-|–|—|~)\s*\+?(-?\d+);regex;Максимальна робоча температура;град.;$1 ;24;TRUE;14191103;attribute;Extract max operating temperature
+;Розміри;([0-9]+(?:\.[0-9]+)?)\s*[xх×]\s*([0-9]+(?:\.[0-9]+)?)\s*[xх×]\s*([0-9]+(?:\.[0-9]+)?)\s*(мм);regex;Довжина;$4 ;$3 ;25;TRUE;14191103;attribute;Extract length from dimensions WxHxD
+;Розміри;([0-9]+(?:\.[0-9]+)?)\s*[xх×]\s*([0-9]+(?:\.[0-9]+)?)\s*[xх×]\s*([0-9]+(?:\.[0-9]+)?)\s*(мм);regex;Ширина;$4 ;$1 ;26;TRUE;14191103;attribute;Extract width from dimensions WxHxD
+;Розміри;([0-9]+(?:\.[0-9]+)?)\s*[xх×]\s*([0-9]+(?:\.[0-9]+)?)\s*[xх×]\s*([0-9]+(?:\.[0-9]+)?)\s*(мм);regex;Висота;$4 ;$2 ;27;TRUE;14191103;attribute;Extract height from dimensions WxHxD
+;"Розміри, мм";([0-9]+(?:\.[0-9]+)?)\s*[xх×]\s*([0-9]+(?:\.[0-9]+)?)\s*[xх×]\s*([0-9]+(?:\.[0-9]+)?);regex;Довжина;мм;$3 ;28;TRUE;14191103;attribute;Extract weight in kg
+;"Розміри, мм";([0-9]+(?:\.[0-9]+)?)\s*[xх×]\s*([0-9]+(?:\.[0-9]+)?)\s*[xх×]\s*([0-9]+(?:\.[0-9]+)?);regex;Ширина;мм;$1 ;29;TRUE;14191103;attribute;Extract weight in g
+;"Розміри, мм";([0-9]+(?:\.[0-9]+)?)\s*[xх×]\s*([0-9]+(?:\.[0-9]+)?)\s*[xх×]\s*([0-9]+(?:\.[0-9]+)?);regex;Висота;мм;$2 ;30;TRUE;14191103;attribute;Extract warranty period in months
+;Вага;([0-9\.]+)\s*г;regex;Вага;г;$1 г;31;TRUE;14191103;attribute;
+;Вага;([0-9\.]+)\s*кг;regex;Вага;г;$1 кг;32;TRUE;14191103;attribute;
+;Строк гарантії;([0-9]+)\s*(міс)\.?;regex;Гарантійний термін;$2 ;$1 ;33;TRUE;14191103;attribute;
+;Материал;.*(?:метал|металл|metal).*;regex;Матеріал корпусу;;Метал;34;TRUE;14191103;attribute;
+;Материал;.*(?:пластик|plastic).*;regex;Матеріал корпусу;;Пластик;35;TRUE;14191103;attribute;
+;Материал;.*(?:алюміній|алюминий|aluminum).*;regex;Матеріал корпусу;;Алюміній;36;TRUE;14191103;attribute;
+;Захист від короткого замикання;.*(?:Підтримує|поддерживает|yes|так).*;regex;Захист від короткого замикання;;Так;37;TRUE;14191103;attribute;
+;Захист від перенапруги;.*(?:Підтримує|поддерживает|yes|так).*;regex;Захист від перевантаження;;Так;38;TRUE;14191103;attribute;
+;Кількість каналів навантаження;.*?(\d+)\s*(?:канал|channel).*;regex;Тип;;Промисловий;39;TRUE;14191103;attribute;Multi-channel indicates industrial type
+;Кількість каналів навантаження;^\s*(\d+)\s*$;regex;Тип;;Промисловий;40;TRUE;14191103;attribute;Numeric channel count
+;Особенности;.*IP\s*(\d{2}).*;regex;Ступінь захисту IP;;$1 ;41;TRUE;14191103;attribute;Extract IP rating from features
+;Класс защиты;.*IP\s*(\d{2}).*;regex;Ступінь захисту IP;;$1 ;42;TRUE;14191103;attribute;Extract IP rating from protection class
+;Додаткові характеристики;.*на DIN.*;regex;Тип монтажу;;На DIN рейку;43;TRUE;14191103;attribute;DIN mounting from additional info
+;Тип устройства;.*DIN.*;regex;Тип монтажу;;На DIN рейку;44;TRUE;14191103;attribute;DIN mounting from device type

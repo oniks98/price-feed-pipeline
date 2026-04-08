@@ -1,0 +1,66 @@
+supplier_name_substring;supplier_attribute;supplier_value_pattern;pattern_type;prom_attribute;prom_attribute_unit_template;prom_value_template;priority;is_active;category_id;rule_kind;notes
+;Тип карт;.*Mifare.*;regex;Підтримка стандартів;;Mifare;1;TRUE;3030;attribute;Картки Mifare
+;Тип карт;.*Mifare\s+Classic\s+1k.*;regex;Підтримка стандартів;;Mifare Classic 1k;2;TRUE;3030;attribute;Картки Mifare Classic 1k
+;Тип карт;.*Mifare\s+4k\s+Classic.*;regex;Підтримка стандартів;;Mifare 4k Classic;3;TRUE;3030;attribute;Картки Mifare 4k Classic
+;Тип карт;.*Mifare\s+DESFire.*;regex;Підтримка стандартів;;Mifare DESFire EV1;4;TRUE;3030;attribute;Картки Mifare DESFire
+;Тип карт;.*Mifare\s+Ultralight.*;regex;Підтримка стандартів;;Mifare Ultralight (U1X);5;TRUE;3030;attribute;Картки Mifare Ultralight
+;Тип карт;.*EM\s+Marine.*;regex;Підтримка стандартів;;EM Marine;6;TRUE;3030;attribute;Картки EM Marine
+;Тип карт;.*EM4100.*;regex;Підтримка стандартів;;EM Marine (EM4100);7;TRUE;3030;attribute;Картки EM4100
+;Тип карт;.*EM4102.*;regex;Підтримка стандартів;;EM Marine (EM4102);8;TRUE;3030;attribute;Картки EM4102
+;Тип карт;.*HID.*;regex;Підтримка стандартів;;HID;9;TRUE;3030;attribute;Картки HID
+;Тип карт;.*iCLASS.*;regex;Підтримка стандартів;;iCLASS;10;TRUE;3030;attribute;Картки iCLASS
+;Тип карт;.*M1.*;regex;Підтримка стандартів;;Mifare Standars 1k (S50);11;TRUE;3030;attribute;Картки M1
+;Тип карт;.*IC.*;regex;Підтримка стандартів;;Mifare;12;TRUE;3030;attribute;IC картки
+;Тип карт;.*ID.*;regex;Підтримка стандартів;;EM Marine;13;TRUE;3030;attribute;ID картки
+;Тип карт;.*DESfire.*;regex;Підтримка стандартів;;Mifare DESFire EV1;14;TRUE;3030;attribute;DESfire картки
+;Інтерфейс зв'язку;.*RJ\s*-?\s*45.*;regex;Протокол зв'язку;;RJ-45;15;TRUE;3030;attribute;RJ-45 інтерфейс
+;Інтерфейс зв'язку;.*RJ45.*;regex;Протокол зв'язку;;RJ-45;16;TRUE;3030;attribute;RJ45 інтерфейс
+;Інтерфейс зв'язку;.*10\s*/\s*100\s*M.*;regex;Протокол зв'язку;;RJ-45;17;TRUE;3030;attribute;Ethernet 10/100M
+;Інтерфейс зв'язку;.*Ethernet.*;regex;Протокол зв'язку;;RJ-45;18;TRUE;3030;attribute;Ethernet інтерфейс
+;Інтерфейс зв'язку;.*RS\s*-?\s*485.*;regex;Протокол зв'язку;;RS-485;19;TRUE;3030;attribute;RS-485 інтерфейс
+;Інтерфейс зв'язку;.*RS485.*;regex;Протокол зв'язку;;RS-485;20;TRUE;3030;attribute;RS485 інтерфейс
+;Інтерфейс зв'язку;.*RS\s*-?\s*232.*;regex;Протокол зв'язку;;RS-232;21;TRUE;3030;attribute;RS-232 інтерфейс
+;Інтерфейс зв'язку;.*RS232.*;regex;Протокол зв'язку;;RS-232;22;TRUE;3030;attribute;RS232 інтерфейс
+;Інтерфейс зв'язку;.*USB.*;regex;Протокол зв'язку;;USB 2.0;23;TRUE;3030;attribute;USB інтерфейс
+;Інтерфейс зв'язку;.*TCP\s*/\s*IP.*;regex;Протокол зв'язку;;TCP;24;TRUE;3030;attribute;TCP/IP інтерфейс
+;Інтерфейс підключення;.*Wiegand.*;regex;Протокол зв'язку;;Wiegand;25;TRUE;3030;attribute;Wiegand інтерфейс
+;Інтерфейс підключення;.*RS\s*-?\s*485.*;regex;Протокол зв'язку;;RS-485;26;TRUE;3030;attribute;RS-485 підключення
+;Інтерфейси введення;.*Wiegand.*;regex;Протокол зв'язку;;Wiegand;27;TRUE;3030;attribute;Wiegand вхід
+;Інтерфейси введення;.*RS\s*-?\s*485.*;regex;Протокол зв'язку;;RS-485;28;TRUE;3030;attribute;RS-485 вхід
+;Підключення зовнішнього зчитувача;.*Wiegand.*;regex;Протокол зв'язку;;Wiegand;29;TRUE;3030;attribute;Wiegand зчитувач
+;Підключення зовнішнього зчитувача;.*RS\s*-?\s*485.*;regex;Протокол зв'язку;;RS-485;30;TRUE;3030;attribute;RS-485 зчитувач
+;Wi-Fi;.*(?:Wi\s*-?\s*Fi|802\.11).*;regex;Протокол зв'язку;;Wi-Fi;31;TRUE;3030;attribute;Wi-Fi підтримка
+;Wi-Fi;.*IEEE802\.11.*;regex;Протокол зв'язку;;Wi-Fi;32;TRUE;3030;attribute;IEEE 802.11
+;Wi-Fi;.*2\.4\s*ГГц.*;regex;Протокол зв'язку;;Wi-Fi;33;TRUE;3030;attribute;Wi-Fi 2.4 GHz
+;Дисплей;"(\d+(?:[.,]\d+)?)\s*[″""]";regex;Розмір монітора (дюйм);;$1;34;TRUE;3030;extract;Розмір дисплею в дюймах
+;Дисплей;.*TFT.*;regex;Монітор;;TFT;35;TRUE;3030;attribute;TFT дисплей
+;Дисплей;.*LCD.*;regex;Монітор;;LCD;36;TRUE;3030;attribute;LCD дисплей
+;Дисплей;.*IPS.*;regex;Монітор;;LCD TFT;37;TRUE;3030;attribute;IPS дисплей
+;Дисплей;.*сенсорн.*;regex;Монітор;;LCD TFT;38;TRUE;3030;attribute;Сенсорний дисплей
+;Дисплей;.*OLED.*;regex;Монітор;;OLED;39;TRUE;3030;attribute;OLED дисплей
+;Дисплей;(\d+)\s*[×xXх]\s*(\d+);regex;Роздільна здатність екрану;;$1×$2;40;TRUE;3030;extract;Роздільна здатність
+;Індикація станів;.*присутн.*;regex;Індикація;;Світлова/Звукова;41;TRUE;3030;attribute;Є індикація
+;Антісаботаж;.*(?:Підтримує|є).*;regex;Датчик злому;;Так;42;TRUE;3030;attribute;Антисаботаж присутній
+;Живлення;.*12\s*В.*;regex;Живлення;;Мережа 12В;43;TRUE;3030;attribute;Живлення 12В
+;Живлення;.*12\s*VDC.*;regex;Живлення;;Мережа 12В;44;TRUE;3030;attribute;Живлення 12VDC
+;Живлення;.*220\s*В.*;regex;Живлення;;Мережа 220В;45;TRUE;3030;attribute;Живлення 220В
+;Живлення;.*24\s*В.*;regex;Живлення;;Мережа 24В;46;TRUE;3030;attribute;Живлення 24В
+;Живлення;.*110\s*В.*;regex;Живлення;;Мережа 110В;47;TRUE;3030;attribute;Живлення 110В
+;Живлення;.*380\s*В.*;regex;Живлення;;Мережа 380В;48;TRUE;3030;attribute;Живлення 380В
+;Живлення;.*PoE.*;regex;Живлення;;Мережа 12В;49;TRUE;3030;attribute;PoE живлення
+;Живлення;.*USB.*;regex;Живлення;;Мережа 12В;50;TRUE;3030;attribute;USB живлення
+;Робоча температура;(-\d+)\s*[°C℃]\s*-\s*\+?(\d+)\s*[°C℃];regex;Мінімальна робоча температура (град.);;$1;51;TRUE;3030;extract;Мінімальна температура
+;Робоча температура;(-\d+)\s*[°C℃]\s*-\s*\+?(\d+)\s*[°C℃];regex;Максимальна робоча температура (град.);;$2;52;TRUE;3030;extract;Максимальна температура
+;Робоча температура;Від\s+(-?\d+)\s+до\s+\+?(-?\d+)\s*[°C℃];regex;Мінімальна робоча температура (град.);;$1;53;TRUE;3030;extract;Мінімальна температура (від-до)
+;Робоча температура;Від\s+(-?\d+)\s+до\s+\+?(-?\d+)\s*[°C℃];regex;Максимальна робоча температура (град.);;$2;54;TRUE;3030;extract;Максимальна температура (від-до)
+;Строк гарантії;(\d+)\s*міс;regex;Гарантійний термін (міс);;$1;55;TRUE;3030;extract;Гарантія в місяцях
+;Пам'ять облич;(\d+(?:\s*\d{3})*);regex;Кількість шаблонів особи;;$1;56;TRUE;3030;extract;Кількість облич
+;Пам'ять відбитків пальця;(\d+(?:\s*\d{3})*);regex;Кількість шаблонів відбитка пальця;;$1;57;TRUE;3030;extract;Кількість відбитків
+;Ступінь захисту;.*IP\s*65.*;regex;Індикація;;Світлова/Звукова;58;TRUE;3030;attribute;Ступінь захисту IP65
+;Інтерфейси введення;.*кнопка\s+виходу.*;regex;Інтеграція з системами і ПО;;Так;59;TRUE;3030;attribute;Інтеграція - кнопка виходу
+;Інтерфейси введення;.*дверний\s+контакт.*;regex;Інтеграція з системами і ПО;;Так;60;TRUE;3030;attribute;Інтеграція - дверний контакт
+;Інтерфейси виходу;.*замок.*;regex;Інтеграція з системами і ПО;;Так;61;TRUE;3030;attribute;Інтеграція - замок
+;Інтерфейси виходу;.*реле.*;regex;Інтеграція з системами і ПО;;Так;62;TRUE;3030;attribute;Інтеграція - реле
+;USB;.*USB.*;regex;Протокол зв'язку;;USB 2.0;63;TRUE;3030;attribute;USB підтримка
+;USB;.*USB\s+2\.0.*;regex;Протокол зв'язку;;USB 2.0;64;TRUE;3030;attribute;USB 2.0
+;USB;.*USB\s+3\.0.*;regex;Протокол зв'язку;;USB 3.0;65;TRUE;3030;attribute;USB 3.0

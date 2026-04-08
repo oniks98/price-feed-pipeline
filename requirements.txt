@@ -1,0 +1,19 @@
+# Core scraping
+scrapy>=2.11
+scrapy-playwright>=0.0.34
+
+# HTTP / parsing
+requests>=2.31
+lxml>=5.0
+brotli
+brotlicffi>=1.0.0
+
+# Browser automation (noindex script)
+playwright>=1.44
+
+# Env / credentials
+python-dotenv>=1.0
+
+# Data processing
+pandas>=2.0
+itemadapter>=0.7

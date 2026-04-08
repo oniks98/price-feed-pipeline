@@ -1,0 +1,64 @@
+supplier_name_substring;supplier_attribute;supplier_value_pattern;pattern_type;prom_attribute;prom_attribute_unit_template;prom_value_template;priority;is_active;category_id;rule_kind;notes
+.*\b(бездротов|wireless|беспроводн)\b.*;;;regex;Інтерфейс;;Бездротовий;1;TRUE;301305;extract;Wireless interface from name
+.*\b(провідн|дротов|wired|проводн)\b.*;;;regex;Інтерфейс;;Провідний;2;TRUE;301305;extract;Wired interface from name
+.*\bLCD\b.*;;;regex;Монітор;;LCD;3;TRUE;301305;extract;LCD display from name
+.*\b(\d+)\s*(?:кнопок|клавіш|button|key)\b.*;;;regex;Кількість кнопок;шт.;$1 ;5;TRUE;301305;extract;Button count from name
+.*\b(сенсорн|touch)\b.*;;;regex;Тип клавіатури;;Сенсорна;6;TRUE;301305;extract;Touch type from name
+.*\b(брелок|fob|remote)\b.*;;;regex;;;Пропустити;7;TRUE;301305;skip;Remote is not a keyboard type
+;Протокол зв'язку;.*(?:RS-232).*;regex;Протокол зв'язку;;RS-232;110;TRUE;301305;attribute;RS-232 protocol
+;Протокол зв'язку;.*(?:RS-422).*;regex;Протокол зв'язку;;RS-422;111;TRUE;301305;attribute;RS-422 protocol
+;Протокол зв'язку;.*(?:RS-485).*;regex;Протокол зв'язку;;RS-485;112;TRUE;301305;attribute;RS-485 protocol
+;Протокол зв'язку;.*(?:USB 2\.0|USB 3\.0|USB).*;regex;Протокол зв'язку;;USB 2.0;113;TRUE;301305;attribute;USB protocol
+;Протокол зв'язку;.*(?:Wi-Fi|Wireless).*;regex;Інтерфейс;;Бездротовий;114;TRUE;301305;attribute;Wireless from protocol
+;Інтерфейс;.*(?:Бездротов|беспроводн|Wireless).*;regex;Інтерфейс;;Бездротовий;115;TRUE;301305;attribute;Wireless from interface
+;Інтерфейс;.*(?:Провідн|Дротов|Wired|проводн).*;regex;Інтерфейс;;Провідний;116;TRUE;301305;attribute;Wired from interface
+;Колір;(?i)(Білий|Бежевий|Бірюзовий|Бордовий|Блакитний|Жовтий|Зелений|Золотистий|Коричневий|Червоний|Помаранчевий|Різні кольори|Рожевий|Салатний|Сірий|Синій|Теракотовий|Фіолетовий|Фуксія|Хакі|Чорний);regex;Колір;;$1 ;120;TRUE;301305;attribute;Color mapping case-insensitive
+;Підсвічування;(?:Так|так|підтримує|Підтримує);regex;Підсвічування;;Так;130;TRUE;301305;attribute;Backlight support
+;Індикація станів;.*(?:Підтримує|підтримує|підтримка).*;regex;Індикація режиму роботи;;Так;131;TRUE;301305;attribute;Status indication
+;Монітор;.*(LCD|TFT|LED|OLED|CRT).*;regex;Монітор;;$1 ;140;TRUE;301305;attribute;Display type
+;Кількість кнопок;(\d+);regex;Кількість кнопок;шт.;$1 ;150;TRUE;301305;attribute;Button count
+;Тип клавіатури;(Механічна|Сенсорна);regex;Тип клавіатури;;$1 ;160;TRUE;301305;attribute;Keyboard type
+;Монтаж;.*(?:Накладн|накладн|surface|Установка на гвинти).*;regex;Спосіб монтажу;;Накладний;161;TRUE;301305;attribute;Surface mount
+;Монтаж;.*(?:Врізн|врізн|flush).*;regex;Спосіб монтажу;;Врізний;162;TRUE;301305;attribute;Flush mount
+;Вбудований зчитувач;.*(?:ІЧ-зчитувач|ІК|IR).*;regex;Вбудований зчитувач;;ІЧ-зчитувач;170;TRUE;301305;attribute;IR reader
+;Вбудований зчитувач;.*(?:RFID|EM-Marine|Mifare|IC|Proximity).*;regex;Вбудований зчитувач;;Зчитувач електронний безконтактний;171;TRUE;301305;attribute;RFID reader type
+;Вбудовані динаміки;(\d+);regex;Вбудовані динаміки;;$1 ;180;TRUE;301305;attribute;Built-in speakers count
+;Вбудований мікрофон;.*(?:Так|так|підтримує|Підтримує).*;regex;Вбудований мікрофон;;Так;181;TRUE;301305;attribute;Built-in microphone
+;Живлення;.*\b12\s*[VВ]\b.*;regex;Живлення;;Мережа 12В;190;TRUE;301305;attribute;12V power supply
+;Живлення;.*\b24\s*[VВ]\b.*;regex;Живлення;;Мережа 24В;191;TRUE;301305;attribute;24V power supply
+;Живлення;.*\b110\s*[VВ]\b.*;regex;Живлення;;Мережа 110В;192;TRUE;301305;attribute;110V power supply
+;Живлення;.*\b220\s*[VВ]\b.*;regex;Живлення;;Мережа 220В;193;TRUE;301305;attribute;220V power supply
+;Живлення;.*\b380\s*[VВ]\b.*;regex;Живlення;;Мережа 380В;194;TRUE;301305;attribute;380V power supply
+;Живлення;.*(?:AA|AAA|CR\d+).*;regex;Живлення;;Батарейки одноразові;195;TRUE;301305;attribute;Battery power
+;Живлення;.*PoE.*;regex;Живлення;;PoE;196;TRUE;301305;attribute;PoE power
+;Живлення;.*(?:Акумулятор|акумулятор|rechargeable).*;regex;Живлення;;Акумулятор;197;TRUE;301305;attribute;Rechargeable battery
+;Напруга;(\d+\.?\d*)\s*[VВ];regex;Напруга;В;$1 ;200;TRUE;301305;attribute;Voltage value
+;Значення вихідного струму;(\d+\.?\d*)\s*[AА];regex;Значення вихідного струму;А;$1 ;201;TRUE;301305;attribute;Output current
+;Робоча температура;(-?\d+)\s*°?\s*[CС]?\s*[-–—~]+\s*\+?(-?\d+)\s*°?\s*[CС];regex;Мінімальна робоча температура;град.;$1 ;210;TRUE;301305;attribute;Min operating temperature
+;Робоча температура;(-?\d+)\s*°?\s*[CС]?\s*[-–—~]+\s*\+?(-?\d+)\s*°?\s*[CС];regex;Максимальна робоча температура;град.;$2 ;211;TRUE;301305;attribute;Max operating temperature
+;Розміри;([0-9\.]+)\s*[×x]\s*([0-9\.]+)\s*[×x]\s*([0-9\.]+)\s*мм;regex;Довжина;мм;$1 ;220;TRUE;301305;attribute;Length from dimensions
+;Розміри;([0-9\.]+)\s*[×x]\s*([0-9\.]+)\s*[×x]\s*([0-9\.]+)\s*мм;regex;Ширина;мм;$2 ;221;TRUE;301305;attribute;Width from dimensions
+;Розміри;([0-9\.]+)\s*[×x]\s*([0-9\.]+)\s*[×x]\s*([0-9\.]+)\s*мм;regex;Висота;мм;$3 ;222;TRUE;301305;attribute;Height from dimensions
+;Розміри;Ф\s*([0-9\.]+)\s*[×x]\s*([0-9\.]+)\s*мм;regex;Довжина;мм;$1 ;223;TRUE;301305;attribute;Diameter as length
+;Розміри;Ф\s*([0-9\.]+)\s*[×x]\s*([0-9\.]+)\s*мм;regex;Висота;мм;$2 ;224;TRUE;301305;attribute;Height for round devices
+;Вага;([0-9\.]+)\s*г\b;regex;Вага;г;$1 ;230;TRUE;301305;attribute;Weight in grams
+;Строк гарантії;(\d+)\s*міс\.?;regex;Гарантійний термін;міс;$1 ;240;TRUE;301305;attribute;Warranty period in months
+;Частотна характеристика;.*;regex;;;Пропустити;300;TRUE;301305;skip;Frequency not in prom attributes
+;Відстань передачі;.*;regex;;;Пропустити;301;TRUE;301305;skip;Transmission distance not in prom
+;Метод роботи;.*;regex;;;Пропустити;302;TRUE;301305;skip;Operation method details
+;Вологість;.*;regex;;;Пропустити;303;TRUE;301305;skip;Humidity not in prom attributes
+;Антісаботаж;.*;regex;;;Пропустити;304;TRUE;301305;skip;Anti-tamper not in prom
+;Захист від підбору пароля;.*;regex;;;Пропустити;305;TRUE;301305;skip;Password protection not in prom
+;Температурний сенсор;.*;regex;;;Пропустити;306;TRUE;301305;skip;Temperature sensor not in prom
+;Віддалене налаштування і тестування;.*;regex;;;Пропустити;307;TRUE;301305;skip;Remote config not in prom
+;Кількість в ящику;.*;regex;;;Пропустити;308;TRUE;301305;skip;Box quantity not needed
+;Розмір упаковки \(Ш х В х Г\);.*;regex;;;Пропустити;309;TRUE;301305;skip;Package dimensions not needed
+;Вага брутто;.*;regex;;;Пропустити;310;TRUE;301305;skip;Gross weight not needed
+;Сумісність;.*;regex;;;Пропустити;311;TRUE;301305;skip;Compatibility details
+;Кольоровість монітора;.*;regex;;;Пропустити;312;TRUE;301305;skip;Display color type not in prom
+;Розмір монітора;.*;regex;;;Пропустити;313;TRUE;301305;skip;Display size not in prom
+;Мінімальна довжина коду;.*;regex;;;Пропустити;314;TRUE;301305;skip;Min code length not in prom
+;Максимальна довжина коду;.*;regex;;;Пропустити;315;TRUE;301305;skip;Max code length not in prom
+;Вандалозахист;.*;regex;;;Пропустити;316;TRUE;301305;skip;Vandal protection not in prom
+;Додаткове джерело живлення;.*;regex;;;Пропустити;317;TRUE;301305;skip;Backup power not in prom
+;Вага;.*кг.*;regex;;;Пропустити;318;TRUE;301305;skip;Weight in kg - no arithmetic support

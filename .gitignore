@@ -1,0 +1,26 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Playwright
+pw-profile/
+
+# Tимчасові output файли (генеруються під час run)
+data/output/
+
+# Великі авто-генеровані файли — живуть в data-latest, не в main
+data/merged.csv
+data/merged_prev.csv
+data/markets/kasta_feed.xml
+data/markets/kasta_feed_prev.xml
+data/markets/epicenter_feed.xml
+data/markets/epicenter_feed_prev.xml
+data/markets/rozetka_feed.xml
+data/markets/rozetka_feed_prev.xml
+
+# Логи
+*.log
+error_*.png
+prom_noindex_fatal_hrefs.json

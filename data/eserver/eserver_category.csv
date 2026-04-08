@@ -1,0 +1,9 @@
+﻿№;Линк категории поставщика;channel;prefix;coefficient;Номер_групи;Назва_групи;Ідентифікатор_підрозділу;Посилання_підрозділу;Особисті_нотатки;Ярлик;Назва_Характеристики;Одиниця_виміру_Характеристики;Значення_Характеристики;Назва_Характеристики;Одиниця_виміру_Характеристики;Значення_Характеристики
+1;https://e-server.com.ua/uk/serverni-shafi/only-inStock;site;;1;17012456;Серверные шкафы;70306;https://prom.ua/Shkafy-servernye;E;;Вага;кг;;;;
+;https://e-server.com.ua/uk/serverni-shafi/only-inStock;prom;prom_;"1,1";140905380;Сетевое оборудование;70306;https://prom.ua/Shkafy-servernye;"E, Eprom, noindex";;Вага;кг;;;;
+2;https://e-server.com.ua/uk/vulichni-ta-antivandalni-shafi/only-inStock;site;;1;17012456;Серверные шкафы;70306;https://prom.ua/Shkafy-servernye;E;;Вага;кг;;;;
+;https://e-server.com.ua/uk/vulichni-ta-antivandalni-shafi/only-inStock;prom;prom_;"1,1";140905380;Сетевое оборудование;70306;https://prom.ua/Shkafy-servernye;"E, Eprom, noindex";;Вага;кг;;;;
+3;https://e-server.com.ua/uk/serverni-stijki/only-inStock;site;;1;91056839;Серверные стойки;70306;https://prom.ua/Shkafy-servernye;E;;Вага;кг;;;;
+;https://e-server.com.ua/uk/serverni-stijki/only-inStock;prom;prom_;"1,1";140905380;Сетевое оборудование;70306;https://prom.ua/Shkafy-servernye;"E, Eprom, noindex";;Вага;кг;;;;
+4;https://e-server.com.ua/uk/patch-paneli/only-inStock;site;;1;152090742;Комплектующие для сетевого оборудования;5092902;https://prom.ua/Patch-paneli;E;;Вага;г;;Тип устройства;;Патч-панелі
+;https://e-server.com.ua/uk/patch-paneli/only-inStock;prom;prom_;"1,1";140905380;Сетевое оборудование;5092902;https://prom.ua/Patch-paneli;"E, Eprom, noindex";;Вага;г;;Тип устройства;;Патч-панелі

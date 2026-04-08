@@ -1,0 +1,13 @@
+# 1. Експортуємо cookies локально
+python scripts/export_prom_cookies.py
+# → створить prom_cookies.json (~5-10 KB)
+
+# 2. Відкриваємо файл
+code prom_cookies.json
+
+# 3. Весь вміст → GitHub → Settings → Secrets → Actions
+#    New secret: PROM_COOKIES = (вміст файлу)
+
+# 4. Прибираємо файл (cookies — чутливі дані)
+del prom_cookies.json
+Через 90 днів — просто знову запусти export_prom_cookies.py і оновь секрет. Більше нічого не треба.

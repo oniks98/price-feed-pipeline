@@ -1,0 +1,53 @@
+﻿supplier_name_substring;supplier_attribute;supplier_value_pattern;pattern_type;prom_attribute;prom_attribute_unit_template;prom_value_template;priority;is_active;category_id;rule_kind;notes
+.*NXI.*;;;regex;Тип відеореєстратора;;NVR;1;TRUE;301101;extract;Hikvision NXI → NVR
+.*\bNVR\b.*;;;regex;Тип відеореєстратора;;NVR;2;TRUE;301101;extract;Explicit NVR in name
+.*XVR.*;;;regex;Тип відеореєстратора;;HDVR;3;TRUE;301101;extract;XVR (HD-CVI / Penta-brid)
+.*HQHI.*;;;regex;Тип відеореєстратора;;HDVR;4;TRUE;301101;extract;Hikvision HD-TVI DVR
+.*HGHI.*;;;regex;Тип відеореєстратора;;HDVR;5;TRUE;301101;extract;Hikvision HD-TVI DVR
+.*HUHI.*;;;regex;Тип відеореєстратора;;HDVR;6;TRUE;301101;extract;Hikvision HD-TVI DVR
+.*HTHI.*;;;regex;Тип відеореєстратора;;HDVR;7;TRUE;301101;extract;Hikvision HD-TVI DVR
+.*\bNI\b.*;;;regex;Тип відеореєстратора;;NVR;8;TRUE;301101;extract;NI as standalone token only
+.*XVR.*;;;regex;Функціональність;;Pentaplex;9;TRUE;301101;extract;XVR → Pentaplex
+.*HQHI.*;;;regex;Функціональність;;Pentaplex;10;TRUE;301101;extract;DVR → Pentaplex
+.*HGHI.*;;;regex;Функціональність;;Pentaplex;11;TRUE;301101;extract;DVR → Pentaplex
+.*HUHI.*;;;regex;Функціональність;;Pentaplex;12;TRUE;301101;extract;DVR → Pentaplex
+.*HTHI.*;;;regex;Функціональність;;Pentaplex;13;TRUE;301101;extract;DVR → Pentaplex
+.*\b4\s*[-–]?\s*кан.*;;;regex;Кількість каналів;;4;14;TRUE;301101;extract;4 channels
+.*\b8\s*[-–]?\s*кан.*;;;regex;Кількість каналів;;8;15;TRUE;301101;extract;8 channels
+.*\b16\s*[-–]?\s*кан.*;;;regex;Кількість каналів;;16;16;TRUE;301101;extract;16 channels
+.*\b32\s*[-–]?\s*кан.*;;;regex;Кількість каналів;;32;17;TRUE;301101;extract;32 channels
+.*\b64\s*[-–]?\s*кан.*;;;regex;Кількість каналів;;64;18;TRUE;301101;extract;64 channels
+.*\bPoE\b.*;;;regex;Підтримка PoE;;Так;19;TRUE;301101;extract;PoE support
+;PoE порти;(\d+)\s*[xх×]\s*RJ-?45;regex;Кількість вбудованих портів POE;;$1 ;20;TRUE;301101;value;PoE ports count
+;Інтерфейси відео виходу;\bHDMI\b;regex;HDMI відеовихід;;Так;21;TRUE;301101;value;Detect HDMI output
+;Інтерфейси відео виходу;\bVGA\b;regex;VGA відеовихід;;Так;22;TRUE;301101;value;Detect VGA output
+;USB;(\d+)\s*[x×]\s*USB\s*2\.0;regex;Кількість USB-портів;;$1 ;23;TRUE;301101;value;USB 2.0 ports count
+;Внутрішні HDD;(\d+)\s*SATA;regex;Количество HDD;;$1 ;24;TRUE;301101;value;Number of SATA HDD
+;Внутрішні HDD;(\d+)\s*SATA\s*до\s*(\d+)\s*Тб;regex;Суммарная емкость HDD;GB;$1 SATA $2 Тб;25;TRUE;301101;extract;Extract HDD SATA and TB
+;HDD режими;(\d+)\s*SATA\s*до\s*(\d+)\s*Тб;regex;Суммарная емкость HDD;GB;$1 SATA $2 Тб;26;TRUE;301101;extract;Extract HDD SATA and TB
+;RS485;\b1\s*порт\b;regex;RS-485;;Так;27;TRUE;301101;value;RS-485 port present
+;RS-232;\b1\s*порт\b;regex;RS-232;;Так;28;TRUE;301101;value;RS-232 port present
+;RS232;\b1\s*порт\b;regex;RS-232;;Так;29;TRUE;301101;value;RS-232 port present
+;Відео компресія;.*H\.265\+.*;regex;Формат стиснення;;H.265+;30;TRUE;301105;extract;
+;Відео компресія;.*H\.265.*;regex;Формат стиснення;;H.265;31;TRUE;301105;extract;
+;Відео компресія;.*H\.264\+.*;regex;Формат стиснення;;H.264+;32;TRUE;301105;extract;
+;Відео компресія;.*H\.264.*;regex;Формат стиснення;;H.264;33;TRUE;301105;extract;
+;Відео компресія;.*MJPEG.*;regex;Формат стиснення;;MJPEG;34;TRUE;301105;extract;
+;Відео компресія;.*MPEG-4.*;regex;Формат стиснення;;MPEG-4;35;TRUE;301105;extract;
+;Робоча температура;[–-]\s*(100|[1-9]?\d|0)\s*°?\s*C\s*[-–—]\s*\+?(-?\d+)\s*°?\s*C;regex;Мінімальна робоча температура;град.;($1);36;TRUE;301101;extract;Min operating temperature
+;Робоча температура;(-?[0-9]+)\s*°?\s*C\s*[-–—]\s*\+?(-?[0-9]+)\s*(°C);regex;Максимальна робоча температура;град.;$2 ;37;TRUE;301101;extract;Max operating temperature
+;Розміри;([0-9\.]+)\s*×\s*([0-9\.]+)\s*×\s*([0-9\.]+)\s*(мм);regex;Довжина;$4 ;$1 ;38;TRUE;301101;extract;Length from dimensions
+;Розміри;([0-9\.]+)\s*×\s*([0-9\.]+)\s*×\s*([0-9\.]+)\s*(мм);regex;Ширина;$4 ;$2 ;39;TRUE;301101;extract;Width from dimensions
+;Розміри;([0-9\.]+)\s*×\s*([0-9\.]+)\s*×\s*([0-9\.]+)\s*(мм);regex;Висота;$4 ;$3 ;40;TRUE;301101;extract;Height from dimensions
+;Вага;([0-9\.]+)\s*г;regex;Вага;г;$1 г;41;TRUE;301101;extract;Weight in grams (decimal kg → g)
+;Вага;([0-9\.]+)\s*кг;regex;Вага;г;$1 кг;42;TRUE;301101;extract;Weight in grams (integer kg → g)
+;Строк гарантії;([0-9]+)\s*(міс)\.?;regex;Гарантійний термін;$2 ;$1 ;43;TRUE;301101;extract;Warranty period
+;Аналітика з камерою;.*;skip;;;Пропустити;44;TRUE;301101;skip;no prom attr
+;Аналітика реєстратора;.*;skip;;;Пропустити;45;TRUE;301101;skip;no prom attr
+;Класифікація об'єктів;.*;skip;;;Пропустити;46;TRUE;301101;skip;no prom attr
+;Захист периметра \(канали\);.*;skip;;;Пропустити;47;TRUE;301101;skip;no prom attr
+;Розпізнавання облич \(канали\);.*;skip;;;Пропустити;48;TRUE;301101;skip;no prom attr
+;Режим розпізнавання облич;.*;skip;;;Пропустити;49;TRUE;301101;skip;no prom attr
+;Декодування;.*;skip;;;Пропустити;50;TRUE;301101;skip;no prom attr
+;Вага брутто;.*;skip;;;Пропустити;52;TRUE;301101;skip;no prom attr
+;Розмір упаковки \(Ш х В х Г\);.*;skip;;;Пропустити;53;TRUE;301101;skip;no prom attr

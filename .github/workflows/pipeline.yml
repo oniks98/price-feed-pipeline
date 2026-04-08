@@ -1,0 +1,525 @@
+name: Product Import Pipeline
+
+# ─────────────────────────────────────────────────────────────
+# РОЗКЛАД: 5 разів на день по Києву
+#   Зима EET  (UTC+2): листопад–березень → UTC = Kyiv - 2
+#   Літо EEST (UTC+3): квітень–жовтень  → UTC = Kyiv - 3
+#
+#   Kyiv  │ Зима (UTC+2) │ Літо (UTC+3)
+#   04:00 │   02:00 UTC  │  01:00 UTC
+#   09:00 │   07:00 UTC  │  06:00 UTC
+#   12:30 │   10:30 UTC  │  09:30 UTC
+#   16:30 │   14:30 UTC  │  13:30 UTC
+#   20:00 │   18:00 UTC  │  17:00 UTC
+# ─────────────────────────────────────────────────────────────
+on:
+  schedule:
+    # 04:00 Kyiv — літо (UTC+3, квітень–жовтень)
+    - cron: "0 1 * 4-10 *"
+    # 04:00 Kyiv — зима (UTC+2, листопад–березень)
+    - cron: "0 2 * 11-12 *"
+    - cron: "0 2 * 1-3 *"
+
+    # 09:00 Kyiv — літо (UTC+3, квітень–жовтень)
+    - cron: "0 6 * 4-10 *"
+    # 09:00 Kyiv — зима (UTC+2, листопад–березень)
+    - cron: "0 7 * 11-12 *"
+    - cron: "0 7 * 1-3 *"
+
+    # 12:30 Kyiv — літо (UTC+3, квітень–жовтень)
+    - cron: "30 9 * 4-10 *"
+    # 12:30 Kyiv — зима (UTC+2, листопад–березень)
+    - cron: "30 10 * 11-12 *"
+    - cron: "30 10 * 1-3 *"
+
+    # 16:30 Kyiv — літо (UTC+3, квітень–жовтень)
+    - cron: "30 13 * 4-10 *"
+    # 16:30 Kyiv — зима (UTC+2, листопад–березень)
+    - cron: "30 14 * 11-12 *"
+    - cron: "30 14 * 1-3 *"
+
+    # 20:00 Kyiv — літо (UTC+3, квітень–жовтень)
+    - cron: "0 17 * 4-10 *"
+    # 20:00 Kyiv — зима (UTC+2, листопад–березень)
+    - cron: "0 18 * 11-12 *"
+    - cron: "0 18 * 1-3 *"
+  workflow_dispatch: # ручний запуск з GitHub UI кнопкою "Run workflow"
+
+# Якщо новий run стартує поки старий ще йде — старий скасовується.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  PYTHONUNBUFFERED: "1"
+
+# ─────────────────────────────────────────────────────────────
+# ДОДАВАННЯ НОВОГО ПОСТАЧАЛЬНИКА:
+#   1. Додай блок в SUPPLIER_CONFIG у scripts/update_products.py
+#   2. Додай spider у матрицю нижче (jobs.scrape.strategy.matrix.include)
+#   Більше нічого в цьому файлі міняти не потрібно.
+# ─────────────────────────────────────────────────────────────
+
+jobs:
+  # ═══════════════════════════════════════════════════════════
+  # STAGE 1 — SCRAPE (паралельно)
+  # ═══════════════════════════════════════════════════════════
+  scrape:
+    name: Spider — ${{ matrix.supplier }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 270
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - supplier: viatec
+            spider: viatec_dealer
+            timeout_minutes: 120
+            max_attempts: 2
+            retry_wait: 30
+
+          - supplier: secur
+            spider: secur_feed_full
+            timeout_minutes: 20
+            max_attempts: 6
+            retry_wait: 30
+
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}
+
+      - name: Install Playwright browser (for scrapy-playwright)
+        run: playwright install chromium --with-deps
+
+      - name: Run spider
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: ${{ matrix.timeout_minutes }}
+          max_attempts: ${{ matrix.max_attempts }}
+          retry_wait_seconds: ${{ matrix.retry_wait }}
+          command: python scripts/ultra_clean_run.py ${{ matrix.spider }}
+        env:
+          PROJECT_ROOT: ${{ github.workspace }}
+          VIATEC_EMAIL: ${{ secrets.VIATEC_EMAIL }}
+          VIATEC_PASSWORD: ${{ secrets.VIATEC_PASSWORD }}
+
+      - name: Upload CSV artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scraped-${{ matrix.supplier }}
+          path: data/output/${{ matrix.supplier }}_new.csv
+          retention-days: 1
+          if-no-files-found: warn
+          compression-level: 6
+
+  # ═══════════════════════════════════════════════════════════
+  # STAGE 2 — PROCESS & PUBLISH
+  # ═══════════════════════════════════════════════════════════
+  process-and-publish:
+    name: Process & Publish to GitHub
+    runs-on: ubuntu-latest
+    needs: scrape
+    if: needs.scrape.result != 'cancelled'
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo (з _old.csv baseline)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download scraped artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: scraped-*
+          path: data/output/
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Verify downloaded files
+        run: |
+          echo "=== Файли в data/output/ ==="
+          ls -la data/output/ || echo "Директорія порожня"
+
+      - name: Run update_products — all suppliers
+        run: python scripts/update_products.py
+        env:
+          PROJECT_ROOT: ${{ github.workspace }}
+
+      - name: Merge CSVs
+        run: python scripts/merge_csv.py
+        env:
+          PROJECT_ROOT: ${{ github.workspace }}
+
+      - name: Commit and push results
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/merged.csv
+          git add "data/*/import_products.csv"
+          git add "data/*/*_old.csv"
+          git add "data/*/sku_map.json"
+
+          if git diff --staged --quiet; then
+            echo "✅ Змін немає — коміт пропущено"
+          else
+            ROWS=$(wc -l < data/merged.csv || echo "?")
+            git commit -m "chore: import update $(date -u '+%Y-%m-%d %H:%M UTC') — ${ROWS} рядків"
+            git fetch origin main
+            git rebase origin/main -X ours || git rebase --abort
+            git push origin HEAD:main --force-with-lease
+            echo "✅ Запушено"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger Prom API import
+        run: python scripts/prom_api_trigger.py
+        env:
+          PROM_API_TOKEN: ${{ secrets.PROM_API_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
+      - name: Print Prom import URL
+        run: |
+          echo ""
+          echo "════════════════════════════════════════════════════"
+          echo "🔗 URL для імпорту в Промі:"
+          echo "   https://raw.githubusercontent.com/oniks98/scrapy-suppliers/main/data/merged.csv"
+          echo ""
+          echo "📋 Вставити в: Імпорт товарів → Завантажити файл з сервера"
+          echo "════════════════════════════════════════════════════"
+
+  # ═══════════════════════════════════════════════════════════
+  # STAGE 3 — NOINDEX AUTOMATION
+  # needs: process-and-publish
+  # Чекає 15 хв на завершення імпорту в Промі (нові товари отримують теги).
+  # ═══════════════════════════════════════════════════════════
+  noindex:
+    name: Prom Noindex Automation
+    runs-on: ubuntu-latest
+    needs: process-and-publish
+    if: needs.process-and-publish.result == 'success'
+    timeout-minutes: 65
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}
+
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
+      - name: Wait for Prom import to complete
+        run: |
+          echo "⏳ Пауза 15 хвилин — чекаємо завершення імпорту в Промі..."
+          sleep 900
+          echo "✅ Пауза завершена, запускаємо noindex"
+
+      - name: Run noindex automation
+        run: python scripts/prom_noindex_automation.py
+        env:
+          PROM_COOKIES: ${{ secrets.PROM_COOKIES }}
+          PROM_HEADLESS: "true"
+          PROJECT_ROOT: ${{ github.workspace }}
+
+      - name: Upload noindex logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: noindex-logs-${{ github.run_number }}
+          path: |
+            prom_noindex.log
+            error_*.png
+            prom_noindex_fatal_hrefs.json
+          retention-days: 7
+          if-no-files-found: ignore
+          compression-level: 6
+
+  # ═══════════════════════════════════════════════════════════
+  # STAGE 3.5 — PROSALE AUTOMATION
+  # needs: noindex — запускається після noindex, щоб уникнути конкурентних сесій
+  # до Prom admin (обидва використовують PROM_COOKIES).
+  # До цього моменту імпорт вже завершено (noindex чекав 15 хв),
+  # тому додаткова пауза не потрібна.
+  # ═══════════════════════════════════════════════════════════
+  prosale:
+    name: Prom ProSale Automation
+    runs-on: ubuntu-latest
+    needs: noindex
+    if: needs.noindex.result == 'success' || needs.noindex.result == 'failure'
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}
+
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
+      - name: Run ProSale automation
+        run: python scripts/prom_prosale_automation.py
+        env:
+          PROM_COOKIES: ${{ secrets.PROM_COOKIES }}
+          PROM_HEADLESS: "true"
+          PROJECT_ROOT: ${{ github.workspace }}
+
+      - name: Upload ProSale logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prosale-logs-${{ github.run_number }}
+          path: prom_prosale.log
+          retention-days: 7
+          if-no-files-found: ignore
+          compression-level: 6
+
+  # ═══════════════════════════════════════════════════════════
+  # STAGE 4 — KASTA FEED
+  # needs: process-and-publish
+  # Чекає 15 хв на завершення імпорту в Промі, потім генерує і пушить.
+  # Паралельно з noindex/prosale — різні ресурси, конфлікту немає.
+  # ═══════════════════════════════════════════════════════════
+  kasta-feed:
+    name: Generate Kasta Feed
+    runs-on: ubuntu-latest
+    needs: process-and-publish
+    if: needs.process-and-publish.result == 'success'
+    timeout-minutes: 35
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Wait for Prom import to complete
+        run: |
+          echo "⏳ Пауза 15 хвилин — чекаємо завершення імпорту в Промі..."
+          sleep 900
+          echo "✅ Пауза завершена, генеруємо фід"
+
+      - name: Generate Kasta feed
+        run: python scripts/generate_kasta_feed.py
+        env:
+          PROJECT_ROOT: ${{ github.workspace }}
+
+      - name: Commit and push kasta_feed.xml
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/markets/kasta_feed.xml
+
+          if git diff --staged --quiet; then
+            echo "✅ Фід не змінився — коміт пропущено"
+          else
+            git commit -m "chore: kasta feed update $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git fetch origin main
+            git rebase origin/main -X ours || git rebase --abort
+            git push origin HEAD:main --force-with-lease
+            echo "✅ Запушено"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Print Kasta feed URL
+        run: |
+          echo ""
+          echo "════════════════════════════════════════════════════"
+          echo "🔗 URL фіду для Касти:"
+          echo "   https://raw.githubusercontent.com/${{ github.repository }}/main/data/markets/kasta_feed.xml"
+          echo "════════════════════════════════════════════════════"
+
+  # ═══════════════════════════════════════════════════════════
+  # STAGE 5 — EPICENTER FEED
+  # needs: kasta-feed — строго після касти, щоб не було race condition на git push
+  # ═══════════════════════════════════════════════════════════
+  epicenter-feed:
+    name: Generate Epicenter Feed
+    runs-on: ubuntu-latest
+    needs: kasta-feed
+    if: needs.kasta-feed.result == 'success'
+    timeout-minutes: 20
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate Epicenter feed
+        run: python scripts/generate_epicenter_feed.py
+        env:
+          PROJECT_ROOT: ${{ github.workspace }}
+
+      - name: Commit and push epicenter_feed.xml
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/markets/epicenter_feed.xml
+
+          if git diff --staged --quiet; then
+            echo "✅ Фід не змінився — коміт пропущено"
+          else
+            git commit -m "chore: epicenter feed update $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git fetch origin main
+            git rebase origin/main -X ours || git rebase --abort
+            git push origin HEAD:main --force-with-lease
+            echo "✅ Запушено"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Print Epicenter feed URL
+        run: |
+          echo ""
+          echo "════════════════════════════════════════════════════"
+          echo "🔗 URL фіду для Епіцентру:"
+          echo "   https://raw.githubusercontent.com/${{ github.repository }}/main/data/markets/epicenter_feed.xml"
+          echo "════════════════════════════════════════════════════"
+
+  # ═══════════════════════════════════════════════════════════
+  # STAGE 6 — ROZETKA FEED
+  # needs: epicenter-feed — строго після епіцентру
+  # ═══════════════════════════════════════════════════════════
+  rozetka-feed:
+    name: Generate Rozetka Feed
+    runs-on: ubuntu-latest
+    needs: epicenter-feed
+    if: needs.epicenter-feed.result == 'success'
+    timeout-minutes: 20
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate Rozetka feed
+        run: python scripts/generate_rozetka_feed.py
+        env:
+          PROJECT_ROOT: ${{ github.workspace }}
+
+      - name: Commit and push rozetka_feed.xml
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/markets/rozetka_feed.xml
+
+          if git diff --staged --quiet; then
+            echo "✅ Фід не змінився — коміт пропущено"
+          else
+            git commit -m "chore: rozetka feed update $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git fetch origin main
+            git rebase origin/main -X ours || git rebase --abort
+            git push origin HEAD:main --force-with-lease
+            echo "✅ Запушено"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Print Rozetka feed URL
+        run: |
+          echo ""
+          echo "════════════════════════════════════════════════════"
+          echo "🔗 URL фіду для Розетки:"
+          echo "   https://raw.githubusercontent.com/${{ github.repository }}/main/data/markets/rozetka_feed.xml"
+          echo "════════════════════════════════════════════════════"

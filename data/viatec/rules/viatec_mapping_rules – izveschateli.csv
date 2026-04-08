@@ -1,0 +1,64 @@
+supplier_name_substring;supplier_attribute;supplier_value_pattern;pattern_type;prom_attribute;prom_attribute_unit_template;prom_value_template;priority;is_active;category_id;rule_kind;notes
+.*\b[Пп]роводн.*;;;regex;Інтерфейс;;Провідний;1;TRUE;302302;extract;Wired detector from name
+.*\b[Бб]еспроводн.*;;;regex;Інтерфейс;;Бездротовий;2;TRUE;302302;extract;Wireless detector from name
+.*\bPIR\b.*;;;regex;Принцип роботи сповіщувача;;Оптико-електронний (пасивний);3;TRUE;302302;extract;PIR detector from name
+.*\b[Дд]вижени.*;;;regex;Принцип роботи сповіщувача;;Оптико-електронний (пасивний);4;TRUE;302302;extract;Motion detector from name
+.*\b[Мм]агнит.*;;;regex;Принцип роботи сповіщувача;;Магнітоконтактний;5;TRUE;302302;extract;Magnetic contact from name
+.*\b[Зз]атоплен.*;;;regex;Тип сповіщувача;;Датчик затоплення;6;TRUE;302302;extract;Flood detector type from name (FIXED: was mapped to Принцип роботи - incorrect)
+.*\b[Рр]азбит.*стекл.*;;;regex;Принцип роботи сповіщувача;;Акустичний (звукової);7;TRUE;302302;extract;Glass break detector from name
+.*\b12\s*[ВV].*;;;regex;Живлення;;Мережа 12В;20;TRUE;302302;extract;12V power from name
+.*\b24\s*[ВV].*;;;regex;Живлення;;Мережа 24В;21;TRUE;302302;extract;24V power from name
+;Метод роботи;[Дд]атчик\s*руху;regex;Принцип роботи сповіщувача;;Оптико-електронний (пасивний);50;TRUE;302302;attribute;Motion sensor from method
+;Метод роботи;PIR;regex;Принцип роботи сповіщувача;;Оптико-електронний (пасивний);150;TRUE;302302;attribute;PIR from method (priority increased to avoid extract conflict)
+;Метод роботи;.*інфрачервон.*;regex;Принцип роботи сповіщувача;;Оптико-електронний (пасивний);52;TRUE;302302;attribute;Infrared from method
+;Метод роботи;.*[Мм]агніто.*контакт.*;regex;Принцип роботи сповіщувача;;Магнітоконтактний;53;TRUE;302302;attribute;Magnetic contact from method
+;Метод роботи;.*СМК.*;regex;Принцип роботи сповіщувача;;Магнітоконтактний;54;TRUE;302302;attribute;SMK from method
+;Метод роботи;контактний;exact;Принцип роботи сповіщувача;;Електроконтактний;55;TRUE;302302;attribute;Contact from method
+;Метод роботи;.*затоплен.*;regex;Тип сповіщувача;;Датчик затоплення;56;TRUE;302302;attribute;Flood detector type from method (FIXED: was Принцип роботи)
+;Метод роботи;.*розбитт.*скл.*;regex;Принцип роботи сповіщувача;;Акустичний (звукової);57;TRUE;302302;attribute;Glass break from method
+;Метод роботи;.*мікрохвил.*;regex;Принцип роботи сповіщувача;;Радіохвильовий;58;TRUE;302302;attribute;Microwave from method
+;Метод роботи;.*СВЧ.*;regex;Принцип роботи сповіщувача;;Радіохвильовий;59;TRUE;302302;attribute;Microwave from method
+;Метод роботи;.*вібрац.*;regex;Принцип роботи сповіщувача;;Вібраційний;60;TRUE;302302;attribute;Vibration from method
+;Метод роботи;.*провідний.*;regex;Інтерфейс;;Провідний;70;TRUE;302302;attribute;Wired interface
+;Метод роботи;.*[Бб]ездротов.*;regex;Інтерфейс;;Бездротовий;71;TRUE;302302;attribute;Wireless interface
+;Живлення;.*9\s*-\s*16.*DC.*;regex;Живлення;;Мережа 12В;80;TRUE;302302;attribute;9-16V DC as 12V
+;Живлення;.*DC\s*12\s*[ВV].*;regex;Живлення;;Мережа 12В;81;TRUE;302302;attribute;DC 12V power
+;Живлення;.*DC\s*24\s*[ВV].*;regex;Живлення;;Мережа 24В;82;TRUE;302302;attribute;DC 24V power
+;Живлення;.*12\s*[ВV].*;regex;Живлення;;Мережа 12В;83;TRUE;302302;attribute;12V power generic
+;Живлення;.*24\s*[ВV].*;regex;Живлення;;Мережа 24В;84;TRUE;302302;attribute;24V power generic
+;Живлення;.*CR\d+.*;regex;Живлення;;Батарейки одноразові;85;TRUE;302302;attribute;Battery power CR series
+;Живлення;.*батар.*;regex;Живлення;;Батарейки одноразові;86;TRUE;302302;attribute;Battery power
+;Робоча температура;(-?\d+)°?\s*[CС]?\s*[-–—~]+\s*\+?(-?\d+)°?\s*[CС];regex;Мінімальна робоча температура;град.;$1 ;100;TRUE;302302;attribute;Min operating temperature
+;Робоча температура;(-?\d+)°?\s*[CС]?\s*[-–—~]+\s*\+?(-?\d+)°?\s*[CС];regex;Максимальна робоча температура;град.;$2 ;101;TRUE;302302;attribute;Max operating temperature
+;Розміри;(\d+(?:\.\d+)?)\s*[хxXх×]\s*(\d+(?:\.\d+)?)\s*[хxXх×]\s*(\d+(?:\.\d+)?)\s*мм;regex;Довжина;мм;$1 ;110;TRUE;302302;attribute;Length from dimensions
+;Розміри;(\d+(?:\.\d+)?)\s*[хxXх×]\s*(\d+(?:\.\d+)?)\s*[хxXх×]\s*(\d+(?:\.\d+)?)\s*мм;regex;Ширина;мм;$2 ;111;TRUE;302302;attribute;Width from dimensions
+;Розміри;(\d+(?:\.\d+)?)\s*[хxXх×]\s*(\d+(?:\.\d+)?)\s*[хxXх×]\s*(\d+(?:\.\d+)?)\s*мм;regex;Висота;мм;$3 ;112;TRUE;302302;attribute;Height from dimensions
+;Розміри;φ(\d+(?:\.\d+)?)\s*[xх×]\s*(\d+(?:\.\d+)?)\s*мм;regex;Діаметр;мм;$1 ;113;TRUE;302302;attribute;Diameter from dimensions
+;Розміри;φ(\d+(?:\.\d+)?)\s*[xх×]\s*(\d+(?:\.\d+)?)\s*мм;regex;Висота;мм;$2 ;114;TRUE;302302;attribute;Height from diameter dimensions
+;Вага;(\d+(?:\.\d+)?)\s*г;regex;Вага;г;$1 ;120;TRUE;302302;attribute;Weight in grams (verified: PROM accepts grams for sensors)
+;Напруга;(\d+)\s*[ВV];regex;Напруга;В;$1 ;130;TRUE;302302;attribute;Voltage from attribute
+;Строк гарантії;(\d+)\s*міс\.?;regex;Гарантійний термін;міс;$1 ;140;TRUE;302302;attribute;Warranty period
+;Частотна характеристика;(\d+)\s*[Мм][Гг]ц;regex;;;Пропустити;150;TRUE;302302;skip;FIXED: Frequency cannot be mapped to protocol (logical error removed)
+;Відстань передачі;(\d+)\s*м;regex;;;Пропустити;160;TRUE;302302;skip;Transmission distance not in PROM
+;Відстань передачі;(\d+(?:\.\d+)?)\s*км;regex;;;Пропустити;161;TRUE;302302;skip;Transmission distance km not in PROM
+;Покриття;.*;regex;;;Пропустити;170;TRUE;302302;skip;Coverage not in PROM
+;Площа;.*;regex;;;Пропустити;171;TRUE;302302;skip;Area coverage not in PROM
+;Висота установки;.*;regex;;;Пропустити;180;TRUE;302302;skip;Installation height not in PROM
+;Імунітет до тварин;.*;regex;;;Пропустити;181;TRUE;302302;skip;Pet immunity not in PROM
+;Автоматична чутливість;.*;regex;;;Пропустити;182;TRUE;302302;skip;Auto sensitivity not in PROM
+;Цифрова температурна компенсація;.*;regex;;;Пропустити;183;TRUE;302302;skip;Digital temp compensation not in PROM
+;Антісаботаж;.*;regex;;;Пропустити;184;TRUE;302302;skip;Tamper protection not in PROM
+;Індикатор рівня сигналу;.*;regex;;;Пропустити;185;TRUE;302302;skip;Signal level indicator not in PROM
+;Швидкість детекції;.*;regex;;;Пропустити;186;TRUE;302302;skip;Detection speed not in PROM
+;Нижня зона виявлення;.*;regex;;;Пропустити;187;TRUE;302302;skip;Lower detection zone not in PROM
+;Термін роботи батареї;.*;regex;;;Пропустити;190;TRUE;302302;skip;Battery life not in PROM
+;Ступінь захисту;.*;regex;;;Пропустити;191;TRUE;302302;skip;IP rating not in PROM
+;Матеріал;.*;regex;;;Пропустити;200;TRUE;302302;skip;Material not in PROM
+;Колір;.*;regex;;;Пропустити;201;TRUE;302302;skip;Color not in PROM
+;Можливості використання;.*;regex;;;Пропустити;202;TRUE;302302;skip;Usage possibilities not in PROM
+;Сенсор;.*;regex;;;Пропустити;210;TRUE;302302;skip;Sensor details not in PROM
+;Роздільна здатність;.*;regex;;;Пропустити;211;TRUE;302302;skip;Resolution not in PROM
+;Особливості;.*;regex;;;Пропустити;220;TRUE;302302;skip;Features not in PROM
+;Кількість в ящику;.*;regex;;;Пропустити;230;TRUE;302302;skip;Box quantity not needed
+;Вага брутто;.*;regex;;;Пропустити;231;TRUE;302302;skip;Gross weight not needed
+;Розмір упаковки.*;.*;regex;;;Пропустити;232;TRUE;302302;skip;Package dimensions not needed

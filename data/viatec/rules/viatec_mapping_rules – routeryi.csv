@@ -1,0 +1,82 @@
+supplier_name_substring;supplier_attribute;supplier_value_pattern;pattern_type;prom_attribute;prom_attribute_unit_template;prom_value_template;priority;is_active;category_id;rule_kind;notes
+(?i).*\bроутер\b.*;;;regex;Тип;;Бездротовий;1;TRUE;71902;extract;Роутер з назви
+(?i).*\bмаршрутизатор\b.*;;;regex;Тип;;Провідний;2;TRUE;71902;extract;Маршрутизатор з назви
+(?i).*\bMESH\b.*;;;regex;Тип;;MESH система;3;TRUE;71902;extract;MESH система
+;Wi-Fi;.*802\.11a.*;regex;Стандарт бездротового зв'язку;;802.11a;4;TRUE;71902;attribute;WiFi 802.11a
+;Wi-Fi;.*802\.11b.*;regex;Стандарт бездротового зв'язку;;802.11b;5;TRUE;71902;attribute;WiFi 802.11b
+;Wi-Fi;.*802\.11g.*;regex;Стандарт бездротового зв'язку;;802.11g;6;TRUE;71902;attribute;WiFi 802.11g
+;Wi-Fi;.*802\.11n.*;regex;Стандарт бездротового зв'язку;;802.11n;7;TRUE;71902;attribute;WiFi 802.11n
+;Wi-Fi;.*802\.11ac.*;regex;Стандарт бездротового зв'язку;;802.11ac;8;TRUE;71902;attribute;WiFi 802.11ac
+;Wi-Fi;.*802\.11ax.*;regex;Стандарт бездротового зв'язку;;802.11ax;9;TRUE;71902;attribute;WiFi 802.11ax
+;Wi-Fi;.*Wi\s*-?\s*Fi\s*4.*;regex;Стандарт бездротового зв'язку;;802.11n;10;TRUE;71902;attribute;WiFi 4
+;Wi-Fi;.*Wi\s*-?\s*Fi\s*5.*;regex;Стандарт бездротового зв'язку;;802.11ac;11;TRUE;71902;attribute;WiFi 5
+;Wi-Fi;.*Wi\s*-?\s*Fi\s*6.*;regex;Стандарт бездротового зв'язку;;802.11ax;12;TRUE;71902;attribute;WiFi 6
+;Wi-Fi;.*IEEE\s+802\.11a.*b.*g.*;regex;Стандарт бездротового зв'язку;;IEEE 802.11a/b/g;13;TRUE;71902;attribute;IEEE 802.11a/b/g
+;Wi-Fi;.*IEEE\s+802\.11a.*b.*g.*n.*;regex;Стандарт бездротового зв'язку;;IEEE 802.11а/b/g/n/ас;14;TRUE;71902;attribute;IEEE 802.11a/b/g/n
+;Wi-Fi;.*IEEE\s+802\.11b.*g.*n.*;regex;Стандарт бездротового зв'язку;;IEEE 802.11b/g/n;15;TRUE;71902;attribute;IEEE 802.11b/g/n
+;Wi-Fi;.*IEEE\s+802\.11ax.*;regex;Стандарт бездротового зв'язку;;IEEE 802.11ax/ac/n/a;16;TRUE;71902;attribute;IEEE 802.11ax
+;Wi-Fi;.*2\.4.*ГГц.*5.*ГГц.*;regex;WI-FI частота, ГГц;;2.4+5 dual band;17;TRUE;71902;attribute;Dual band 2.4+5
+;Wi-Fi;.*2\.4.*GHz.*5.*GHz.*;regex;WI-FI частота, ГГц;;2.4+5 dual band;18;TRUE;71902;attribute;Dual band 2.4+5 GHz
+;Wi-Fi;.*2\.4\s*ГГц.*;regex;WI-FI частота, ГГц;;2.4;19;TRUE;71902;attribute;2.4 ГГц
+;Wi-Fi;.*5\s*ГГц.*;regex;WI-FI частота, ГГц;;5;20;TRUE;71902;attribute;5 ГГц
+;Wi-Fi;.*2\.4\s*GHz.*;regex;WI-FI частота, ГГц;;2.4;21;TRUE;71902;attribute;2.4 GHz
+;Wi-Fi;.*5\s*GHz.*;regex;WI-FI частота, ГГц;;5;22;TRUE;71902;attribute;5 GHz
+;Wi-Fi;.*MU\s*-?\s*MIMO.*;regex;Підтримка MU-MIMO;;Так;23;TRUE;71902;attribute;MU-MIMO підтримка
+;Антена;(\d+)[\s×x]*(\d+);regex;Кількість антен;шт.;$1;24;TRUE;71902;extract;Кількість антен з формату NxN
+;Антена;.*вбудов.*;regex;Тип антени;;Внутрішня;25;TRUE;71902;attribute;Вбудовані антени
+;Антена;.*внутр.*;regex;Тип антени;;Внутрішня;26;TRUE;71902;attribute;Внутрішні антени
+;Антена;.*зовн.*;regex;Тип антени;;Зовнішня;27;TRUE;71902;attribute;Зовнішні антени
+;Антена;.*знім.*;regex;Антени WI-FI;;Зовнішні, знімні;28;TRUE;71902;attribute;Знімні антени
+;Антена;.*незнім.*;regex;Антени WI-FI;;Зовнішні, незнімні;29;TRUE;71902;attribute;Незнімні антени
+;Ethernet порти (Uplink);(\d+)[\s×x]*.*WAN.*;regex;Кількість WAN портів;шт.;$1;30;TRUE;71902;extract;Кількість WAN портів
+;Ethernet порти (DownLink);(\d+)[\s×x]*.*LAN.*;regex;Кількість LAN портів;шт.;$1;31;TRUE;71902;extract;Кількість LAN портів
+;Ethernet порти (Uplink);.*10\/100\/1000.*;regex;Інтерфейс підключення до локальної мережі/комп'ютера;;Gigabit Ethernet;32;TRUE;71902;attribute;Gigabit Ethernet Uplink
+;Ethernet порти (DownLink);.*10\/100\/1000.*;regex;Інтерфейс підключення до локальної мережі/комп'ютера;;Gigabit Ethernet;33;TRUE;71902;attribute;Gigabit Ethernet DownLink
+;Ethernet порти (Uplink);.*гігабіт.*;regex;Інтерфейс підключення до локальної мережі/комп'ютера;;Gigabit Ethernet;34;TRUE;71902;attribute;Гігабітний Uplink
+;Ethernet порти (DownLink);.*гігабіт.*;regex;Інтерфейс підключення до локальної мережі/комп'ютера;;Gigabit Ethernet;35;TRUE;71902;attribute;Гігабітний DownLink
+;Ethernet порти (Uplink);.*10\/100.*;regex;Інтерфейс підключення до локальної мережі/комп'ютера;;Fast Ethernet;36;TRUE;71902;attribute;Fast Ethernet Uplink
+;Ethernet порти (DownLink);.*10\/100.*;regex;Інтерфейс підключення до локальної мережі/комп'ютера;;Fast Ethernet;37;TRUE;71902;attribute;Fast Ethernet DownLink
+;Ethernet порти (Uplink);.*100\s*M.*;regex;Інтерфейс підключення до локальної мережі/комп'ютера;;Fast Ethernet;38;TRUE;71902;attribute;100M Uplink
+;Ethernet порти (DownLink);.*100\s*M.*;regex;Інтерфейс підключення до локальної мережі/комп'ютера;;Fast Ethernet;39;TRUE;71902;attribute;100M DownLink
+;Ethernet порти (Uplink);.*SFP.*;regex;Інтерфейс підключення до інтернет (WAN);;SFP;40;TRUE;71902;attribute;SFP WAN
+;USB;.*USB.*;regex;Кількість USB-портів;;1;41;TRUE;71902;attribute;USB наявний
+;USB;(\d+).*USB.*;regex;Кількість USB-портів;;$1;42;TRUE;71902;extract;Кількість USB
+;USB;.*USB\s+3\.0.*;regex;Інтерфейс підключення до локальної мережі/комп'ютера;;USB 3.0;43;TRUE;71902;attribute;USB 3.0
+;USB;.*USB\s+2\.0.*;regex;Інтерфейс підключення до локальної мережі/комп'ютера;;USB 2.0;44;TRUE;71902;attribute;USB 2.0
+;PoE;.*802\.3af.*;regex;Живлення;;PoE;45;TRUE;71902;attribute;PoE 802.3af живлення
+;PoE;.*802\.3at.*;regex;Живлення;;PoE;46;TRUE;71902;attribute;PoE 802.3at живлення
+;Живлення від PoE-in;.*802\.3af.*;regex;Живлення;;PoE;47;TRUE;71902;attribute;PoE-in 802.3af
+;Живлення від PoE-in;.*802\.3at.*;regex;Живлення;;PoE;48;TRUE;71902;attribute;PoE-in 802.3at
+;Живлення від PoE-in;.*Passive.*;regex;Живлення;;PoE;49;TRUE;71902;attribute;Passive PoE
+;Живлення;.*12\s*В.*;regex;Живлення;;Мережа 12В;50;TRUE;71902;attribute;Живлення 12В
+;Живлення;.*12\s*V.*;regex;Живлення;;Мережа 12В;51;TRUE;71902;attribute;Живлення 12V
+;Живлення;.*220\s*В.*;regex;Живлення;;Мережа 220В;52;TRUE;71902;attribute;Живлення 220В
+;Живлення;.*24\s*В.*;regex;Живлення;;Мережа 24В;53;TRUE;71902;attribute;Живлення 24В
+;Живлення;.*110\s*В.*;regex;Живлення;;Мережа 110В;54;TRUE;71902;attribute;Живлення 110В
+;Живлення;.*5\s*В.*;regex;Живлення;;USB;55;TRUE;71902;attribute;Живлення 5В (USB)
+;Живлення;.*5\s*V.*;regex;Живлення;;USB;56;TRUE;71902;attribute;Живлення 5V (USB)
+;Живлення;.*100\s*-?\s*240.*В.*;regex;Живлення;;Мережа 220В;57;TRUE;71902;attribute;Живлення 100-240В
+;Живлення;.*AC.*;regex;Живлення;;Мережа 220В;58;TRUE;71902;attribute;Живлення AC
+;Живлення;.*DC.*;regex;Додаткове джерело живлення;;Мережа 12В;59;TRUE;71902;attribute;Живлення DC
+;Особливості;.*VPN.*;regex;Підтримка VPN-тунелів;;Так;60;TRUE;71902;attribute;VPN підтримка
+;Особливості;.*(\d+)\s*x\s*слот.*SIM.*;regex;Кількість підтримуваних SIM-карт;;$1;61;TRUE;71902;extract;Кількість SIM-карт
+;Особливості;.*SIM.*;regex;Кількість підтримуваних SIM-карт;;1;62;TRUE;71902;attribute;SIM-карта
+;Особливості;.*4G.*;regex;Інтерфейс підключення до інтернет (WAN);;3G/4G/LTE;63;TRUE;71902;attribute;4G підтримка
+;Особливості;.*LTE.*;regex;Інтерфейс підключення до інтернет (WAN);;3G/4G/LTE;64;TRUE;71902;attribute;LTE підтримка
+;Особливості;.*3G.*;regex;Інтерфейс підключення до інтернет (WAN);;3G/4G/LTE;65;TRUE;71902;attribute;3G підтримка
+(?i).*\bпортативн.*;;;regex;Клас пристрою;;Портативний;66;TRUE;71902;extract;Портативний з назви
+(?i).*\bкишеньков.*;;;regex;Клас пристрою;;Кишеньковий;67;TRUE;71902;extract;Кишеньковий з назви
+(?i).*\bофісн.*;;;regex;Клас пристрою;;Офісний;68;TRUE;71902;extract;Офісний з назви
+(?i).*\bпромисл.*;;;regex;Клас пристрою;;Стаціонарний;69;TRUE;71902;extract;Промисловий - стаціонарний
+(?i).*\bдомашн.*;;;regex;Клас пристрою;;Персональний;70;TRUE;71902;extract;Домашній - персональний
+;Строк гарантії;(\d+)\s*міс;regex;Гарантійний термін;міс;$1;71;TRUE;71902;extract;Гарантія в місяцях
+;Розміри;(\d+)\s*[×x]\s*(\d+)\s*[×x]\s*(\d+)\s*мм;regex;Довжина;мм;$1;72;TRUE;71902;extract;Довжина з розмірів
+;Розміри;(\d+)\s*[×x]\s*(\d+)\s*[×x]\s*(\d+)\s*мм;regex;Ширина;мм;$2;73;TRUE;71902;extract;Ширина з розмірів
+;Розміри;(\d+)\s*[×x]\s*(\d+)\s*[×x]\s*(\d+)\s*мм;regex;Висота;мм;$3;74;TRUE;71902;extract;Висота з розмірів
+(?i).*\bбілий.*;;;regex;Колір;;Білий;75;TRUE;71902;extract;Колір білий
+(?i).*\bчорн.*;;;regex;Колір;;Чорний;76;TRUE;71902;extract;Колір чорний
+(?i).*\bсір.*;;;regex;Колір;;Сірий;77;TRUE;71902;extract;Колір сірий
+;Wi-Fi;.*репітер.*;regex;Тип;;Бездротовий;78;TRUE;71902;attribute;Репітер - бездротовий
+;Wi-Fi;.*точка\s+доступ.*;regex;Тип;;Бездротовий;79;TRUE;71902;attribute;Точка доступу
+;Особливості;.*моста.*;regex;Режим моста;;Так;80;TRUE;71902;attribute;Режим моста
+;Особливості;.*комутатор.*;regex;Вбудований комутатор;;Так;81;TRUE;71902;attribute;Вбудований комутатор

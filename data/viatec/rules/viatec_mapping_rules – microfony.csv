@@ -1,0 +1,43 @@
+supplier_name_substring;supplier_attribute;supplier_value_pattern;pattern_type;prom_attribute;prom_attribute_unit_template;prom_value_template;priority;is_active;category_id;rule_kind;notes
+.*\bдинаміч.*мікрофон\b.*;;;regex;Тип;;Динамічний;1;TRUE;6371204;extract;Dynamic microphone from name
+.*\bконденсатор.*мікрофон\b.*;;;regex;Тип;;Конденсаторний;2;TRUE;6371204;extract;Condenser microphone from name
+.*\bелектрет.*мікрофон\b.*;;;regex;Тип;;Електретний;3;TRUE;6371204;extract;Electret microphone from name
+.*\bбездрото.*мікрофон\b.*;;;regex;Підключення пристрою;;Бездротове;4;TRUE;6371204;extract;Wireless microphone from name
+.*\bпровідн.*мікрофон\b.*;;;regex;Підключення пристрою;;Дротове;5;TRUE;6371204;extract;Wired microphone from name
+.*\bпетлич.*мікрофон\b.*;;;regex;Вид;;Петличний мікрофон;6;TRUE;6371204;extract;Lavalier microphone from name
+.*\bпетлич.*мікрофон\b.*;;;regex;Спосіб установки/кріплення;;Петличний;7;TRUE;6371204;extract;Lavalier mounting from name
+.*\bстудій.*мікрофон\b.*;;;regex;Вид;;Студійний вокальний мікрофон;8;TRUE;6371204;extract;Studio microphone from name
+.*\bсценіч.*мікрофон\b.*;;;regex;Вид;;Сценічний вокальний мікрофон;9;TRUE;6371204;extract;Stage microphone from name
+.*\bігров.*мікрофон\b.*;;;regex;Вид;;Ігровий;10;TRUE;6371204;extract;Gaming microphone from name
+.*\bручн.*мікрофон\b.*;;;regex;Спосіб установки/кріплення;;Ручний;11;TRUE;6371204;extract;Handheld from name
+.*\bнастільн.*мікрофон\b.*;;;regex;Спосіб установки/кріплення;;Настільний;12;TRUE;6371204;extract;Desktop from name
+\bUSB\b.*(microphone|мікрофон).*;;;regex;Тип роз'єму;;USB;13;TRUE;6371204;extract;USB connector from name (strict)
+\bXLR\b.*(microphone|мікрофон).*;;;regex;Тип роз'єму;;XLR;14;TRUE;6371204;extract;XLR connector from name (strict)
+;Чутливість мікрофона;(-?\d+(?:\.\d+)?)\s*dB;regex;Чутливість;дБ;$1 ;20;TRUE;6371204;attribute;Sensitivity in dB
+;Частотна характеристика;(\d+)\s*Hz\s*[~–-]\s*(\d+)\s*Hz;regex;Частота;Гц;$1-$2;21;TRUE;6371204;attribute;Frequency range Hz-Hz
+;Частотна характеристика;(\d+)\s*Hz\s*[~–-]\s*(\d+)\s*kHz;regex;Частота;Гц;$1-$2000;22;TRUE;6371204;attribute;Frequency Hz-kHz (manual conversion)
+;Частотна характеристика;(\d+)\s*Hz\s*[~–-]\s*(\d+)k\s*Hz;regex;Частота;Гц;$1-$2000;23;TRUE;6371204;attribute;Frequency Hz-kHz space variant
+;Напрямок;.*всеспрямован.*;regex;Спрямованість;;Всеспрямований;30;TRUE;6371204;attribute;Omnidirectional
+;Напрямок;.*кардіо.*(?!супер)(?!гіпер).*;regex;Спрямованість;;Кардіоїдна;31;TRUE;6371204;attribute;Cardioid pattern
+;Напрямок;.*суперкардіо.*;regex;Спрямованість;;Суперкардіоїдна;32;TRUE;6371204;attribute;Supercardioid pattern
+;Напрямок;.*гіперкардіо.*;regex;Спрямованість;;Гіперкардіоїдна;33;TRUE;6371204;attribute;Hypercardioid pattern
+;Напрямок;.*двонаправлен.*;regex;Спрямованість;;Двонаправлений;34;TRUE;6371204;attribute;Bidirectional pattern
+;Напрямок;.*ненаправлен.*;regex;Спрямованість;;Ненаправлений;35;TRUE;6371204;attribute;Non-directional
+;Вихідний опір;(\d+)\s*Ом;regex;Опір;Ом;$1 ;40;TRUE;6371204;attribute;Output impedance
+;Живлення;.*\b12\s*В.*;regex;;;Пропустити;50;TRUE;6371204;skip;Power supply not in prom
+;Живлення;.*\b48\s*В.*;regex;;;Пропустити;51;TRUE;6371204;skip;Phantom power not in prom
+;Потужність споживання;.*;regex;;;Пропустити;52;TRUE;6371204;skip;Power consumption - mA not convertible to A without calculation
+;SNR;(\d+)\s*дБ;regex;;;Пропустити;60;TRUE;6371204;skip;SNR not in prom
+;Динамічний діапазон;(\d+)\s*[Дд]б;regex;;;Пропустити;61;TRUE;6371204;skip;Dynamic range not in prom
+;Матеріал;.*;regex;;;Пропустити;70;TRUE;6371204;skip;Material not in prom
+;Розміри;Ф\s*(\d+(?:\.\d+)?)\s*[×xXх]\s*(\d+(?:\.\d+)?)\s*мм;regex;Діаметр;мм;$1 ;80;TRUE;6371204;attribute;Diameter from dimensions
+;Розміри;Φ\s*(\d+(?:\.\d+)?)\s*[×xXх]\s*(\d+(?:\.\d+)?)\s*мм;regex;Діаметр;мм;$1 ;81;TRUE;6371204;attribute;Diameter Phi symbol
+;Розміри;(\d+(?:\.\d+)?)\s*[×xXх]\s*(\d+(?:\.\d+)?)\s*[×xXх]\s*(\d+(?:\.\d+)?)\s*мм;regex;Довжина;мм;$1 ;82;TRUE;6371204;attribute;Length from dimensions
+;Розміри;(\d+(?:\.\d+)?)\s*[×xXх]\s*(\d+(?:\.\d+)?)\s*[×xXх]\s*(\d+(?:\.\d+)?)\s*мм;regex;Ширина;мм;$2 ;83;TRUE;6371204;attribute;Width from dimensions
+;Вага;(\d+(?:\.\d+)?)\s*г;regex;Вага;г;$1 ;90;TRUE;6371204;attribute;Weight in grams
+;Вага;(\d+(?:\.\d+)?)\s*кг;regex;;;Пропустити;91;TRUE;6371204;skip;Weight in kg - engine limitation (no arithmetic)
+;Строк гарантії;(\d+)\s*міс\.?;regex;Гарантійний термін;міс;$1 ;100;TRUE;6371204;attribute;Warranty period in months
+;Формат;.*;regex;;;Пропустити;110;TRUE;6371204;skip;Format not clear attribute
+;Площа;.*;regex;;;Пропустити;111;TRUE;6371204;skip;Coverage area not in prom
+;Розмір упаковки;.*;regex;;;Пропустити;120;TRUE;6371204;skip;Package size not needed
+;Вага брутто;.*;regex;;;Пропустити;121;TRUE;6371204;skip;Gross weight not needed

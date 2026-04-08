@@ -1,0 +1,141 @@
+supplier_name_substring;supplier_attribute;supplier_value_pattern;pattern_type;prom_attribute;prom_attribute_unit_template;prom_value_template;priority;is_active;category_id;rule_kind;notes
+.*\bUTP\b.*;;;regex;Тип витої пари;;UTP;1;TRUE;7190605;extract;UTP from name
+.*\bFTP\b.*;;;regex;Тип витої пари;;FTP;2;TRUE;7190605;extract;FTP from name
+.*\bSTP\b.*;;;regex;Тип витої пари;;STP;3;TRUE;7190605;extract;STP from name
+.*\bF/UTP\b.*;;;regex;Тип витої пари;;F/UTP;4;TRUE;7190605;extract;F/UTP from name
+.*\bS/FTP\b.*;;;regex;Тип витої пари;;S/FTP;5;TRUE;7190605;extract;S/FTP from name
+.*\bSF/UTP\b.*;;;regex;Тип витої пари;;SF/UTP;6;TRUE;7190605;extract;SF/UTP from name
+.*\bCAT\s*5[Ee]\b.*;;;regex;Категорія витої пари;;САТ5е;10;TRUE;7190605;extract;CAT5e from name
+.*\bCAT\s*6[Aa]\b.*;;;regex;Категорія витої пари;;CAT6a;11;TRUE;7190605;extract;CAT6a from name FIXED
+.*\bCAT\s*6\b.*;;;regex;Категорія витої пари;;CAT6;12;TRUE;7190605;extract;CAT6 from name FIXED priority
+.*\bCAT\s*7[Aa]\b.*;;;regex;Категорія витої пари;;CAT7a;13;TRUE;7190605;extract;CAT7a from name
+.*\bCAT\s*7\b.*;;;regex;Категорія витої пари;;CAT7;14;TRUE;7190605;extract;CAT7 from name
+.*внутр.*;;;regex;Тип монтажу;;Внутрішній;20;TRUE;7190605;extract;Indoor cable from name
+.*зовн.*;;;regex;Тип монтажу;;Зовнішній;21;TRUE;7190605;extract;Outdoor cable from name
+.*улич.*;;;regex;Тип монтажу;;Зовнішній;22;TRUE;7190605;extract;Street cable as outdoor
+.*коаксіальн.*;;;regex;Тип кабеля;;Коаксіальний;30;TRUE;7190605;extract;Coaxial cable from name
+.*комбін.*;;;regex;Тип кабеля;;Комбінований;31;TRUE;7190605;extract;Combined cable from name
+.*сигнальн.*;;;regex;Тип кабеля;;Сигнальний;32;TRUE;7190605;extract;Signal cable from name
+.*безгалоген.*;;;regex;Матеріал оболочки;;LSZH;40;TRUE;7190605;extract;LSZH from name bezgalogen
+.*LSZH.*;;;regex;Матеріал оболочки;;LSZH;41;TRUE;7190605;extract;LSZH from name
+.*LSOH.*;;;regex;Матеріал оболочки;;LSZH;42;TRUE;7190605;extract;LSOH as LSZH
+.*НГ-FRLS.*;;;regex;Марка кабелю;;НГ-FRLS;50;TRUE;7190605;extract;NG-FRLS from name
+.*НГ-HF.*;;;regex;Марка кабелю;;НГ-HF;51;TRUE;7190605;extract;NG-HF from name
+.*НГ-LS.*;;;regex;Марка кабелю;;НГ-LS;52;TRUE;7190605;extract;NG-LS from name
+.*\b(FTP|STP|S/FTP|F/UTP|SF/UTP)\b.*;;;regex;Наявність екрану;;Так;55;TRUE;7190605;extract;Shielded cable type implies screen presence FIXED
+(\d+)\s*м\b.*;;;regex;Длина в упаковке;м;$1 ;60;TRUE;7190605;extract;Length in meters from name
+;Тип;.*UTP.*;regex;Тип витої пари;;UTP;100;TRUE;7190605;attribute;UTP from type attribute
+;Тип;.*FTP.*;regex;Тип витої пари;;FTP;101;TRUE;7190605;attribute;FTP from type attribute
+;Тип;.*F/UTP.*;regex;Тип витої пари;;F/UTP;102;TRUE;7190605;attribute;F/UTP from type attribute
+;Тип;.*S/FTP.*;regex;Тип витої пари;;S/FTP;103;TRUE;7190605;attribute;S/FTP from type attribute
+;Тип витої пари;UTP;exact;Тип витої пари;;UTP;110;TRUE;7190605;attribute;UTP exact match
+;Тип витої пари;FTP;exact;Тип витої пари;;FTP;111;TRUE;7190605;attribute;FTP exact match
+;Тип витої пари;F/UTP;exact;Тип витої пари;;F/UTP;112;TRUE;7190605;attribute;F/UTP exact match
+;Тип витої пари;S/FTP;exact;Тип витої пари;;S/FTP;113;TRUE;7190605;attribute;S/FTP exact match
+;Тип витої пари;SF/UTP;exact;Тип витої пари;;SF/UTP;114;TRUE;7190605;attribute;SF/UTP exact match FIXED added
+;Категорія витої пари;САТ5е;exact;Категорія витої пари;;САТ5е;120;TRUE;7190605;attribute;CAT5e exact
+;Категорія витої пари;CAT5е;exact;Категорія витої пари;;САТ5е;121;TRUE;7190605;attribute;CAT5e variant
+;Категорія витої пари;CAT6a;exact;Категорія витої пари;;CAT6a;122;TRUE;7190605;attribute;CAT6a exact FIXED order
+;Категорія витої пари;CAT6;exact;Категорія витої пари;;CAT6;123;TRUE;7190605;attribute;CAT6 exact FIXED order
+;Категорія витої пари;CAT7a;exact;Категорія витої пари;;CAT7a;124;TRUE;7190605;attribute;CAT7a exact
+;Категорія витої пари;CAT7;exact;Категорія витої пари;;CAT7;125;TRUE;7190605;attribute;CAT7 exact
+;Діаметр жили \(мм\);(\d+(?:[,\.]\d+)?);regex;Діаметр жили (мм);;$1 ;130;TRUE;7190605;attribute;Wire diameter from attribute
+;Кількість жил;(\d+);regex;Кількість жил;;$1 ;140;TRUE;7190605;attribute;Wire count
+;Переріз;(\d+(?:[,\.]\d+)?)\s*мм;regex;Площа перетину;кв. мм;$1 ;150;TRUE;7190605;attribute;Cross section from pererіz
+;Площа перетину \(кв\. мм\);(\d+(?:[,\.]\d+)?);regex;Площа перетину;кв. мм;$1 ;151;TRUE;7190605;attribute;Cross section direct
+;Материал оболочки;ПВХ;exact;Материал оболочки;;ПВХ;160;TRUE;7190605;attribute;PVC shell material
+;Материал оболочки;Поліетилен;exact;Материал оболочки;;Поліетилен;161;TRUE;7190605;attribute;Polyethylene shell
+;Материал оболочки;LSZH;exact;Материал оболочки;;LSZH;162;TRUE;7190605;attribute;LSZH shell material
+;Оболонка;.*ПВХ.*;regex;Материал оболочки;;ПВХ;170;TRUE;7190605;attribute;PVC from obolonka higher priority FIXED
+;Оболонка;.*[Пп]оліетилен.*;regex;Материал оболочки;;Поліетилен;171;TRUE;7190605;attribute;Polyethylene from obolonka higher priority FIXED
+;Оболонка;.*LSZH.*;regex;Материал оболочки;;LSZH;172;TRUE;7190605;attribute;LSZH from obolonka higher priority FIXED
+;Оболонка;.*LSOH.*;regex;Материал оболочки;;LSZH;173;TRUE;7190605;attribute;LSOH as LSZH
+;Оболонка;.*безгалогенн.*;regex;Материал оболочки;;LSZH;174;TRUE;7190605;attribute;Bezgalogen as LSZH
+;Матеріал центральної жили;Мідь;exact;Матеріал центральної жили;;Мідь;180;TRUE;7190605;attribute;Copper central wire
+;Матеріал центральної жили;CCA;exact;Матеріал центральної жили;;CCA;181;TRUE;7190605;attribute;CCA central wire
+;Матеріал центральної жили;CCS;exact;Матеріал центральної жили;;CCS;182;TRUE;7190605;attribute;CCS central wire
+;Матеріал центральної жили;Біметал;exact;Матеріал центральної жили;;Біметал;183;TRUE;7190605;attribute;Bimetal central wire
+;Матеріал центральної жили;Алюміній;exact;Матеріал центральної жили;;Алюміній;184;TRUE;7190605;attribute;Aluminum central wire
+;Центральний провідник;.*[Мм]ідь.*;regex;Матеріал центральної жили;;Мідь;190;TRUE;7190605;attribute;Copper from central conductor
+;Центральний провідник;.*CCA.*;regex;Матеріал центральної жили;;CCA;191;TRUE;7190605;attribute;CCA from central conductor
+;Центральний провідник;.*CCS.*;regex;Матеріал центральної жили;;CCS;192;TRUE;7190605;attribute;CCS from central conductor
+;Центральний провідник;.*[Бб]іметал.*;regex;Матеріал центральної жили;;Біметал;193;TRUE;7190605;attribute;Bimetal from central conductor
+;Центральний провідник;.*[Аа]люміній.*;regex;Матеріал центральної жили;;Алюміній;194;TRUE;7190605;attribute;Aluminum from central conductor
+;Матеріал жили \(провідника\);.*мідь.*;regex;Матеріал жили;;Мідь;200;TRUE;7190605;attribute;Copper wire material from provodnik
+;Матеріал жили \(провідника\);.*медь.*;regex;Матеріал жили;;Мідь;201;TRUE;7190605;attribute;Copper wire RU spelling
+;Матеріал жили;Мідь;exact;Матеріал жили;;Мідь;210;TRUE;7190605;attribute;Copper wire exact
+;Матеріал жили;CCA;exact;Матеріал жили;;CCA;211;TRUE;7190605;attribute;CCA wire exact
+;Матеріал жили;CCS;exact;Матеріал жили;;CCS;212;TRUE;7190605;attribute;CCS wire exact
+;Матеріал жили;Біметал;exact;Матеріал жили;;Біметал;213;TRUE;7190605;attribute;Bimetal wire exact
+;Матеріал жили;Оміднина сталь;exact;Матеріал жили;;Оміднина сталь;214;TRUE;7190605;attribute;Copper-clad steel
+;Матеріал жили;Оміднений алюміній;exact;Матеріал жили;;Оміднений алюміній;215;TRUE;7190605;attribute;Copper-clad aluminum
+;Матеріал жили;Сталь покрита міддю;exact;Матеріал жили;;Сталь покрита міддю;216;TRUE;7190605;attribute;Copper-coated steel
+;Матеріал жили;SCCS;exact;Матеріал жили;;SCCS;217;TRUE;7190605;attribute;SCCS wire material
+;Тип кабеля;Коаксіальний;exact;Тип кабеля;;Коаксіальний;220;TRUE;7190605;attribute;Coaxial cable type
+;Тип кабеля;Коаксиальный;exact;Тип кабеля;;Коаксіальний;221;TRUE;7190605;attribute;Coaxial RU spelling
+;Тип кабеля;Комбінований;exact;Тип кабеля;;Комбінований;222;TRUE;7190605;attribute;Combined cable type
+;Тип кабеля;Сигнальний;exact;Тип кабеля;;Сигнальний;223;TRUE;7190605;attribute;Signal cable type
+;Упаковка;Бухта;exact;Упаковка;;Бухта;230;TRUE;7190605;attribute;Coil packaging
+;Упаковка;Барабан;exact;Упаковка;;Барабан;231;TRUE;7190605;attribute;Drum packaging
+;Упаковка;Котушка;exact;Упаковка;;Котушка;232;TRUE;7190605;attribute;Reel packaging
+;Упаковка;Коробка;exact;Упаковка;;Коробка;233;TRUE;7190605;attribute;Box packaging
+;Упаковка;Моток;exact;Упаковка;;Моток;234;TRUE;7190605;attribute;Skein packaging
+;Марка кабелю;НГ-FRLS;exact;Марка кабелю;;НГ-FRLS;240;TRUE;7190605;attribute;NG-FRLS mark exact
+;Марка кабелю;НГ-FRHF;exact;Марка кабелю;;НГ-FRHF;241;TRUE;7190605;attribute;NG-FRHF mark
+;Марка кабелю;НГ-FRLSLTx;exact;Марка кабелю;;НГ-FRLSLTx;242;TRUE;7190605;attribute;NG-FRLSLTx mark
+;Марка кабелю;НГ-HF;exact;Марка кабелю;;НГ-HF;243;TRUE;7190605;attribute;NG-HF mark
+;Марка кабелю;НГ-LS;exact;Марка кабелю;;НГ-LS;244;TRUE;7190605;attribute;NG-LS mark
+;Марка кабелю;НГ-LTx;exact;Марка кабелю;;НГ-LTx;245;TRUE;7190605;attribute;NG-LTx mark
+;Екранування;.*екран.*;regex;Наявність екрану;;Так;250;TRUE;7190605;attribute;Screen mentioned in ekranuvannia FIXED logic
+;Наявність екрану;Так;exact;Наявність екрану;;Так;260;TRUE;7190605;attribute;Screen presence yes
+;Наявність екрану;Ні;exact;Наявність екрану;;Ні;261;TRUE;7190605;attribute;Screen presence no
+;Тип монтажу;Внутрішній;exact;Тип монтажу;;Внутрішній;270;TRUE;7190605;attribute;Indoor mounting
+;Тип монтажу;Зовнішній;exact;Тип монтажу;;Зовнішній;271;TRUE;7190605;attribute;Outdoor mounting
+;Монтаж;.*приміщен.*;regex;Тип монтажу;;Внутрішній;280;TRUE;7190605;attribute;Indoor from montazh
+;Монтаж;.*зовні.*;regex;Тип монтажу;;Зовнішній;281;TRUE;7190605;attribute;Outdoor from montazh pomeschennia
+;Монтаж;.*поза.*;regex;Тип монтажу;;Зовнішній;282;TRUE;7190605;attribute;Outdoor from poza
+;Матеріал ізоляції;ПВХ;exact;Матеріал ізоляції;;ПВХ;290;TRUE;7190605;attribute;PVC insulation
+;Матеріал ізоляції;Поліетилен;exact;Матеріал ізоляції;;Поліетилен;291;TRUE;7190605;attribute;Polyethylene insulation
+;Матеріал ізоляції;PTFE;exact;Матеріал ізоляції;;PTFE;292;TRUE;7190605;attribute;PTFE insulation
+;Матеріал ізоляції;Поліуретан;exact;Матеріал ізоляції;;Поліуретан;293;TRUE;7190605;attribute;Polyurethane insulation
+;Матеріал ізоляції;Полістирол;exact;Матеріал ізоляції;;Полістирол;294;TRUE;7190605;attribute;Polystyrene insulation
+;Матеріал ізоляції;Гума;exact;Матеріал ізоляції;;Гума;295;TRUE;7190605;attribute;Rubber insulation
+;Изоляция;.*ПВХ.*;regex;Матеріал ізоляції;;ПВХ;300;TRUE;7190605;attribute;PVC from izolyatsiya
+;Изоляция;.*[Пп]оліетилен.*;regex;Матеріал ізоляції;;Поліетилен;301;TRUE;7190605;attribute;Polyethylene from izolyatsiya
+;Виконання 1 екрана;Фольга;exact;Виконання 1 екрана;;Фольга;310;TRUE;7190605;attribute;Foil screen 1
+;Виконання 1 екрана;Стрічка;exact;Виконання 1 екрана;;Стрічка;311;TRUE;7190605;attribute;Tape screen 1
+;Виконання 1 екрана;Дріт;exact;Виконання 1 екрана;;Дріт;312;TRUE;7190605;attribute;Wire screen 1
+;Виконання 1 екрана;Гофрована труба;exact;Виконання 1 екрана;;Гофрована труба;313;TRUE;7190605;attribute;Corrugated tube screen 1
+;Длина в упаковке \(м\);(\d+);regex;Длина в упаковке;м;$1 ;350;TRUE;7190605;attribute;Length in package meters
+;Довжина кабеля;(\d+)\s*м;regex;Длина в упаковке;м;$1 ;351;TRUE;7190605;attribute;Cable length meters
+;Смуга частот \(МГц\);(\d+);regex;Смуга частот;МГц;$1 ;390;TRUE;7190605;attribute;Frequency band MHz
+;Частотна характеристика;(\d+)\s*[мМ]Гц;regex;Смуга частот;МГц;$1 ;391;TRUE;7190605;attribute;Frequency characteristic mHz or MHz FIXED case insensitive
+;Хвильовий опір \(Ом\);(\d+);regex;Хвильовий опір;Ом;$1 ;460;TRUE;7190605;attribute;Wave impedance Ohm
+;Сопротивление;(\d+)\s*Ом;regex;Хвильовий опір;Ом;$1 ;461;TRUE;7190605;attribute;Soprotivlenie as wave impedance
+;Опір \(Ом/км\);(\d+(?:[,\.]\d+)?);regex;Опір;Ом/км;$1 ;470;TRUE;7190605;attribute;Resistance Ohm per km
+;Рабочая температура;(-?\d+)\s*°?\s*C\s*[-–—]\s*\+?(-?\d+)\s*°?\s*C;regex;Мінімальна робоча температура;град.;$1 ;500;TRUE;7190605;attribute;Min temp from rabochaya temperatura
+;Рабочая температура;(-?\d+)\s*°?\s*C\s*[-–—]\s*\+?(-?\d+)\s*°?\s*C;regex;Максимальна робоча температура;град.;$2 ;501;TRUE;7190605;attribute;Max temp from rabochaya temperatura
+;Вага брутто;.*;regex;;;Пропустити;800;TRUE;7190605;skip;Gross weight not in PROM
+;Розмір упаковки.*;.*;regex;;;Пропустити;801;TRUE;7190605;skip;Package dimensions not needed
+;Кількість в ящику;.*;regex;;;Пропустити;802;TRUE;7190605;skip;Box quantity not needed
+;Размер;.*;regex;;;Пропустити;803;TRUE;7190605;skip;Size details not needed
+;Стандарти;.*;regex;;;Пропустити;804;TRUE;7190605;skip;Standards not in PROM
+;Ізоляція дроту;.*;regex;;;Пропустити;805;TRUE;7190605;skip;Wire insulation details
+;Знос;.*;regex;;;Пропустити;806;TRUE;7190605;skip;Wear details not needed
+;Внешний вид;.*;regex;;;Пропустити;807;TRUE;7190605;skip;Appearance not needed
+;Колір проводу;.*;regex;;;Пропустити;808;TRUE;7190605;skip;Wire color not in PROM
+;Маркування кабелю;.*;regex;;;Пропустити;809;TRUE;7190605;skip;Cable marking not needed
+;Налагодження;.*;regex;;;Пропустити;810;TRUE;7190605;skip;Setup details not needed
+;Незбалансований опір постійного струму;.*;regex;;;Пропустити;811;TRUE;7190605;skip;Unbalanced DC resistance not in PROM
+;Опір постійного струму;.*;regex;;;Пропустити;812;TRUE;7190605;skip;DC resistance details
+;Основний провідник;.*;regex;;;Пропустити;813;TRUE;7190605;skip;Main conductor details covered
+;Ріпкорд;.*;regex;;;Пропустити;814;TRUE;7190605;skip;Ripcord not in PROM
+;Фізичні властивості оболонки.*;.*;regex;;;Пропустити;815;TRUE;7190605;skip;Physical properties not needed
+;Діелектрик;.*;regex;;;Пропустити;816;TRUE;7190605;skip;Dielectric details not in PROM
+;Материал корпуса;.*;regex;;;Пропустити;817;TRUE;7190605;skip;Body material not in PROM
+;Входное напряжение;.*;regex;;;Пропустити;818;TRUE;7190605;skip;Input voltage details
+;Дополнительно;.*;regex;;;Пропустити;819;TRUE;7190605;skip;Additional info not needed
+;Диаметр;.*;regex;;;Пропустити;820;TRUE;7190605;skip;Diameter details covered
+;Обратные потери;.*;regex;;;Пропустити;821;TRUE;7190605;skip;Return loss not in PROM
+;Радиус изгиба;.*;regex;;;Пропустити;822;TRUE;7190605;skip;Bend radius details
+;Материал;.*;regex;;;Пропустити;823;TRUE;7190605;skip;Материал details covered by other rules

@@ -1,0 +1,63 @@
+﻿supplier_name_substring;supplier_attribute;supplier_value_pattern;pattern_type;prom_attribute;prom_attribute_unit_template;prom_value_template;priority;is_active;category_id;rule_kind;notes
+.*\b(AGM)\b.*;;;regex;Тип акумулятора;;AGM;1;TRUE;5280501;extract;AGM from name
+.*\b(GEL|GL|гелев)\b.*;;;regex;Тип акумулятора;;GEL;2;TRUE;5280501;extract;GEL / GL / гелевий from name
+.*\b(Li\s*Fe\s*PO\s*4|LiFePO4|LFP|Li-?TIME|LiTIME|Li-TIME)\b.*;;;regex;Тип акумулятора;;LiFePO4;3;TRUE;5280501;extract;LiFePO4 / LFP / Li-TIME from name
+.*\bЛітієва\b.*;;;regex;Тип акумулятора;;LiFePO4;4;TRUE;5280501;extract;Cyrillic Lithium indicator
+.*\bЛитиевая\b.*;;;regex;Тип акумулятора;;LiFePO4;4;TRUE;5280501;extract;Cyrillic Lithium indicator
+\b(\d+(?:\.\d+)?)\s*[АA][\•·●]?[чh]\b;;;regex;Ємність акумулятору;А·г;$1 ;9;TRUE;5280501;extract;Capacity Ah from name
+\b(\d+(?:\.\d+)?)\s*кВт[\•·●]?ч\b;;;regex;;;Пропустити;10;TRUE;5280501;skip;kWh cannot convert to Ah
+\b(\d+(?:\.\d+)?)\s*[ВV]\b;;;regex;Напруга;В;$1 ;11;TRUE;5280501;extract;Voltage from name
+;Тип пристрою;(?i)\bAGM\b;regex;Тип акумулятора;;AGM;12;TRUE;5280501;attribute;AGM type (regex)
+;Тип пристрою;(?i)\b(GEL|гелев(ий|ый)|GL\s*\(гелев(ий|ый)\))\b;regex;Тип акумулятора;;GEL;13;TRUE;5280501;attribute;GEL type (latin + cyrillic)
+;Тип пристрою;(?i)\bLi\s*Fe\s*PO\s*4\b|\bLiFePo4\b|літій[-\s]?залізо[-\s]?фосфат;regex;Тип акумулятора;;LiFePO4;14;TRUE;5280501;attribute;LiFePO4 type
+;Тип пристрою;Гелевий;exact;Тип акумулятора;;GEL;15;TRUE;5280501;attribute;Gel type (Cyrillic capital)
+;Тип пристрою;GEL \(гелевий\);exact;Тип акумулятора;;GEL;16;TRUE;5280501;attribute;GEL gel type
+;Тип пристрою;LiFePo4.*;regex;Тип акумулятора;;LiFePO4;17;TRUE;5280501;attribute;LiFePO4 type
+;Тип пристрою;.*літій-залізо-фосфат.*;regex;Тип акумулятора;;LiFePO4;18;TRUE;5280501;attribute;LiFePO4 (Cyrillic description)
+;Ємність;"(\d+(?:[.,]\d+)?)\s*кВт[\•·●]?[чг]";regex;;;Пропустити;19;TRUE;5280501;skip;kWh capacity – skip
+;Ємність;"(\d+(?:[.,]\d+)?)\s*[АA][\•·●]?\s*[гh]";regex;Ємність акумулятору;А. г;$1 ;20;TRUE;5280501;attribute;"Capacity Ah (А•г, Аг, Ah)"
+;Ємність;"(\d+(?:[.,]\d+)?)\s*[АA]\s*[гh]";regex;Ємність акумулятору;А. г;$1 ;21;TRUE;5280501;attribute;Capacity Ah (Aг without dot)
+;Ємність;"(\d+),(\d+)";regex;Ємність акумулятору;А. г;$1.$2;22;TRUE;5280501;attribute;Comma to dot normalization
+;Выходное напряжение;(\d+(?:\.\d+)?)\s*[ВV];regex;Напруга;В;$1 ;23;TRUE;5280501;attribute;Voltage from Выходное напряжение
+;Напруга \(В\);(\d+(?:\.\d+)?);regex;Напруга;В;$1 ;24;TRUE;5280501;attribute;Voltage from formatted attribute
+;Напруга;(\d+(?:\.\d+)?);regex;Напруга;В;$1 ;25;TRUE;5280501;attribute;Voltage direct from attribute
+;Питание;(\d+)\s*В;regex;Напруга;В;$1 ;26;TRUE;5280501;attribute;Voltage from Питание
+;Тип струмовивіду;\bDT\b;exact;Тип струмовивіду;;DT;30;TRUE;5280501;attribute;DT terminal
+;Тип струмовивіду;\bF2\b;regex;Тип струмовивіду;;F2;31;TRUE;5280501;attribute;F2 terminal
+;Тип струмовивіду;\bF6\b;regex;Тип струмовивіду;;F6;32;TRUE;5280501;attribute;F6 terminal
+;Тип струмовивіду;\bF8\b;regex;Тип струмовивіду;;F8;33;TRUE;5280501;attribute;F8 terminal
+;Тип струмовивіду;\bF12\b;regex;Тип струмовивіду;;F12 (M8);34;TRUE;5280501;attribute;F12 terminal
+;Тип струмовивіду;\bF18\b;regex;Тип струмовивіду;;F18;35;TRUE;5280501;attribute;F18 terminal
+;Тип струмовивіду;[Тт]1\b;regex;Тип струмовивіду;;T1;36;TRUE;5280501;attribute;T1 terminal
+;Тип струмовивіду;[Тт]2\b;regex;Тип струмовивіду;;T2;37;TRUE;5280501;attribute;T2 terminal
+;Тип струмовивіду;[Тт]3\b;regex;Тип струмовивіду;;T3;38;TRUE;5280501;attribute;T3 terminal
+;Тип струмовивіду;[Тт]6\b;regex;Тип струмовивіду;;T6;39;TRUE;5280501;attribute;T6 terminal
+;Тип струмовивіду;[Тт]8\b;regex;Тип струмовивіду;;T8;40;TRUE;5280501;attribute;T8 terminal
+;Тип струмовивіду;[Тт]11\b;regex;Тип струмовивіду;;T11;41;TRUE;5280501;attribute;T11 terminal
+;Тип струмовивіду;[Тт]12\b;regex;Тип струмовивіду;;T12;42;TRUE;5280501;attribute;T12 terminal
+;Тип струмовивіду;[Тт]14\b;regex;Тип струмовивіду;;T14;43;TRUE;5280501;attribute;T14 terminal
+;Тип токовывода;\bF2\b;regex;Тип струмовивіду;;F2;44;TRUE;5280501;attribute;F2 from supplier
+;Тип токовывода;\bF6\b;regex;Тип струмовивіду;;F6;45;TRUE;5280501;attribute;F6 from supplier
+;Тип токовывода;\bF8\b;regex;Тип струмовивіду;;F8;46;TRUE;5280501;attribute;F8 from supplier
+;Тип токовывода;\bF12\b;regex;Тип струмовивіду;;F12 (M8);47;TRUE;5280501;attribute;F12 from supplier
+;Тип токовывода;\bF18\b;regex;Тип струмовивіду;;F18;48;TRUE;5280501;attribute;F18 from supplier
+;Разъем;\bF2\b;regex;Тип струмовивіду;;F2;49;TRUE;5280501;attribute;F2 from connector
+;Разъем;\bF6\b;regex;Тип струмовивіду;;F6;50;TRUE;5280501;attribute;F6 from connector
+;Разъем;\bF8\b;regex;Тип струмовивіду;;F8;51;TRUE;5280501;attribute;F8 from connector
+;Разъем;\bF12\b;regex;Тип струмовивіду;;F12 (M8);52;TRUE;5280501;attribute;F12 from connector
+;Разъем;\bF18\b;regex;Тип струмовивіду;;F18;53;TRUE;5280501;attribute;F18 from connector
+;Додаткові характеристики;.*тип клем\s*-\s*F(2|6|8|12|18)\b;regex;Тип струмовивіду;;F$1;54;TRUE;5280501;attribute;Terminal type from text
+;Струм заряду \(А\);"(\d+(?:[.,]\d+)?)";regex;Струм заряду;А;$1 ;55;TRUE;5280501;attribute;Charge current formatted
+;Струм заряду;"(\d+(?:[.,]\d+)?)";regex;Струм заряду;А;$1 ;56;TRUE;5280501;attribute;Charge current direct
+;Додаткові характеристики;".*[Рр]екомендований струм заряду[:\s]+(\d+(?:[.,]\d+)?)\s*[АA]";regex;Струм заряду;А;$1 ;57;TRUE;5280501;attribute;Recommended charge current
+;Особенности;.*[Мм]аксимальний\s+(?:зарядний\s+)?струм\s+заряду[:\s]+(\d+(?:\.\d+)?)\s*[АA];regex;;;Пропустити;58;TRUE;5280501;skip;Max charge current not in PROM
+;Особенности;.*[Сс]трум заряду до\s+(\d+(?:\.\d+)?)\s*[АA];regex;Струм заряду;А;$1 ;59;TRUE;5280501;attribute;Charge current up to from features
+;Додаткові характеристики;.*[Рр]екомендований струм заряду[:\s]+(\d+(?:\.\d+)?)\s*[АA];regex;Струм заряду;А;$1 ;60;TRUE;5280501;attribute;Recommended charge current
+;Робоча температура;[–-]\s*(100|[1-9]?\d|0)\s*°?\s*C\s*[-–—]\s*\+?(-?\d+)\s*°?\s*C;regex;Мінімальна робоча температура;град.;($1);61;TRUE;5280501;extract;Min operating temperature
+;Робоча температура;(-?[0-9]+)\s*°?\s*C\s*[-–—]\s*\+?(-?[0-9]+)\s*(°C);regex;Максимальна робоча температура;град.;$2 ;62;TRUE;5280501;extract;Max operating temperature
+;Розміри;([0-9\.]+)\s*×\s*([0-9\.]+)\s*×\s*([0-9\.]+)\s*(мм);regex;Довжина;$4 ;$1 ;63;TRUE;5280501;extract;Length from dimensions
+;Розміри;([0-9\.]+)\s*×\s*([0-9\.]+)\s*×\s*([0-9\.]+)\s*(мм);regex;Ширина;$4 ;$2 ;64;TRUE;5280501;extract;Width from dimensions
+;Розміри;([0-9\.]+)\s*×\s*([0-9\.]+)\s*×\s*([0-9\.]+)\s*(мм);regex;Висота;$4 ;$3 ;65;TRUE;5280501;extract;Height from dimensions
+;Вага;([0-9\.]+)\s*г;regex;Вага;г;$1 г;66;TRUE;5280501;extract;Weight in grams (decimal kg → g)
+;Вага;([0-9\.]+)\s*кг;regex;Вага;г;$1 кг;67;TRUE;5280501;extract;Weight in grams (integer kg → g)
+;Строк гарантії;([0-9]+)\s*(міс)\.?;regex;Гарантійний термін;$2 ;$1 ;68;TRUE;5280501;extract;Warranty period
