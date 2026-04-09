@@ -15,10 +15,10 @@ name: Product Import Pipeline
 on:
   schedule:
     # 04:00 Kyiv — літо (UTC+3, квітень–жовтень)
-    - cron: "0 1 * 4-10 *"
+    #- cron: "0 1 * 4-10 *"
     # 04:00 Kyiv — зима (UTC+2, листопад–березень)
-    - cron: "0 2 * 11-12 *"
-    - cron: "0 2 * 1-3 *"
+    #- cron: "0 2 * 11-12 *"
+    #- cron: "0 2 * 1-3 *"
 
     # 09:00 Kyiv — літо
     - cron: "0 6 * 4-10 *"
