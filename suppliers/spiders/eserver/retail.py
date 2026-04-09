@@ -41,7 +41,7 @@ class EserverRetailSpider(EserverBaseSpider, BaseRetailSpider):
         self.keywords_mapping  = self._load_keywords_mapping_eserver()
 
         import os as _os
-        _root = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+        _root = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         csv_path = str(_root / "data" / "eserver" / "eserver_category.csv")
         self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
 
@@ -53,7 +53,7 @@ class EserverRetailSpider(EserverBaseSpider, BaseRetailSpider):
         mapping = {}
         import os as _os
         csv_path = (
-            Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+            Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
             / "data" / "eserver" / "eserver_category.csv"
         )
         try:

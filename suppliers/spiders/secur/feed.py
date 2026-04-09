@@ -61,7 +61,7 @@ class SecurFeedSpider(scrapy.Spider):
         self.category_mapping = self._load_category_mapping()
 
         import os as _os
-        _root = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+        _root = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         csv_path = str(_root / "data" / "secur" / "secur_category.csv")
         self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
 
@@ -75,7 +75,7 @@ class SecurFeedSpider(scrapy.Spider):
     def _load_category_mapping(self) -> dict:
         mapping: dict = {}
         import os as _os
-        csv_path = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy")) / "data" / "secur" / "secur_category.csv"
+        csv_path = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline")) / "data" / "secur" / "secur_category.csv"
 
         try:
             with open(csv_path, encoding="utf-8-sig") as f:

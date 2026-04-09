@@ -115,7 +115,7 @@ class SecurRetailSpider(BaseRetailSpider):
         self.category_urls = list(self.category_mapping.keys())
 
         import os as _os
-        _root = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+        _root = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         csv_path = str(_root / "data" / "secur" / "secur_category.csv")
         self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
 
@@ -130,7 +130,7 @@ class SecurRetailSpider(BaseRetailSpider):
         mapping = {}
         import os as _os
         csv_path = (
-            Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+            Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
             / "data" / "secur" / "secur_category.csv"
         )
         try:
@@ -162,7 +162,7 @@ class SecurRetailSpider(BaseRetailSpider):
         urls: set = set()
         import os as _os
         out_path = (
-            Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+            Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
             / "data" / "output" / self.output_filename
         )
         if not out_path.exists():

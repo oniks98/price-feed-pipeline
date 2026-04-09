@@ -107,8 +107,9 @@ class BaseSupplierSpider(scrapy.Spider):
         }
         """
         import csv
+        import os as _os
         mapping = {}
-        csv_path = Path(r"C:\FullStack\Scrapy\data\viatec\viatec_keywords.csv")
+        csv_path = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline")) / "data" / "viatec" / "viatec_keywords.csv"
         if not csv_path.exists():
             self.logger.warning("viatec_keywords.csv not found")
             return mapping

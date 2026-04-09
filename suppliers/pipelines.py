@@ -147,7 +147,7 @@ class SuppliersPipeline:
         self.manufacturers_db: dict[str, "ManufacturersDB"] = {}
 
         import os as _os
-        self.output_dir = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy")) / "data" / "output"
+        self.output_dir = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline")) / "data" / "output"
 
     # ------------------------------------------------------------------ #
     # OPEN SPIDER

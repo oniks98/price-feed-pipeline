@@ -147,7 +147,7 @@ class SecurFeedFullSpider(scrapy.Spider):
         self.category_mapping = self._load_category_mapping()
 
         import os as _os
-        _root = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+        _root = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         csv_path = str(_root / "data" / "secur" / "secur_category.csv")
         self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
 
@@ -180,7 +180,7 @@ class SecurFeedFullSpider(scrapy.Spider):
         urls: set = set()
         import os as _os
         out_path = (
-            Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+            Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
             / "data" / "output" / self.output_filename
         )
         if not out_path.exists():
@@ -210,7 +210,7 @@ class SecurFeedFullSpider(scrapy.Spider):
         mapping: dict = {}
         import os as _os
         csv_path = (
-            Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+            Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
             / "data" / "secur" / "secur_category.csv"
         )
         try:

@@ -9,7 +9,7 @@ from typing import Final, Mapping
 Константи для модуля suppliers.
 Централізоване зберігання налаштувань для всіх постачальників.
 
-Документація: C:/FullStack/Scrapy/ADD_NEW_SUPPLIER.md
+Документація: C:/FullStack/PriceFeedPipeline/ADD_NEW_SUPPLIER.md
 Тестування:   python test_price_rounding.py
 """
 
@@ -18,7 +18,7 @@ from typing import Final, Mapping
 # =============================================================================
 # Підтримує локальний запуск (дефолт) і GitHub Actions (через env PROJECT_ROOT)
 import os as _os
-_PROJECT_ROOT: Final[Path] = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+_PROJECT_ROOT: Final[Path] = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
 
 BASE_DATA_DIR: Final[Path] = _PROJECT_ROOT / "data"
 OUTPUT_DIR: Final[Path] = BASE_DATA_DIR / "output"

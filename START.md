@@ -18,8 +18,6 @@ python scripts/update_products.py viatec dealer
 python scripts/update_products.py viatec retail
 python scripts/update_products.py secur retail
 python scripts/update_products.py eserver retail
-python scripts/update_products.py lun retail
-python scripts/update_products.py neolight retail
 
 # Додавання noindex
 

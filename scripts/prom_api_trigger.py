@@ -64,10 +64,10 @@ def get_merged_csv_url() -> str:
 
     repo = os.environ.get("GITHUB_REPOSITORY", "").strip()
     if not repo:
-        repo = "oniks98/scrapy-suppliers"
+        repo = "oniks98/PriceFeedPipeline"
         print(f"⚠️  GITHUB_REPOSITORY не задано, використовую: {repo}")
 
-    return f"https://raw.githubusercontent.com/{repo}/main/data/merged.csv"
+    return f"https://raw.githubusercontent.com/{repo}/data-latest/data/merged.csv"
 
 
 def prom_request(token: str, payload: dict) -> dict:

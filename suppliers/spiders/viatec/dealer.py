@@ -41,7 +41,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        _project_root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+        _project_root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         load_dotenv(_project_root / "suppliers" / ".env")
         self.email    = os.getenv("VIATEC_EMAIL")
         self.password = os.getenv("VIATEC_PASSWORD")
@@ -55,7 +55,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         self.category_mapping = self._load_category_mapping()
         self.category_urls    = list(self.category_mapping.keys())
 
-        _root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+        _root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         csv_path = str(_root / "data" / "viatec" / "viatec_category.csv")
         self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
 
@@ -97,7 +97,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
 
     def _load_category_mapping(self):
         mapping = {}
-        _root    = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+        _root    = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         csv_path = _root / "data" / "viatec" / "viatec_category.csv"
         try:
             with open(csv_path, encoding="utf-8-sig") as f:

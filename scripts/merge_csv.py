@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from update_products import SUPPLIER_CONFIG
 from suppliers.services.prom_csv_schema import PromCsvSchema
 
-BASE_PATH = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+BASE_PATH = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
 OUTPUT_FILE = BASE_PATH / "data" / "merged.csv"
 
 # Еталонний заголовок з єдиного джерела правди

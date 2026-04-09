@@ -11,8 +11,8 @@ r"""
   при зміні ціни товар потрапляє у файл імпорту
 - Статистика: одна строка "Змінилася ціна" (сума по всім кейсам)
 - Універсальна логіка для всіх постачальників:
-  OLD файл: C:\FullStack\Scrapy\data\{supplier}\{supplier}_old.csv
-  NEW файл: C:\FullStack\Scrapy\data\output\{supplier}_new.csv
+  OLD файл: C:\FullStack\PriceFeedPipeline\data\{supplier}\{supplier}_old.csv
+  NEW файл: C:\FullStack\PriceFeedPipeline\data\output\{supplier}_new.csv
 - Після генерації import_products.csv видаляється старий {supplier}_old.csv
   і {supplier}_new.csv перейменовується в {supplier}_old.csv
 """
@@ -260,7 +260,7 @@ def process_supplier(supplier: str, product_type: str) -> None:
     print(f"{'='*60}")
 
     # Підтримує локальний запуск (дефолт) і GitHub Actions (через env PROJECT_ROOT)
-    base_path = os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy")
+    base_path = os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline")
 
     # Універсальна логіка для всіх постачальників
     old_file = os.path.join(base_path, "data", supplier, f"{supplier}_old.csv")

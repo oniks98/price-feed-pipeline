@@ -38,7 +38,7 @@ class ViatecRetailSpider(ViatecBaseSpider, BaseRetailSpider):
         self.category_mapping = self._load_category_mapping()
         self.category_urls    = list(self.category_mapping.keys())
 
-        _root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+        _root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         csv_path = str(_root / "data" / "viatec" / "viatec_category.csv")
         self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
 
@@ -81,7 +81,7 @@ class ViatecRetailSpider(ViatecBaseSpider, BaseRetailSpider):
     def _load_category_mapping(self):
         mapping = {}
         csv_path = (
-            Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+            Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
             / "data" / "viatec" / "viatec_category.csv"
         )
         try:
