@@ -12,20 +12,12 @@ python scripts/ultra_clean_run.py eserver_retail
 python scripts/ultra_clean_run.py lun_retail
 python scripts/ultra_clean_run.py neolight_retail
 
-# Оновлення товарів
+# Порівняння та оновлення товарів
 
 python scripts/update_products.py viatec dealer
 python scripts/update_products.py viatec retail
 python scripts/update_products.py secur retail
 python scripts/update_products.py eserver retail
-
-# Додавання noindex
-
-python scripts/prom_noindex_automation.py
-
-# Додавання ProSale
-
-python scripts/prom_prosale_automation.py
 
 # Всі постачальники (dealer + retail)
 
@@ -41,88 +33,29 @@ python scripts/generate_kasta_feed.py
 python scripts/generate_epicenter_feed.py
 python scripts/generate_rozetka_feed.py
 
-https://raw.githubusercontent.com/oniks98/scrapy-suppliers/main/data/markets/kasta_feed.xml
-https://raw.githubusercontent.com/oniks98/scrapy-suppliers/main/data/markets/epicenter_feed.xml
-https://raw.githubusercontent.com/oniks98/scrapy-suppliers/main/data/markets/rozetka_feed.xml
+https://raw.githubusercontent.com/oniks98/price-feed-pipeline/data-latest/data/markets/kasta_feed.xml
+https://raw.githubusercontent.com/oniks98/price-feed-pipeline/data-latest/data/markets/epicenter_feed.xml
+https://raw.githubusercontent.com/oniks98/price-feed-pipeline/data-latest/data/markets/rozetka_feed.xml
 
-# Скрипт оновлення товарів
+# Додавання noindex
 
-Скрипт порівнює старий список товарів з вашого сайту з новим списком від постачальника та створює файл для імпорту з оновленими даними.
+python scripts/prom_noindex_automation.py
 
-## 🎯 Логіка роботи
+# Додавання ProSale
 
-### 1. Товари, що існують в обох файлах:
+python scripts/prom_prosale_automation.py
 
-- ✅ **Наявність ТА Кількість однакові** → НЕ додаємо в import (нема що оновлювати)
-- 🔄 **Кількість різні** → Додаємо зі старого файлу з НОВОЮ Кількість
-- 🔄 **Наявність різні** → Додаємо зі старого файлу з НОВОЮ Наявність
-- 🔄 **Обидва параметри різні** → Додаємо зі старого з ОБОМА новими значеннями
+# Синхронізує категорії з фіду PROM з локальними файлами маркетплейсів
 
-### 2. Нові товари (є в new, немає в old):
+python scripts/export_prom_categories.py
 
-- ➕ Додаються в КІНЕЦЬ файлу
-- 🔢 Код товару = максимальний код зі старого файлу + 1, + 2, + 3...
+# Витягує cookies сесії Prom і зберігає їх у prom_cookies.json
 
-### 3. Відсутні товари (є в old, немає в new):
+python scripts/export_prom_cookies.py
 
-- ⚠️ Додаються з Наявність = "-" та Кількість = "0" (позначає відсутність у постачальника)
+# Тригер імпорту товарів в Prom.ua через API після git push
 
-## 📁 Структура файлів
-
-```
-C:\FullStack\Scrapy\
-├── scripts\
-│   └── update_products.py      ← Основний скрипт
-├── run_update.bat              ← Швидкий запуск
-├── data\
-│   └── viatec\
-│       ├── old_products.csv    ← Старий список (з вашого сайту)
-│       ├── new_products.csv    ← Новий список (від постачальника)
-│       └── import_products.csv ← РЕЗУЛЬТАТ (для імпорту)
-```
-
-## 📊 Приклад виводу
-
-```
-============================================================
-🚀 СКРИПТ ОНОВЛЕННЯ ТОВАРІВ v1.2
-============================================================
-
-📁 Файли:
-   Старий: C:\FullStack\Scrapy\data\viatec\old_products.csv
-   Новий:  C:\FullStack\Scrapy\data\viatec\new_products.csv
-   Вихід:  C:\FullStack\Scrapy\data\viatec\import_products.csv
-
-✅ Прочитано 4 товарів з old_products.csv
-   Колонок: 250
-✅ Прочитано 4 товарів з new_products.csv
-   Колонок: 250
-
-📊 Статистика:
-   Старих товарів: 4
-   Нових товарів: 4
-
-🔄 Обробка існуючих товарів...
-➕ Обробка нових товарів...
-
-💾 Запис результатів...
-✅ Файл успішно створено!
-
-============================================================
-📈 ПІДСУМКОВА СТАТИСТИКА:
-============================================================
-  Без змін (не додано):           1
-  Змінилася кількість:            1
-  Змінилася наявність:            1
-  Змінилося обидва параметри:     0
-  Відсутні в новому файлі:        1
-  Нові товари:                    1
-------------------------------------------------------------
-  ВСЬОГО для імпорту:             4
-============================================================
-
-✅ Готово!
-```
+python scripts/prom_api_trigger.py
 
 # Видаляємо коміт бота з remote — remote стане = локальному HEAD
 

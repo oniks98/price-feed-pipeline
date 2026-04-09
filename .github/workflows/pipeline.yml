@@ -130,12 +130,14 @@ jobs:
           VIATEC_EMAIL: ${{ secrets.VIATEC_EMAIL }}
           VIATEC_PASSWORD: ${{ secrets.VIATEC_PASSWORD }}
 
-      - name: Upload CSV artifact
+      - name: Upload CSV + sku_map artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: scraped-${{ matrix.supplier }}
-          path: data/output/${{ matrix.supplier }}_new.csv
+          path: |
+            data/output/${{ matrix.supplier }}_new.csv
+            data/${{ matrix.supplier }}/sku_map.json
           retention-days: 1
           if-no-files-found: warn
           compression-level: 6
@@ -192,7 +194,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: scraped-*
-          path: data/output/
+          path: ./
           merge-multiple: true
         continue-on-error: true
 
@@ -200,6 +202,8 @@ jobs:
         run: |
           echo "=== Файли в data/output/ ==="
           ls -la data/output/ || echo "Директорія порожня"
+          echo "=== sku_map файли ==="
+          find data/ -name "sku_map.json" -exec ls -la {} \; 2>/dev/null || echo "sku_map файлів не знайдено"
 
       - name: Run update_products — all suppliers
         run: python scripts/update_products.py

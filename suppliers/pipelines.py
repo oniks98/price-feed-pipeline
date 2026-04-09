@@ -556,19 +556,21 @@ class SuppliersPipeline:
         self.stats[file][key] += 1
 
     def close_spider(self, spider):
+        # Guard: Scrapy може викликати close_spider повторно при скасуванні.
+        # Перевіряємо одразу, щоб уникнути double-close файлів і double-save.
+        if self.stats_logged:
+            return
+        self.stats_logged = True
+
         for f in self.files.values():
             f.close()
 
         # Зберігаємо sku_map на диск
         for sku_service in self.sku_code_services.values():
             sku_service.save()
-        
+
         # Виводимо статистику обробки характеристик
         self.spec_length_handler.print_stats()
-
-        if self.stats_logged:
-            return
-        self.stats_logged = True
 
         for file, s in self.stats.items():
             spider.logger.info(
