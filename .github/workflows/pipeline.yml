@@ -173,9 +173,25 @@ jobs:
       # publish-dir залишається для подальшого push назад в data-latest.
       - name: Restore *_old.csv from data-latest
         run: |
-          git clone --branch data-latest --single-branch \
-            https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
-            publish-dir
+          # Якщо гілка data-latest ще не існує — створюємо її з порожнім комітом.
+          # Це потрібно для першого запуску нового репо.
+          if git ls-remote --exit-code --heads origin data-latest; then
+            git clone --branch data-latest --single-branch \
+              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
+              publish-dir
+            echo "✅ data-latest клоновано"
+          else
+            echo "⚠️  Гілка data-latest не існує — створюємо порожню"
+            mkdir -p publish-dir
+            cd publish-dir
+            git init
+            git remote add origin \
+              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            git checkout -b data-latest
+            git commit --allow-empty -m "chore: init data-latest branch"
+            git push origin data-latest
+            cd ..
+          fi
 
           for supplier in viatec secur; do
             mkdir -p data/${supplier}
@@ -184,7 +200,7 @@ jobs:
               cp "${src}" "data/${supplier}/${supplier}_old.csv"
               echo "✅ Відновлено ${supplier}_old.csv"
             else
-              echo "⚠️  ${supplier}_old.csv не знайдено в data-latest"
+              echo "⚠️  ${supplier}_old.csv не знайдено в data-latest (перший запуск?)"
             fi
           done
         env:
@@ -194,7 +210,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: scraped-*
-          path: ./
+          path: data/
           merge-multiple: true
         continue-on-error: true
 
@@ -219,9 +235,6 @@ jobs:
       # Це зберігає тільки ОДИН commit в data-latest — без history bloat.
       - name: Push large files to data-latest (amend)
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
           # Backup merged_prev перед перезаписом
           [ -f publish-dir/data/merged.csv ] && \
             cp publish-dir/data/merged.csv publish-dir/data/merged_prev.csv
@@ -239,6 +252,9 @@ jobs:
           done
 
           cd publish-dir
+          # git config має бути всередині publish-dir де своя .git від data-latest
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
           if git diff --staged --quiet; then
             echo "✅ Змін немає — коміт пропущено"
