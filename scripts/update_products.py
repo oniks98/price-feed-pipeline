@@ -262,6 +262,14 @@ def process_supplier(supplier: str, product_type: str) -> None:
     # Підтримує локальний запуск (дефолт) і GitHub Actions (через env PROJECT_ROOT)
     base_path = os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline")
 
+    # GitHub Actions передає {SUPPLIER}_OK=false якщо паук завершився з помилкою.
+    # Локально змінна не встановлена → за замовчуванням 'true' → обробка йде.
+    supplier_ok = os.environ.get(f"{supplier.upper()}_OK", "true").strip().lower()
+    if supplier_ok == "false":
+        print(f"⏭️  {supplier.upper()} ПРОПУЩЕНО — паук завершився з помилкою.")
+        print(f"   Старі дані збережено без змін до наступного успішного циклу.")
+        return
+
     # Універсальна логіка для всіх постачальників
     old_file = os.path.join(base_path, "data", supplier, f"{supplier}_old.csv")
     new_file = os.path.join(base_path, "data", "output", f"{supplier}_new.csv")

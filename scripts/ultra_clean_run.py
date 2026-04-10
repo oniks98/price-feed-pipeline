@@ -95,6 +95,26 @@ def get_output_filename(spider_name: str) -> str:
     return f"{supplier_name}_new.csv"
 
 
+def write_status(supplier_name: str, status: str) -> None:
+    """
+    Записує статус виконання паука у data/output/{supplier}_status.txt.
+    Значення: 'success' або 'failure'.
+
+    Використовується GitHub Actions для передачі статусу між jobs.
+    Локально файл також створюється, але process-and-publish не читає
+    його — він перевіряє змінну оточення {SUPPLIER}_OK, яка локально
+    не встановлена і за замовчуванням вважається 'true'.
+    """
+    output_dir = PROJECT_ROOT / "data" / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    status_file = output_dir / f"{supplier_name}_status.txt"
+    try:
+        status_file.write_text(status, encoding="utf-8")
+        print(f"📋 Статус паука записано: {status_file.name} = {status}")
+    except Exception as e:
+        print(f"⚠️  Не вдалося записати статус: {e}")
+
+
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("❌ Використання: python scripts/ultra_clean_run.py <spider_name>")
@@ -114,18 +134,24 @@ if __name__ == '__main__':
     extra_args = sys.argv[2:]
     sys.argv = ['scrapy', 'crawl', spider_name] + extra_args
 
+    supplier_name = spider_name.split("_")[0]
+
     try:
         execute()
         print("\n✅ Spider виконано успішно")
         print(f"📄 Результат збережено в: data/output/{output_file}")
+        write_status(supplier_name, "success")
         sys.exit(0)
     except SystemExit as e:
         if e.code == 0:
             print("\n✅ Spider виконано успішно")
             print(f"📄 Результат збережено в: data/output/{output_file}")
+            write_status(supplier_name, "success")
         else:
             print("\n❌ Spider завершився з помилками")
+            write_status(supplier_name, "failure")
         sys.exit(e.code)
     except Exception as e:
         print(f"❌ ПОМИЛКА ПРИ ЗАПУСКУ SPIDER: {e}")
+        write_status(supplier_name, "failure")
         sys.exit(1)
