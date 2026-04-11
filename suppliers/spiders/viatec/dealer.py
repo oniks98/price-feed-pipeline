@@ -19,6 +19,7 @@ import os
 from dotenv import load_dotenv
 from suppliers.spiders.base import ViatecBaseSpider, BaseDealerSpider
 from suppliers.services.category_specs_enricher import CategorySpecsEnricher
+from suppliers.services.viatec_feed_service import ViatecFeedService
 
 PRIORITY_PRODUCT  = 10
 PRIORITY_CATEGORY = 0
@@ -58,6 +59,9 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         _root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         csv_path = str(_root / "data" / "viatec" / "viatec_category.csv")
         self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
+
+        # ── XML-фід: виробники за артикулом (пріоритет перед CSV-словариком) ──
+        self.feed_service = ViatecFeedService(logger=self.logger)
 
         # ── RESUME: завантажуємо вже спарсені товари з попереднього запуску ──
         already_scraped = self._load_already_scraped_urls(_root)
@@ -318,7 +322,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
                 "Ідентифікатор_товару":     supplier_sku,
                 "Ідентифікатор_підрозділу": response.meta.get("subdivision_id", ""),
                 "Посилання_підрозділу":     response.meta.get("subdivision_link", ""),
-                "Виробник":                 "",
+                "Виробник":                 self.feed_service.get_vendor(supplier_sku),
                 "Країна_виробник":          "",
                 "price_type":               self.price_type,
                 "supplier_id":              self.supplier_id,
