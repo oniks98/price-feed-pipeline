@@ -94,6 +94,7 @@ from suppliers.services.channel_service import ChannelService
 from suppliers.services.availability_service import AvailabilityService
 from suppliers.services.specs_utils import merge_all_specs
 from suppliers.services.prom_csv_schema import PromCsvSchema
+from suppliers.services.specs_enricher import SpecsEnricher
 from suppliers.services.spec_length_handler import SpecificationLengthHandler
 from suppliers.services.field_processor import FieldProcessor
 from suppliers.services.validation_service import ValidationService
@@ -363,6 +364,9 @@ class SuppliersPipeline:
                 
                 specs = self._process_specs(specs, cleaned, adapter, spider)
                 
+                # Додаємо стандартні характеристики (Стан, Компанія-виробник, Країна-виробник)
+                specs = SpecsEnricher.ensure_manufacturer_specs(specs, cleaned)
+                
                 # ---- POSTPROCESS SPECS ------------------------------- #
                 
                 category_id = channel_config.subdivision_id
@@ -529,7 +533,7 @@ class SuppliersPipeline:
     def _process_specs(self, specs, cleaned, adapter, spider):
         """Обробка характеристик через AttributeMapper + merge_all_specs"""
         if not self.attribute_mapper:
-            return self._ensure_condition(specs)
+            return SpecsEnricher.ensure_condition(specs)
 
         cat = adapter.get("Ідентифікатор_підрозділу", "")
         
@@ -539,14 +543,7 @@ class SuppliersPipeline:
         mapped = self.attribute_mapper.map_attributes(specs, cat).get("mapped", [])
         final_specs = merge_all_specs(specs, mapped, name_specs, spider.logger)
         
-        return self._ensure_condition(final_specs)
-
-    def _ensure_condition(self, specs: list) -> list:
-        """Додає 'Стан: Новий' якщо немає в характеристиках"""
-        specs_dict = {s["name"].lower().strip(): s for s in specs}
-        if "стан" not in specs_dict:
-            specs_dict["стан"] = {"name": "Стан", "unit": "", "value": "Новий"}
-        return list(specs_dict.values())
+        return SpecsEnricher.ensure_condition(final_specs)
 
     # ------------------------------------------------------------------ #
     # STATS / CLOSE
