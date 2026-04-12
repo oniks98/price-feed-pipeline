@@ -84,3 +84,12 @@ git reset --soft origin/main
 =SORT(UNIQUE(TOCOL(SPLIT(A:A;" ");1)))
 =SORT(UNIQUE(TOCOL(SPLIT(REGEXREPLACE(A:A;"[!@%,*]";"");" ");1)))
 =SORT(UNIQUE(TOCOL(SPLIT(REGEXREPLACE(A:A;"[!@%,*\.\(\)\[\]]";"");" ");1)))
+
+# Проверка репо
+
+https://api.github.com/repos/oniks98/scrapy-suppliers
+
+# Зависимости для мапинга єпицентра
+
+pip install openpyxl rapidfuzz
+pip install openpyxl rapidfuzz requests

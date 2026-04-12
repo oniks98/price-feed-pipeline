@@ -512,14 +512,33 @@ class SecurFeedFullSpider(scrapy.Spider):
         yield feed_item
 
     def errback_product(self, failure):
-        """Playwright впав → yield з фід-даними (не губимо товар)."""
+        """Playwright впав (timeout/network) → yield з фід-даними.
+
+        Зображення: зберігаємо feed_image з фіду (вже в feed_item).
+        Хар-ки: specs_from_feed (XML <param>) + category_enricher.
+        Товар не губиться.
+        """
         self.logger.error(f"❌ Playwright помилка: {failure.value}")
         self.logger.error(f"   URL: {failure.request.url}")
         feed_item = failure.request.meta.get("feed_item", {})
-        if feed_item:
-            specs_from_feed = failure.request.meta.get("specs_from_feed", [])
-            feed_item["specifications_list"] = specs_from_feed
-            yield feed_item
+        if not feed_item:
+            return
+
+        specs_from_feed = failure.request.meta.get("specs_from_feed", [])
+        category_id = failure.request.meta.get("category_id", "")
+        feed_id = failure.request.meta.get("feed_id", "")
+
+        # Доповнюємо категорійними хар-ками навіть без сторінки
+        specs = self.category_enricher.enrich_specs_by_category_id(
+            specs_from_feed, category_id, feed_id
+        )
+        feed_item["specifications_list"] = specs
+
+        self.logger.info(
+            f"⚠️  YIELD (fallback, фід-дані): {feed_item.get('Назва_позиції', '')[:50]} "
+            f"| Хар-к: {len(specs)} | Фото з фіду: {bool(feed_item.get('Посилання_зображення'))}"
+        )
+        yield feed_item
 
     # ──────────────────────────────────────────────────────────────────
     # ITEM BUILDING
