@@ -1,0 +1,2 @@
+я ошибся - давай эту логику перенесем  с красными ячейками  в C:\FullStack\PriceFeedPipeline\scripts\map_epicenter_attributes.py  , потому что не логично ее держать в  C:\FullStack\PriceFeedPipeline\scripts\fetch_epicenter_categories.py, а то теперь  при записи красных ячеек удаляется значение-  до прошлого рефактора такоого не было - тоже посмотри
+Проблема в map_epicenter_attributes.py — рядок ws_attr.cell(attr_row, col_prom_param).value = "" очищає клітинку якщо fuzzy не знайшов збіг, навіть якщо там вже було заповнено вручну.
