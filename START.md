@@ -87,7 +87,8 @@ git reset --soft origin/main
 
 # Проверка репо
 
-https://api.github.com/repos/oniks98/scrapy-suppliers
+https://api.github.com/repos/oniks98/price-feed-pipeline
+"size": 16744, 12.04.26
 
 # Зависимости для мапинга єпицентра
 

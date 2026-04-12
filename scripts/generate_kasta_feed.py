@@ -203,6 +203,57 @@ def transform_prom_image_urls(xml: str) -> str:
     return result
 
 
+DEFAULT_VENDOR = "Anker"
+DEFAULT_COUNTRY = "Китай"
+
+
+def fill_missing_vendor(xml: str) -> str:
+    """Підставляє <vendor> і <country_of_origin> якщо вони відсутні або порожні.
+
+    Prom стирає виробника якого немає в своїй базі → фід приходить
+    з порожнім <vendor>. Маркетплейси (Kasta, Rozetka, Epicenter)
+    відхиляють такі товари при валідації.
+    Fallback: Anker / Китай — нейтральний бренд, який є в базах усіх маркетплейсів.
+    """
+    filled = 0
+
+    def on_offer(m: re.Match) -> str:
+        nonlocal filled
+        offer_id, tail_attrs, body = m.group(1), m.group(2), m.group(3)
+
+        # Перевіряємо vendor
+        vendor_match = re.search(r"<vendor>(.*?)</vendor>", body, re.DOTALL)
+        if not vendor_match or not vendor_match.group(1).strip():
+            if vendor_match:
+                body = body.replace(vendor_match.group(0), f"<vendor>{DEFAULT_VENDOR}</vendor>", 1)
+            else:
+                insert_after = re.search(r"</price>", body)
+                pos = insert_after.end() if insert_after else 0
+                body = body[:pos] + f"\n<vendor>{DEFAULT_VENDOR}</vendor>" + body[pos:]
+            filled += 1
+
+        # Перевіряємо country_of_origin
+        country_match = re.search(r"<country_of_origin>(.*?)</country_of_origin>", body, re.DOTALL)
+        if not country_match or not country_match.group(1).strip():
+            if country_match:
+                body = body.replace(country_match.group(0), f"<country_of_origin>{DEFAULT_COUNTRY}</country_of_origin>", 1)
+            else:
+                vendor_end = re.search(r"</vendor>", body)
+                pos = vendor_end.end() if vendor_end else len(body)
+                body = body[:pos] + f"\n<country_of_origin>{DEFAULT_COUNTRY}</country_of_origin>" + body[pos:]
+
+        return f'<offer id="{offer_id}"{tail_attrs}>{body}</offer>'
+
+    xml = re.sub(
+        r'<offer\s+id="(\d+)"([^>]*)>(.*?)</offer>',
+        on_offer,
+        xml,
+        flags=re.DOTALL,
+    )
+    print(f"🏭  Підставлено виробника за замовчуванням ({DEFAULT_VENDOR} / {DEFAULT_COUNTRY}): {filled} товарів")
+    return xml
+
+
 def filter_unavailable_offers(xml: str) -> str:
     before = len(re.findall(r'<offer\s', xml))
     xml = re.sub(
@@ -260,6 +311,7 @@ def main() -> None:
     updated_xml = filter_unavailable_offers(xml)
     updated_xml = apply_prices(updated_xml, offer_map, currency_rates)
     updated_xml = transform_prom_image_urls(updated_xml)
+    updated_xml = fill_missing_vendor(updated_xml)
     updated_xml = add_name_ua(updated_xml)
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
