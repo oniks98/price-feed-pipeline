@@ -17,8 +17,8 @@ AlphaESS;AlphaESS;Китай
 APRO;APRO;Україна
 ARDESTO;ARDESTO;Україна
 Assmann;Assmann;Німеччина
-ACPR;ATIS;Україна
-ATIS;ATIS;Україна
+ACPR;Atis;Україна
+ATIS;Atis;Україна
 AZBIST;AZBIST;Китай
 Ballast Fix;Ballast Fix;ЄС
 BCOM;BCOM;Китай
@@ -330,7 +330,7 @@ FTL-A2;Артон;Україна
 СПТ-2Б;Артон;Україна
 СПТ-3Б;Артон;Україна
 Артон-ДЛ3;Артон;Україна
-ББП;ББП;Україна
+ББП-;Viatec;Китай
 ЗЗКМ;Запорізький завод кольорових металів;Україна
 ЗЗЦМ;Запорізький завод кольорових металів;Україна
 СПКВ-04;КС Мехатроникс;Україна
@@ -385,4 +385,19 @@ Oukitel;Oukitel;Китай
 ThermTec;ThermTec;Китай
 EnerGo;EnerGo;Китай
 Fiber;Fiber;Китай
-;Без бренду;
+Патч-корд;Kingda;Китай
+LBX;Lightwell;Китай
+CINLINELE;CINLINELE;Китай
+Nextorch;Nextorch;Китай
+LW-;Lightwell;Китай
+МС4;Voltronic;Китай
+Leather;Atis;Україна
+SA-;Trinix;Китай
+DC-F;Voltronic;Китай
+LBX;Lightwell;Китай
+Тірас;Тірас;Україна
+BGW-;Full Energy;Китай
+DСHOUSE;DСHOUSE;Китай
+3М;3М;Китай
+ЕТІ;ЕТІ;Китай
+;Без бренду;Китай
