@@ -175,6 +175,9 @@ jobs:
       # publish-dir залишається для подальшого push назад в data-latest.
       - name: Restore *_old.csv from data-latest
         run: |
+          BOT_NAME="github-actions[bot]"
+          BOT_EMAIL="github-actions[bot]@users.noreply.github.com"
+
           # Якщо гілка data-latest ще не існує — створюємо її з порожнім комітом.
           # Це потрібно для першого запуску нового репо.
           if git ls-remote --exit-code --heads origin data-latest; then
@@ -187,6 +190,8 @@ jobs:
             mkdir -p publish-dir
             cd publish-dir
             git init
+            git config user.name  "${BOT_NAME}"
+            git config user.email "${BOT_EMAIL}"
             git remote add origin \
               https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
             git checkout -b data-latest
@@ -253,6 +258,15 @@ jobs:
       # Це зберігає тільки ОДИН commit в data-latest — без history bloat.
       - name: Push large files to data-latest (amend)
         run: |
+          BOT_NAME="github-actions[bot]"
+          BOT_EMAIL="github-actions[bot]@users.noreply.github.com"
+
+          # Налаштовуємо ident ДО будь-яких git операцій
+          cd publish-dir
+          git config user.name  "${BOT_NAME}"
+          git config user.email "${BOT_EMAIL}"
+          cd ..
+
           # Backup merged_prev перед перезаписом
           [ -f publish-dir/data/merged.csv ] && \
             cp publish-dir/data/merged.csv publish-dir/data/merged_prev.csv
@@ -270,14 +284,13 @@ jobs:
           done
 
           cd publish-dir
-          # git config має бути всередині publish-dir де своя .git від data-latest
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
           if git diff --staged --quiet; then
             echo "✅ Змін немає — коміт пропущено"
           else
-            git commit --amend --no-edit
+            # --author явно щоб amend не брав порожній ident з HEAD
+            git commit --amend --no-edit \
+              --author="${BOT_NAME} <${BOT_EMAIL}>"
             git push origin data-latest --force
             echo "✅ data-latest оновлено"
           fi
@@ -631,15 +644,18 @@ jobs:
 
       - name: Push to data-latest (один amend)
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          BOT_NAME="github-actions[bot]"
+          BOT_EMAIL="github-actions[bot]@users.noreply.github.com"
 
           cd publish-dir
+          git config user.name  "${BOT_NAME}"
+          git config user.email "${BOT_EMAIL}"
           git add data/markets/
           if git diff --staged --quiet; then
             echo "✅ Фіди не змінились — коміт пропущено"
           else
-            git commit --amend --no-edit
+            git commit --amend --no-edit \
+              --author="${BOT_NAME} <${BOT_EMAIL}>"
             git push origin data-latest --force
             echo "✅ Всі фіди запушено"
           fi
