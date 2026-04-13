@@ -55,6 +55,7 @@ import re
 from pathlib import Path
 from scrapy.selector import Selector
 from scrapy_playwright.page import PageMethod
+from twisted.internet import reactor, defer
 
 from suppliers.services.category_specs_enricher import CategorySpecsEnricher
 
@@ -266,6 +267,7 @@ class SecurFeedFullSpider(scrapy.Spider):
         return scrapy.Request(
             url=f"https://secur.ua/feed/export/{fid}",
             callback=self.parse_ua_feed,
+            errback=self.errback_feed,
             meta={"feed_id": fid, "feed_index": feed_index},
             dont_filter=True,
         )
@@ -324,6 +326,7 @@ class SecurFeedFullSpider(scrapy.Spider):
         yield scrapy.Request(
             url=f"https://secur.ua/feed/export/{feed_id}?lang=ru",
             callback=self.parse_ru_feed,
+            errback=self.errback_feed,
             meta={"feed_id": feed_id, "feed_index": feed_index},
             dont_filter=True,
         )
@@ -510,6 +513,46 @@ class SecurFeedFullSpider(scrapy.Spider):
             f"Фото: {len(page_image_url.split(', ')) if page_image_url else 0}"
         )
         yield feed_item
+
+    def errback_feed(self, failure):
+        """
+        Errback для XML-фідів (UA та RU). Ретраїть до 3 разів з паузою 180с.
+        Playwright-запити мають власний errback_product і сюди не потрапляють.
+        """
+        request = failure.request
+        retry_count = request.meta.get("feed_retry_count", 0)
+        feed_id = request.meta.get("feed_id", "?")
+        feed_index = request.meta.get("feed_index", 0)
+        max_retries = 3
+        retry_delay = 180  # секунд між спробами
+
+        if retry_count < max_retries:
+            self.logger.warning(
+                f"⚠️ Помилка завантаження фіду {feed_id} "
+                f"(спроба {retry_count + 1}/{max_retries}): {failure.value} "
+                f"— повтор через {retry_delay}с | URL: {request.url}"
+            )
+            new_req = request.copy()
+            new_req.meta["feed_retry_count"] = retry_count + 1
+            new_req.dont_filter = True
+
+            # Twisted: відкладаємо re-schedule без блокування event loop
+            d: defer.Deferred = defer.Deferred()
+            reactor.callLater(retry_delay, d.callback, new_req)
+            return d
+
+        # Всі спроби вичерпано — пропускаємо фід, продовжуємо з наступним
+        self.logger.error(
+            f"❌ Фід {feed_id} недоступний після {max_retries} спроб "
+            f"— пропускаємо, продовжуємо далі | URL: {request.url}"
+        )
+        next_index = feed_index + 1
+        if next_index < len(self.ALL_FEED_IDS):
+            self.logger.info(
+                f"➡️  Пропускаємо до фіду [{next_index + 1}/{len(self.ALL_FEED_IDS)}]: "
+                f"{self.ALL_FEED_IDS[next_index]}"
+            )
+            return self._ua_request(feed_index=next_index)
 
     def errback_product(self, failure):
         """Playwright впав (timeout/network) → yield з фід-даними.

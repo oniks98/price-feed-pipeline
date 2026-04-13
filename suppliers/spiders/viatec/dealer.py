@@ -161,6 +161,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         yield scrapy.Request(
             url=first,
             callback=self.parse_category,
+            errback=self.parse_category_error,
             meta={"category_url": first, "category_index": 0, "page_number": 1},
             priority=PRIORITY_CATEGORY,
             dont_filter=True,
@@ -230,6 +231,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
             yield scrapy.Request(
                 url=urljoin(response.url, next_page_link),
                 callback=self.parse_category,
+                errback=self.parse_category_error,
                 meta={
                     "category_url":   category_url,
                     "category_index": category_index,
@@ -334,6 +336,20 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
             yield item
         except Exception as e:
             self.logger.error(f"❌ Помилка парсингу (RU): {response.url} | {e}")
+
+    def parse_category_error(self, failure):
+        """Категорія впала після всіх Scrapy-ретраїв → переходимо до наступної."""
+        request        = failure.request
+        category_index = request.meta.get("category_index", 0)
+        page_number    = request.meta.get("page_number", 1)
+        self.logger.error(
+            f"❌ Категорія [{category_index + 1}/{len(self.category_urls)}] "
+            f"стор.{page_number} недоступна після всіх ретраїв: {request.url} "
+            f"| {failure.value} — переходимо до наступної"
+        )
+        next_cat = self._start_next_category(category_index)
+        if next_cat:
+            return next_cat
 
     def parse_product_error(self, failure):
         url          = failure.request.url
