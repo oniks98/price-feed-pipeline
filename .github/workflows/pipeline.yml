@@ -93,9 +93,9 @@ jobs:
 
           - supplier: secur
             spider: secur_feed_full
-            timeout_minutes: 20
-            max_attempts: 6
-            retry_wait: 30
+            timeout_minutes: 120
+            max_attempts: 3
+            retry_wait: 60
 
     steps:
       - name: Checkout repo

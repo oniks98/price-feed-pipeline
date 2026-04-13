@@ -65,8 +65,9 @@ from suppliers.services.category_specs_enricher import CategorySpecsEnricher
 # ─────────────────────────────────────────────────────────────
 GOTO_TIMEOUT_MS = 30_000   # page.goto() timeout — 30 сек
 DOWNLOAD_TIMEOUT = 35      # Scrapy-рівень — 35 сек (трохи більше goto)
-JS_WAIT_MS = 2_000         # secur.ua рендерить ~142 хар-ки через JS;
-                            # без паузи отримаємо лише ~17 з HTML
+
+# Сигнали бану — перевіряємо перші 500 символів відповіді
+BAN_SIGNALS = ["captcha", "access denied", "cloudflare", "403 forbidden", "too many requests"]
 
 
 def _playwright_meta(extra: dict | None = None) -> dict:
@@ -79,7 +80,13 @@ def _playwright_meta(extra: dict | None = None) -> dict:
             "timeout": GOTO_TIMEOUT_MS,
         },
         "playwright_page_methods": [
-            PageMethod("wait_for_timeout", JS_WAIT_MS),
+            # Чекаємо появи хар-к АБО 5 сек — не витрачаємо зайвого часу на sleep
+            PageMethod(
+                "wait_for_selector",
+                "div.item",
+                timeout=5_000,
+                state="attached",
+            ),
         ],
     }
     if extra:
@@ -110,9 +117,21 @@ class SecurFeedFullSpider(scrapy.Spider):
             "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
         },
         "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
-        "CONCURRENT_REQUESTS": 4,
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
-        "DOWNLOAD_DELAY": 1,
+        # ── Антибот: 1 запит, рандомна затримка 2.5–7.5 сек ──────────────
+        "CONCURRENT_REQUESTS": 2,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
+        "DOWNLOAD_DELAY": 5,
+        "RANDOMIZE_DOWNLOAD_DELAY": True,  # Scrapy: delay × 0.5..1.5 → 2.5–7.5 сек
+        # ── AutoThrottle: уповільнюється якщо сайт починає гальмувати ──
+        "AUTOTHROTTLE_ENABLED": True,
+        "AUTOTHROTTLE_START_DELAY": 5,
+        "AUTOTHROTTLE_MAX_DELAY": 60,
+        "AUTOTHROTTLE_TARGET_CONCURRENCY": 1.0,
+        "AUTOTHROTTLE_DEBUG": False,
+        # ── Блокуємо зайві ресурси — нам потрібен тільки DOM ─────────────
+        "PLAYWRIGHT_ABORT_REQUEST": lambda req: req.resource_type in {
+            "image", "media", "font", "stylesheet"
+        },
         "DOWNLOAD_TIMEOUT": DOWNLOAD_TIMEOUT,
         "PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT": GOTO_TIMEOUT_MS,
         "PLAYWRIGHT_LAUNCH_OPTIONS": {
@@ -481,6 +500,14 @@ class SecurFeedFullSpider(scrapy.Spider):
             self.logger.warning(
                 f"⚠️ HTTP {response.status} → {response.url} | yield з фід-даними"
             )
+            feed_item["specifications_list"] = specs_from_feed
+            yield feed_item
+            return
+
+        # ── Бан-детектор: captcha / access denied / cloudflare ───────────
+        body_lower = response.text[:500].lower()
+        if any(signal in body_lower for signal in BAN_SIGNALS):
+            self.logger.warning(f"🚫 БАН ДЕТЕКТОВАНО → {response.url}")
             feed_item["specifications_list"] = specs_from_feed
             yield feed_item
             return
