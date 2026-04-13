@@ -116,7 +116,7 @@ class SecurFeedFullSpider(scrapy.Spider):
             "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
             "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
         },
-        "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
+        "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",  # noqa: дублюється з settings.py для явності
         # ── Антибот: 1 запит, рандомна затримка 2.5–7.5 сек ──────────────
         "CONCURRENT_REQUESTS": 2,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 1,

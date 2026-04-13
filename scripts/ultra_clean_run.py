@@ -36,6 +36,13 @@ os.environ['SCRAPY_SETTINGS_MODULE'] = 'suppliers.settings'
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
 
+# КРИТИЧНО: AsyncioSelectorReactor потрібен scrapy-playwright.
+# Має бути встановлений ДО будь-якого імпорту Scrapy/Twisted,
+# бо Twisted встановлює дефолтний epollreactor при першому імпорті.
+import asyncio
+from twisted.internet import asyncioreactor
+asyncioreactor.install(asyncio.new_event_loop())
+
 # Патчимо configure_logging ДО імпорту Scrapy
 def silent_configure_logging(settings=None, install_root_handler=True):
     """Наша версія configure_logging яка приховує технічні логи"""

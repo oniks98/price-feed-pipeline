@@ -12,6 +12,10 @@ BOT_NAME = "suppliers"
 SPIDER_MODULES = ["suppliers.spiders"]
 NEWSPIDER_MODULE = "suppliers.spiders"
 
+# КРИТИЧНО: має бути в settings.py, НЕ в custom_settings паука.
+# Реактор встановлюється один раз при старті процесу — до читання custom_settings.
+TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
+
 ADDONS = {}
 
 # ==============================================================================
