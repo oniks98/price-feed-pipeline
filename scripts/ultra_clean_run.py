@@ -41,7 +41,13 @@ warnings.filterwarnings('ignore', category=DeprecationWarning)
 # бо Twisted встановлює дефолтний epollreactor при першому імпорті.
 import asyncio
 from twisted.internet import asyncioreactor
-asyncioreactor.install(asyncio.new_event_loop())
+
+# asyncio.new_event_loop() без set_event_loop() → реактор і решта asyncio
+# коду використовують РІЗНІ event loop-и → паук стартує і тихо вмирає.
+# Правильно: створити loop, встановити як поточний, ТОДІ передати реактору.
+_loop = asyncio.new_event_loop()
+asyncio.set_event_loop(_loop)
+asyncioreactor.install(_loop)
 
 # Патчимо configure_logging ДО імпорту Scrapy
 def silent_configure_logging(settings=None, install_root_handler=True):
@@ -60,9 +66,9 @@ def silent_configure_logging(settings=None, install_root_handler=True):
         'scrapy.utils.log',
         'scrapy.addons',
         'scrapy.middleware',
-        'scrapy.crawler',
-        'scrapy.core.engine',
-        'scrapy.core.scraper',
+        # 'scrapy.crawler',       # НЕ глушимо — потрібен для діагностики старту
+        # 'scrapy.core.engine',   # НЕ глушимо — ховає реальні помилки пауків
+        # 'scrapy.core.scraper',  # НЕ глушимо — ховає exceptions у callbacks
         'scrapy.extensions',
         'scrapy.statscollectors',
         'twisted',
