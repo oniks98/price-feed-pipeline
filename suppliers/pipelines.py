@@ -157,9 +157,14 @@ class SuppliersPipeline:
     def open_spider(self, spider):
         """Ініціалізація через SupplierConfig - ZERO magic, ONE source of truth"""
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Зберігаємо spider logger для використання в _write_row
         self._spider_logger = spider.logger
+
+        # Глушимо scrapy.core.scraper WARNING — він дампає повний item при DropItem.
+        # Натомість логуємо коротко самі (нижче, перед кожним raise DropItem).
+        import logging
+        logging.getLogger("scrapy.core.scraper").setLevel(logging.ERROR)
 
         # 1️⃣ Створюємо конфігурацію автоматично
         config = SupplierConfig.from_spider(spider.name)
@@ -268,11 +273,19 @@ class SuppliersPipeline:
         price = adapter.get("Ціна")
         if not self.validation_service.is_valid_price(price):
             self._inc(output_file, "filtered_no_price")
+            spider.logger.warning(
+                f"⏭️  DROP NO_PRICE: {adapter.get('Назва_позиції', '?')[:60]} "
+                f"| {adapter.get('Продукт_на_сайті', '')}"
+            )
             raise DropItem("NO PRICE")
 
         availability_raw = adapter.get("Наявність", "")
         if not self.availability_service.is_available(availability_raw):
             self._inc(output_file, "filtered_no_stock")
+            spider.logger.warning(
+                f"⏭️  DROP NO_STOCK: {adapter.get('Назва_позиції', '?')[:60]} "
+                f"| {adapter.get('Продукт_на_сайті', '')}"
+            )
             raise DropItem("NO STOCK")
 
         # ---- MULTI-CHANNEL MODE -------------------------------------- #

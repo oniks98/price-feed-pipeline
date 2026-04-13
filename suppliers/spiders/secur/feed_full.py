@@ -66,6 +66,12 @@ from suppliers.services.category_specs_enricher import CategorySpecsEnricher
 GOTO_TIMEOUT_MS = 30_000   # page.goto() timeout — 30 сек
 DOWNLOAD_TIMEOUT = 35      # Scrapy-рівень — 35 сек (трохи більше goto)
 
+# Два сценарії:
+#   1. Товар з хар-ками → Vue рендерить div.item (може бути повільно → 10с)
+#   2. Товар без хар-к  → div.item немає, але h1 є завжди → не таймаутимо
+_WAIT_SELECTOR = "div.item, h1"
+_WAIT_TIMEOUT_MS = 10_000
+
 # Сигнали бану — перевіряємо перші 500 символів відповіді
 BAN_SIGNALS = ["captcha", "access denied", "cloudflare", "403 forbidden", "too many requests"]
 
@@ -80,11 +86,10 @@ def _playwright_meta(extra: dict | None = None) -> dict:
             "timeout": GOTO_TIMEOUT_MS,
         },
         "playwright_page_methods": [
-            # Чекаємо появи хар-к АБО 5 сек — не витрачаємо зайвого часу на sleep
             PageMethod(
                 "wait_for_selector",
-                "div.item",
-                timeout=5_000,
+                _WAIT_SELECTOR,
+                timeout=_WAIT_TIMEOUT_MS,
                 state="attached",
             ),
         ],
