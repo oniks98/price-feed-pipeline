@@ -79,7 +79,7 @@ jobs:
   scrape:
     name: Spider — ${{ matrix.supplier }}
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 175
 
     strategy:
       fail-fast: false
@@ -94,7 +94,7 @@ jobs:
           - supplier: secur
             spider: secur_feed_full
             timeout_minutes: 20
-            max_attempts: 6
+            max_attempts: 8
             retry_wait: 30
 
     steps:

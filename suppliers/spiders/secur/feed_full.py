@@ -63,8 +63,8 @@ from suppliers.services.category_specs_enricher import CategorySpecsEnricher
 # ─────────────────────────────────────────────────────────────
 # Константи Playwright (ті ж що і в retail.py)
 # ─────────────────────────────────────────────────────────────
-GOTO_TIMEOUT_MS = 30_000   # page.goto() timeout — 30 сек
-DOWNLOAD_TIMEOUT = 35      # Scrapy-рівень — 35 сек (трохи більше goto)
+GOTO_TIMEOUT_MS = 15_000   # page.goto() timeout — 15 сек (fail fast на банах)
+DOWNLOAD_TIMEOUT = 18      # Scrapy-рівень — 18 сек (трохи більше goto)
 
 # Два сценарії:
 #   1. Товар з хар-ками → Vue рендерить div.item (може бути повільно → 10с)
