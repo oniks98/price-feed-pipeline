@@ -317,6 +317,14 @@ class SecurFeedFullSpider(scrapy.Spider):
         self.products_ua = {}
         with_params = 0
 
+        # DEBUG: логуємо що реально повернув сервер
+        self.logger.info(
+            f"🔍 DEBUG фід {feed_id}: HTTP {response.status} | "
+            f"Content-Type: {response.headers.get('Content-Type', b'?').decode(errors='replace')} | "
+            f"Розмір: {len(response.body)} байт | "
+            f"Перші 300 символів: {response.text[:300]!r}"
+        )
+
         for offer in selector.xpath("//offer"):
             product_id = offer.xpath("@id").get()
             if not product_id:
