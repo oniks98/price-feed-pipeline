@@ -46,16 +46,23 @@ Spider об'єднаний: Feed (ціни) + Playwright (зображення +
   тому однаковий URL з різних фідів НЕ вважається дублем.
   Дублі відсіюються тільки всередині одного фіду.
 
+BAN / RETRY:
+  BAN в parse-колбеку → _ban_retry_or_next() → повертає Request (retry) або None.
+    НЕ викликаємо errback_feed() — він повертає Deferred, який Scrapy не приймає
+    як item від генератора → "Error processing <Deferred>".
+  BAN/мережева помилка в errback → errback_feed() → Deferred (коректно для errback).
+
 ПРИМІТКИ:
   - Фід 54 (Україна) видалено.
   - errback_product: Playwright впав → yield з фід-зображенням без хар-к зі сторінки.
   - CategorySpecsEnricher підключений безпосередньо в пауку (специфічний для secur).
 """
 
-import scrapy
-import csv
 import re
+import csv
 from pathlib import Path
+
+import scrapy
 from scrapy.selector import Selector
 from scrapy_playwright.page import PageMethod
 from twisted.internet import reactor, defer
@@ -76,7 +83,7 @@ _WAIT_SELECTOR = "div.item, h1"
 _WAIT_TIMEOUT_MS = 10_000
 
 # Сигнали бану — перевіряємо перші 500 символів відповіді
-BAN_SIGNALS = [
+BAN_SIGNALS = frozenset({
     "captcha",
     "access denied",
     "cloudflare",
@@ -85,7 +92,17 @@ BAN_SIGNALS = [
     "just a moment",       # Cloudflare challenge page
     "enable javascript",   # Cloudflare JS-fallback
     "checking your browser",
-]
+})
+
+# Retry-налаштування для XML-фідів
+FEED_MAX_RETRIES = 3
+FEED_RETRY_DELAY = 180  # секунд між спробами
+
+
+def _is_banned(text: str) -> bool:
+    """Перевіряє перші 500 символів на сигнали бану. O(1) по кількості сигналів."""
+    preview = text[:500].lower()
+    return any(signal in preview for signal in BAN_SIGNALS)
 
 
 def _playwright_meta(extra: dict | None = None) -> dict:
@@ -122,7 +139,7 @@ def _playwright_feed_meta(extra: dict | None = None) -> dict:
         "playwright": True,
         "download_timeout": 60,
         "playwright_page_goto_kwargs": {
-            "wait_until": "domcontentloaded",   # ← було networkidle
+            "wait_until": "domcontentloaded",
             "timeout": 45_000,
         },
     }
@@ -136,23 +153,18 @@ def _extract_xml_from_browser_response(text: str) -> str:
     Браузер відкриває XML і огортає його в HTML: <html><body><pre>...xml...</pre></body></html>
     Або повертає сирий XML якщо вже є <?xml декларація.
     """
-    # Якщо вже чистий XML — повертаємо як є
     stripped = text.strip()
     if stripped.startswith("<?xml") or stripped.startswith("<yml_catalog"):
         return stripped
-    # Браузер огорнув XML у <pre> або просто в <body>
-    # Спроба 1: <pre id="webkit-xml-viewer-source-xml"> (Chrome)
-    import re as _re
-    m = _re.search(r'<pre[^>]*>(.*?)</pre>', stripped, _re.DOTALL)
+    # Chrome огортає XML у <pre id="webkit-xml-viewer-source-xml">
+    m = re.search(r'<pre[^>]*>(.*?)</pre>', stripped, re.DOTALL)
     if m:
         return m.group(1).strip()
-    # Спроба 2: витягуємо від першого < до кінця
-    start = stripped.find("<?xml")
-    if start == -1:
-        start = stripped.find("<yml_catalog")
-    if start != -1:
-        return stripped[start:]
-    # Фалбек: повертаємо оригінал
+    # Витягуємо від першого XML-тегу
+    for marker in ("<?xml", "<yml_catalog"):
+        start = stripped.find(marker)
+        if start != -1:
+            return stripped[start:]
     return text
 
 
@@ -168,7 +180,7 @@ class SecurFeedFullSpider(scrapy.Spider):
     supplier_id = "secur"
     allowed_domains = ["secur.ua"]
 
-    ALL_FEED_IDS = ["50", "52"]  # Фід 54 (Україна) видалено
+    ALL_FEED_IDS: list[str] = ["50", "52"]  # Фід 54 (Україна) видалено
 
     custom_settings = {
         "ITEM_PIPELINES": {
@@ -178,19 +190,19 @@ class SecurFeedFullSpider(scrapy.Spider):
             "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
             "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
         },
-        "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",  # noqa: дублюється з settings.py для явності
+        "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
         # ── Антибот: 2 паралельні Playwright-вкладки, затримка 1.5–4.5 сек ──
         "CONCURRENT_REQUESTS": 4,
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,           # ← було 1, ключова зміна
-        "DOWNLOAD_DELAY": 3,                           # ← було 5
-        "RANDOMIZE_DOWNLOAD_DELAY": True,              # 3 × 0.5..1.5 → 1.5–4.5 сек
-        # ── AutoThrottle: тримає 2 паралельних, відступає при гальмуванні ──
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
+        "DOWNLOAD_DELAY": 3,
+        "RANDOMIZE_DOWNLOAD_DELAY": True,        # 3 × 0.5..1.5 → 1.5–4.5 сек
+        # ── AutoThrottle ────────────────────────────────────────────────────
         "AUTOTHROTTLE_ENABLED": True,
-        "AUTOTHROTTLE_START_DELAY": 3,                 # ← було 5
+        "AUTOTHROTTLE_START_DELAY": 3,
         "AUTOTHROTTLE_MAX_DELAY": 60,
-        "AUTOTHROTTLE_TARGET_CONCURRENCY": 2.0,        # ← було 1.0, ключова зміна
+        "AUTOTHROTTLE_TARGET_CONCURRENCY": 2.0,
         "AUTOTHROTTLE_DEBUG": False,
-        # ── Блокуємо зайві ресурси — нам потрібен тільки DOM ─────────────
+        # ── Блокуємо зайві ресурси — нам потрібен тільки DOM ────────────────
         "PLAYWRIGHT_ABORT_REQUEST": lambda req: req.resource_type in {
             "image", "media", "font", "stylesheet"
         },
@@ -198,6 +210,7 @@ class SecurFeedFullSpider(scrapy.Spider):
         "PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT": GOTO_TIMEOUT_MS,
         "PLAYWRIGHT_LAUNCH_OPTIONS": {
             "args": [
+                "--disable-blink-features=AutomationControlled",  # ← анти-бот
                 "--disable-dev-shm-usage",
                 "--no-sandbox",
                 "--disable-gpu",
@@ -234,7 +247,6 @@ class SecurFeedFullSpider(scrapy.Spider):
         self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
 
         # Кеш UA-даних: назви, описи, хар-ки з <param> (УКРАЇНСЬКОЮ)
-        # Очищається перед кожним новим фідом у parse_ua_feed
         self.products_ua: dict = {}
 
         # Дедуплікація всередині кожного фіду.
@@ -242,8 +254,6 @@ class SecurFeedFullSpider(scrapy.Spider):
         self.processed_seen: set[tuple[str, str]] = set()
 
         # ── RESUME: відновлюємо вже оброблені URL з попереднього запуску ──
-        # Читаємо secur_new.csv (якщо існує) і додаємо URL для всіх фідів,
-        # щоб при перезапуску не дублювати вже збережені товари.
         already_scraped = self._load_already_scraped_urls()
         for url in already_scraped:
             for fid in self.ALL_FEED_IDS:
@@ -253,13 +263,12 @@ class SecurFeedFullSpider(scrapy.Spider):
     # RESUME
     # ──────────────────────────────────────────────────────────────────
 
-    def _load_already_scraped_urls(self) -> set:
+    def _load_already_scraped_urls(self) -> set[str]:
         """
         Читає вже збережений secur_new.csv і повертає set URL.
         Якщо файл не існує — порожній set (перший запуск).
-        Ідентично retail.py::_load_already_scraped_urls()
         """
-        urls: set = set()
+        urls: set[str] = set()
         import os as _os
         out_path = (
             Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
@@ -286,9 +295,8 @@ class SecurFeedFullSpider(scrapy.Spider):
     # ──────────────────────────────────────────────────────────────────
 
     def _load_category_mapping(self) -> dict:
-        # Ключ: (feed_id, category_id) — щоб категорії, які є одночасно
-        # у фіді 50 і 52, мали різні дані (різні Номер_групи, Назва_групи тощо).
-        # Для рядків з порожнім feed (напр. delete-категорії) ключ: ("", category_id).
+        # Ключ: (feed_id, category_id)
+        # Delete-рядки мають порожній feed → ключ: ("", category_id)
         mapping: dict = {}
         import os as _os
         csv_path = (
@@ -322,16 +330,64 @@ class SecurFeedFullSpider(scrapy.Spider):
         return mapping
 
     def _is_deleted_category(self, category_id: str) -> bool:
-        # Delete-рядки мають порожній feed → ключ ("", category_id)
         return self.category_mapping.get(("", category_id), {}).get("subdivision_id", "").lower() == "delete"
 
     def _is_allowed_for_feed(self, category_id: str, feed_id: str) -> bool:
-        # Категорія дозволена для фіду, якщо є запис (feed_id, category_id)
-        # або fallback-запис ("", category_id)
         return (
             (feed_id, category_id) in self.category_mapping
             or ("", category_id) in self.category_mapping
         )
+
+    # ──────────────────────────────────────────────────────────────────
+    # BAN RETRY (parse-контекст)
+    # ──────────────────────────────────────────────────────────────────
+
+    def _ban_retry_or_next(
+        self,
+        response,
+        feed_id: str,
+        feed_index: int,
+        label: str,
+    ) -> scrapy.Request | None:
+        """
+        Викликається коли BAN виявлено всередині parse-колбеку (НЕ в errback).
+
+        ВАЖЛИВО: errback_feed() не можна викликати з parse-генератора, бо
+        він повертає Deferred — Scrapy приймає його тільки з errback-ланцюжка,
+        але НЕ як item від генератора (→ "Error processing <Deferred>").
+
+        Повертає:
+          - scrapy.Request (retry) — якщо ліміт спроб не вичерпано
+          - scrapy.Request (наступний фід) — якщо всі спроби вичерпано і є наступний фід
+          - None — якщо всі фіди вичерпано
+        """
+        retry_count = response.meta.get("feed_retry_count", 0)
+
+        self.logger.error(
+            f"🚫 БАН {label} ФІДУ {feed_id} → Cloudflare замість XML | URL: {response.url}"
+        )
+
+        if retry_count < FEED_MAX_RETRIES:
+            self.logger.warning(
+                f"⚠️ Фід {feed_id}: спроба {retry_count + 1}/{FEED_MAX_RETRIES} "
+                f"— повтор через {FEED_RETRY_DELAY}с"
+            )
+            req = response.request.copy()
+            req.meta["feed_retry_count"] = retry_count + 1
+            req.dont_filter = True
+            return req
+
+        self.logger.error(
+            f"❌ Фід {feed_id} недоступний після {FEED_MAX_RETRIES} спроб — пропускаємо"
+        )
+        next_index = feed_index + 1
+        if next_index < len(self.ALL_FEED_IDS):
+            self.logger.info(
+                f"➡️  Пропускаємо до фіду [{next_index + 1}/{len(self.ALL_FEED_IDS)}]: "
+                f"{self.ALL_FEED_IDS[next_index]}"
+            )
+            return self._ua_request(feed_index=next_index)
+        return None
 
     # ──────────────────────────────────────────────────────────────────
     # CRAWLING
@@ -355,31 +411,25 @@ class SecurFeedFullSpider(scrapy.Spider):
 
     def parse_ua_feed(self, response):
         """
-        UA фід (XML, HTTP) — кешує для кожного товару:
+        UA фід (XML, Playwright) — кешує для кожного товару:
           - name_ua, description_ua
           - specs_from_feed: хар-ки з <param> УКРАЇНСЬКОЮ мовою
 
-        Якщо <param> є → в parse_product_page не парсимо хар-ки зі сторінки.
-        Якщо <param> немає → parse_product_page парсить хар-ки зі сторінки (UA URL).
+        BAN → _ban_retry_or_next() (НЕ errback_feed — він повертає Deferred,
+        який не можна yield з parse-генератора).
         """
         feed_id = response.meta["feed_id"]
         feed_index = response.meta["feed_index"]
 
-        # ── BAN detection для UA фіду — до будь-якого парсингу ─────────
-        raw_preview = response.text[:500].lower()
-        # INFO щоб було видно на CI (debug може бути вимкнено)
         self.logger.info(
             f"📂 [{feed_index + 1}/{len(self.ALL_FEED_IDS)}] UA фід {feed_id} "
             f"| len={len(response.text)} | preview: {response.text[:200]!r}"
         )
-        if any(signal in raw_preview for signal in BAN_SIGNALS):
-            self.logger.error(
-                f"🚫 БАН UA ФІДУ {feed_id} → Cloudflare замість XML "
-                f"| URL: {response.url}"
-            )
-            yield from self.errback_feed(
-                type("_FakeFail", (), {"request": response.request, "value": "BAN"})(),
-            ) or []
+
+        if _is_banned(response.text):
+            req = self._ban_retry_or_next(response, feed_id, feed_index, "UA")
+            if req:
+                yield req
             return
 
         xml_text = _extract_xml_from_browser_response(response.text)
@@ -396,19 +446,17 @@ class SecurFeedFullSpider(scrapy.Spider):
             category_id = offer.xpath("categoryId/text()").get() or ""
             if self._is_deleted_category(category_id):
                 continue
-            # Фільтр по feed прибрано: якщо товар є в XML — він валідний для цього фіду.
 
             name_ua = offer.xpath("name/text()").get() or ""
             name_ua = re.sub(r'\s*\([A-Z0-9\.]+\)\s*$', '', name_ua).strip()
 
-            # Парсимо <param> з UA фіду — вони вже УКРАЇНСЬКОЮ мовою
             specs_from_feed = self._parse_feed_specs(offer)
             if specs_from_feed:
                 with_params += 1
 
             self.products_ua[product_id] = {
-                "name_ua":        name_ua,
-                "description_ua": self._clean_description(
+                "name_ua":         name_ua,
+                "description_ua":  self._clean_description(
                     offer.xpath("description/text()").get()
                 ),
                 "specs_from_feed": specs_from_feed,
@@ -429,30 +477,23 @@ class SecurFeedFullSpider(scrapy.Spider):
 
     def parse_ru_feed(self, response):
         """
-        RU фід (XML, HTTP) — об'єднує з UA кешем, формує чергу Playwright-запитів.
+        RU фід (XML, Playwright) — об'єднує з UA кешем, формує чергу Playwright-запитів.
 
         Дедуплікація: ключ (feed_id, product_url) — дозволяє одному URL
-        з'явитися в різних фідах як різні товари (напр. різні акумулятори
-        категорії 621 у фідах 50 і 52).
+        з'явитися в різних фідах як різні товари.
         """
         feed_id = response.meta["feed_id"]
         feed_index = response.meta["feed_index"]
 
-        # ── BAN detection для RU фіду — до будь-якого парсингу ─────────
-        raw_preview = response.text[:500].lower()
-        # INFO щоб було видно на CI (debug може бути вимкнено)
         self.logger.info(
             f"📂 [{feed_index + 1}/{len(self.ALL_FEED_IDS)}] RU фід {feed_id} "
             f"| len={len(response.text)} | preview: {response.text[:200]!r}"
         )
-        if any(signal in raw_preview for signal in BAN_SIGNALS):
-            self.logger.error(
-                f"🚫 БАН RU ФІДУ {feed_id} → Cloudflare замість XML "
-                f"| URL: {response.url}"
-            )
-            yield from self.errback_feed(
-                type("_FakeFail", (), {"request": response.request, "value": "BAN"})(),
-            ) or []
+
+        if _is_banned(response.text):
+            req = self._ban_retry_or_next(response, feed_id, feed_index, "RU")
+            if req:
+                yield req
             return
 
         xml_text = _extract_xml_from_browser_response(response.text)
@@ -460,7 +501,7 @@ class SecurFeedFullSpider(scrapy.Spider):
         selector.remove_namespaces()
 
         total = queued = deleted = skipped = 0
-        unmapped_categories: set = set()
+        unmapped_categories: set[str] = set()
 
         for offer in selector.xpath("//offer"):
             product_id = offer.xpath("@id").get()
@@ -469,7 +510,6 @@ class SecurFeedFullSpider(scrapy.Spider):
             if self._is_deleted_category(category_id):
                 deleted += 1
                 continue
-            # Фільтр по feed прибрано: товар присутній у XML → обробляємо.
 
             total += 1
 
@@ -500,38 +540,28 @@ class SecurFeedFullSpider(scrapy.Spider):
 
             product_url = feed_item.pop("_product_url", "")
 
-            # URL береться з RU фіду і може містити /ru/ (напр. secur.ua/ru/product)
-            # → стрипаємо /ru/ щоб Playwright відкривав UA-версію сторінки
+            # URL з RU фіду може містити /ru/ → стрипаємо для UA-версії сторінки
             product_url = product_url.replace("secur.ua/ru/", "secur.ua/")
-
-            # Синхронізуємо Продукт_на_сайті з фактичним UA URL
             feed_item["Продукт_на_сайті"] = product_url
 
-            # Хар-ки з UA XML (українська мова) — передаємо в meta
             specs_from_feed: list = ua_data.get("specs_from_feed", [])
 
             if not product_url:
-                # URL відсутній → yield без зображень зі сторінки
                 feed_item["specifications_list"] = specs_from_feed
                 skipped += 1
                 yield feed_item
                 continue
 
-            # Дедуплікація всередині одного фіду.
-            # Ключ містить feed_id → однаковий URL у різних фідах НЕ є дублем.
+            # Ключ містить feed_id → однаковий URL у різних фідах НЕ є дублем
             dedup_key = (feed_id, product_url)
             if dedup_key in self.processed_seen:
                 skipped += 1
-                self.logger.debug(
-                    f"⏭️  Дублікат у фіді {feed_id}: {product_url}"
-                )
+                self.logger.debug(f"⏭️  Дублікат у фіді {feed_id}: {product_url}")
                 continue
 
             self.processed_seen.add(dedup_key)
             queued += 1
 
-            # Завжди йдемо на сторінку — потрібні зображення.
-            # specs_from_feed передаємо щоб parse_product_page знав чи парсити хар-ки.
             yield scrapy.Request(
                 url=product_url,
                 callback=self.parse_product_page,
@@ -562,9 +592,7 @@ class SecurFeedFullSpider(scrapy.Spider):
             )
             yield self._ua_request(feed_index=next_index)
         else:
-            self.logger.info(
-                "🎉 Всі фіди прочитані! Очікую завершення Playwright-черги..."
-            )
+            self.logger.info("🎉 Всі фіди прочитані! Очікую завершення Playwright-черги...")
 
     # ──────────────────────────────────────────────────────────────────
     # PLAYWRIGHT: зображення + хар-ки (якщо XML не мав <param>)
@@ -573,15 +601,8 @@ class SecurFeedFullSpider(scrapy.Spider):
     def parse_product_page(self, response):
         """
         UA-сторінка товару (Playwright):
-
-        ЗАВЖДИ:
-          - Парсить усі великі зображення → замінює одне фід-фото
-
-        УМОВНО (якщо XML не мав жодного <param>):
-          - Парсить хар-ки зі сторінки (UA URL → УКРАЇНСЬКА мова)
-          - Якщо XML мав <param> → пропускаємо, вже є хар-ки з фіду
-
-        Якщо HTTP != 200 → yield з фід-даними (не губимо товар).
+          - ЗАВЖДИ: парсить усі великі зображення
+          - УМОВНО: парсить хар-ки, якщо XML не мав жодного <param>
         """
         feed_item = response.meta["feed_item"]
         feed_id = response.meta.get("feed_id", "")
@@ -596,30 +617,25 @@ class SecurFeedFullSpider(scrapy.Spider):
             yield feed_item
             return
 
-        # ── Бан-детектор: captcha / access denied / cloudflare ───────────
-        body_lower = response.text[:500].lower()
-        if any(signal in body_lower for signal in BAN_SIGNALS):
+        if _is_banned(response.text):
             self.logger.warning(f"🚫 БАН ДЕТЕКТОВАНО → {response.url}")
             feed_item["specifications_list"] = specs_from_feed
             yield feed_item
             return
 
-        # ── 1. ЗОБРАЖЕННЯ (завжди, ідентично retail.py) ──────────────
+        # ── 1. ЗОБРАЖЕННЯ (завжди) ─────────────────────────────────────
         page_image_url = self._parse_images(response)
         if page_image_url:
             feed_item["Посилання_зображення"] = page_image_url
 
-        # ── 2. ХАРАКТЕРИСТИКИ (УКРАЇНСЬКОЮ) ──────────────────────────
+        # ── 2. ХАРАКТЕРИСТИКИ (УКРАЇНСЬКОЮ) ───────────────────────────
         if specs_from_feed:
-            # XML мав <param> → використовуємо їх (UA мова з кешу)
             specs_list = specs_from_feed
             source_label = "XML"
         else:
-            # XML без <param> → парсимо зі сторінки (UA URL = українська мова)
             specs_list = self._parse_specifications(response)
             source_label = "сторінка"
 
-        # Доповнюємо категорійними хар-ками з CSV (завжди)
         specs_list = self.category_enricher.enrich_specs_by_category_id(
             specs_list, category_id, feed_id
         )
@@ -633,37 +649,40 @@ class SecurFeedFullSpider(scrapy.Spider):
         )
         yield feed_item
 
+    # ──────────────────────────────────────────────────────────────────
+    # ERRBACKS
+    # ──────────────────────────────────────────────────────────────────
+
     def errback_feed(self, failure):
         """
-        Errback для XML-фідів (UA та RU). Ретраїть до 3 разів з паузою 180с.
-        Playwright-запити мають власний errback_product і сюди не потрапляють.
+        Errback для реальних мережевих помилок XML-фідів (UA та RU).
+        Ретраїть до FEED_MAX_RETRIES разів з паузою FEED_RETRY_DELAY секунд.
+
+        Повертає Deferred — це коректно ТІЛЬКИ з errback-ланцюжка.
+        НЕ викликати з parse-генератора (→ "Error processing <Deferred>").
         """
         request = failure.request
         retry_count = request.meta.get("feed_retry_count", 0)
         feed_id = request.meta.get("feed_id", "?")
         feed_index = request.meta.get("feed_index", 0)
-        max_retries = 3
-        retry_delay = 180  # секунд між спробами
 
-        if retry_count < max_retries:
+        if retry_count < FEED_MAX_RETRIES:
             self.logger.warning(
                 f"⚠️ Помилка завантаження фіду {feed_id} "
-                f"(спроба {retry_count + 1}/{max_retries}): {failure.value} "
-                f"— повтор через {retry_delay}с | URL: {request.url}"
+                f"(спроба {retry_count + 1}/{FEED_MAX_RETRIES}): {failure.value} "
+                f"— повтор через {FEED_RETRY_DELAY}с | URL: {request.url}"
             )
             new_req = request.copy()
             new_req.meta["feed_retry_count"] = retry_count + 1
             new_req.dont_filter = True
 
-            # Twisted: відкладаємо re-schedule без блокування event loop
             d: defer.Deferred = defer.Deferred()
-            reactor.callLater(retry_delay, d.callback, new_req)
+            reactor.callLater(FEED_RETRY_DELAY, d.callback, new_req)
             return d
 
-        # Всі спроби вичерпано — пропускаємо фід, продовжуємо з наступним
         self.logger.error(
-            f"❌ Фід {feed_id} недоступний після {max_retries} спроб "
-            f"— пропускаємо, продовжуємо далі | URL: {request.url}"
+            f"❌ Фід {feed_id} недоступний після {FEED_MAX_RETRIES} спроб "
+            f"— пропускаємо | URL: {request.url}"
         )
         next_index = feed_index + 1
         if next_index < len(self.ALL_FEED_IDS):
@@ -674,12 +693,7 @@ class SecurFeedFullSpider(scrapy.Spider):
             return self._ua_request(feed_index=next_index)
 
     def errback_product(self, failure):
-        """Playwright впав (timeout/network) → yield з фід-даними.
-
-        Зображення: зберігаємо feed_image з фіду (вже в feed_item).
-        Хар-ки: specs_from_feed (XML <param>) + category_enricher.
-        Товар не губиться.
-        """
+        """Playwright впав (timeout/network) → yield з фід-даними. Товар не губиться."""
         self.logger.error(f"❌ Playwright помилка: {failure.value}")
         self.logger.error(f"   URL: {failure.request.url}")
         feed_item = failure.request.meta.get("feed_item", {})
@@ -690,7 +704,6 @@ class SecurFeedFullSpider(scrapy.Spider):
         category_id = failure.request.meta.get("category_id", "")
         feed_id = failure.request.meta.get("feed_id", "")
 
-        # Доповнюємо категорійними хар-ками навіть без сторінки
         specs = self.category_enricher.enrich_specs_by_category_id(
             specs_from_feed, category_id, feed_id
         )
@@ -725,7 +738,6 @@ class SecurFeedFullSpider(scrapy.Spider):
         url = offer.xpath("url/text()").get() or ""
         available = offer.xpath("@available").get() == "true"
         vendor_code = offer.xpath("vendorCode/text()").get() or ""
-
         brand = (
             offer.xpath("brand/text()").get()
             or offer.xpath("vendor/text()").get()
@@ -735,12 +747,10 @@ class SecurFeedFullSpider(scrapy.Spider):
         pictures = offer.xpath("picture/text()").getall()
         feed_image_url = ", ".join(pictures) if pictures else ""
 
-        availability_raw = "В наявності" if available else "Немає в наявності"
-        # available=True  → "" → pipeline підставить AvailabilityService.DEFAULT_QUANTITY ("10000")
-        # available=False → "0" → pipeline залишає як є
+        # available=True  → "" → pipeline підставить DEFAULT_QUANTITY ("10000")
+        # available=False → "0"
         quantity = "" if available else "0"
 
-        # Шукаємо спочатку за (feed_id, category_id), потім fallback ("", category_id)
         category_info = (
             self.category_mapping.get((feed_id, category_id))
             or self.category_mapping.get(("", category_id))
@@ -748,8 +758,7 @@ class SecurFeedFullSpider(scrapy.Spider):
         )
 
         return {
-            # Службове поле — URL з RU фіду, може містити /ru/
-            # Стрипається і нормалізується в parse_ru_feed
+            # Службове поле — буде стрипнуто/нормалізовано в parse_ru_feed
             "_product_url": url,
 
             "supplier_id":  self.supplier_id,
@@ -770,13 +779,13 @@ class SecurFeedFullSpider(scrapy.Spider):
             "Валюта":         self.currency,
             "Одиниця_виміру": "шт.",
 
-            "Посилання_зображення": feed_image_url,  # замінюється в parse_product_page
-            "Наявність":            availability_raw,
+            "Посилання_зображення": feed_image_url,
+            "Наявність":            "В наявності" if available else "Немає в наявності",
             "Кількість":            quantity,
 
             "Виробник":         brand,
             "Країна_виробник":  "",
-            "Продукт_на_сайті": url,  # перезаписується UA URL в parse_ru_feed
+            "Продукт_на_сайті": url,
 
             "Пошукові_запити":     "",
             "Пошукові_запити_укр": "",
@@ -787,7 +796,7 @@ class SecurFeedFullSpider(scrapy.Spider):
             "Ідентифікатор_підрозділу": category_info.get("subdivision_id", ""),
             "Посилання_підрозділу":     category_info.get("subdivision_link", ""),
 
-            "feed_id":  feed_id,  # для фільтрації каналів у pipeline
+            "feed_id":      feed_id,
             "category_url": category_info.get("category_url", ""),
             "category_id":  category_id,
 
@@ -806,7 +815,6 @@ class SecurFeedFullSpider(scrapy.Spider):
 
         dealer_price = self._to_float(offer.xpath("dealerPrice/text()").get())
 
-        # dealer_price == 0 так само некоректний, як і відсутній → fallback на retail
         if not dealer_price:
             return retail_price
 
@@ -904,8 +912,8 @@ class SecurFeedFullSpider(scrapy.Spider):
             for _ in range(3):
                 winsound.Beep(1000, 300)
             self.logger.info("🔔 Звуковий сигнал відтворено!")
-        except Exception as e:
-            self.logger.debug(f"Не вдалося відтворити звук: {e}")
+        except Exception:
+            pass
 
     @staticmethod
     def _to_float(value: str | None) -> float | None:
