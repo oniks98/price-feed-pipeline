@@ -10,10 +10,13 @@ Spider об'єднаний: Feed (ціни) + Playwright (зображення +
 
 ПОТІК ЗАПИТІВ:
   start()
-    └─ parse_ua_feed()     [HTTP, XML — кешує назви/описи/<param>]
-         └─ parse_ru_feed()     [HTTP, XML — збирає ціни + формує чергу]
+    └─ parse_ua_feed()     [Playwright, XML — кешує назви/описи/<param>]
+         └─ parse_ru_feed()     [Playwright, XML — збирає ціни + формує чергу]
               └─ parse_product_page()  [Playwright — зображення + хар-ки за потреби]
                    └─ yield item
+
+  ПРИМІТКА: Фіди завантажуються через Playwright (браузер) щоб обійти
+  Cloudflare, який блокує прямі HTTP-запити з GitHub Actions IP.
 
 ФІДИ ТА ЛОГІКА ЦІН:
   Фід 50 (Ajax, крупний опт):
@@ -97,6 +100,50 @@ def _playwright_meta(extra: dict | None = None) -> dict:
     if extra:
         base.update(extra)
     return base
+
+
+def _playwright_feed_meta(extra: dict | None = None) -> dict:
+    """
+    Playwright-мета для XML-фідів. Чекаємо networkidle — фід має бути
+    повністю завантажений перед парсингом. Без wait_for_selector — XML
+    не має DOM-елементів на які можна чекати.
+    """
+    base = {
+        "playwright": True,
+        "download_timeout": 60,
+        "playwright_page_goto_kwargs": {
+            "wait_until": "networkidle",
+            "timeout": 45_000,
+        },
+    }
+    if extra:
+        base.update(extra)
+    return base
+
+
+def _extract_xml_from_browser_response(text: str) -> str:
+    """
+    Браузер відкриває XML і огортає його в HTML: <html><body><pre>...xml...</pre></body></html>
+    Або повертає сирий XML якщо вже є <?xml декларація.
+    """
+    # Якщо вже чистий XML — повертаємо як є
+    stripped = text.strip()
+    if stripped.startswith("<?xml") or stripped.startswith("<yml_catalog"):
+        return stripped
+    # Браузер огорнув XML у <pre> або просто в <body>
+    # Спроба 1: <pre id="webkit-xml-viewer-source-xml"> (Chrome)
+    import re as _re
+    m = _re.search(r'<pre[^>]*>(.*?)</pre>', stripped, _re.DOTALL)
+    if m:
+        return m.group(1).strip()
+    # Спроба 2: витягуємо від першого < до кінця
+    start = stripped.find("<?xml")
+    if start == -1:
+        start = stripped.find("<yml_catalog")
+    if start != -1:
+        return stripped[start:]
+    # Фалбек: повертаємо оригінал
+    return text
 
 
 class SecurFeedFullSpider(scrapy.Spider):
@@ -292,7 +339,7 @@ class SecurFeedFullSpider(scrapy.Spider):
             url=f"https://secur.ua/feed/export/{fid}",
             callback=self.parse_ua_feed,
             errback=self.errback_feed,
-            meta={"feed_id": fid, "feed_index": feed_index},
+            meta=_playwright_feed_meta({"feed_id": fid, "feed_index": feed_index}),
             dont_filter=True,
         )
 
@@ -308,7 +355,8 @@ class SecurFeedFullSpider(scrapy.Spider):
         feed_id = response.meta["feed_id"]
         feed_index = response.meta["feed_index"]
 
-        selector = Selector(text=response.text, type="xml")
+        xml_text = _extract_xml_from_browser_response(response.text)
+        selector = Selector(text=xml_text, type="xml")
         selector.remove_namespaces()
         self.logger.info(
             f"📂 [{feed_index + 1}/{len(self.ALL_FEED_IDS)}] UA фід {feed_id} ..."
@@ -316,14 +364,6 @@ class SecurFeedFullSpider(scrapy.Spider):
 
         self.products_ua = {}
         with_params = 0
-
-        # DEBUG: логуємо що реально повернув сервер
-        self.logger.info(
-            f"🔍 DEBUG фід {feed_id}: HTTP {response.status} | "
-            f"Content-Type: {response.headers.get('Content-Type', b'?').decode(errors='replace')} | "
-            f"Розмір: {len(response.body)} байт | "
-            f"Перші 300 символів: {response.text[:300]!r}"
-        )
 
         for offer in selector.xpath("//offer"):
             product_id = offer.xpath("@id").get()
@@ -359,7 +399,7 @@ class SecurFeedFullSpider(scrapy.Spider):
             url=f"https://secur.ua/feed/export/{feed_id}?lang=ru",
             callback=self.parse_ru_feed,
             errback=self.errback_feed,
-            meta={"feed_id": feed_id, "feed_index": feed_index},
+            meta=_playwright_feed_meta({"feed_id": feed_id, "feed_index": feed_index}),
             dont_filter=True,
         )
 
@@ -374,7 +414,8 @@ class SecurFeedFullSpider(scrapy.Spider):
         feed_id = response.meta["feed_id"]
         feed_index = response.meta["feed_index"]
 
-        selector = Selector(text=response.text, type="xml")
+        xml_text = _extract_xml_from_browser_response(response.text)
+        selector = Selector(text=xml_text, type="xml")
         selector.remove_namespaces()
         self.logger.info(
             f"📂 [{feed_index + 1}/{len(self.ALL_FEED_IDS)}] RU фід {feed_id} ..."
