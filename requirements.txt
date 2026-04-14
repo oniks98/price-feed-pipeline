@@ -11,6 +11,9 @@ brotlicffi>=1.0.0
 # Browser automation (noindex script)
 playwright>=1.44
 
+# Anti-bot / Cloudflare bypass
+playwright-stealth>=1.0.0
+
 # Env / credentials
 python-dotenv>=1.0
 

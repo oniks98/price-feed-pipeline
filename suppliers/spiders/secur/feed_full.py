@@ -52,6 +52,12 @@ BAN / RETRY:
     як item від генератора → "Error processing <Deferred>".
   BAN/мережева помилка в errback → errback_feed() → Deferred (коректно для errback).
 
+АНТИБОТ (3 шари):
+  1. --disable-blink-features=AutomationControlled (Chrome CLI arg)
+  2. playwright-stealth via StealthPlaywrightDownloadHandler (context-level init scripts)
+     → патчить navigator.webdriver, navigator.plugins, window.chrome та ~15 інших
+  3. Реальний UA, мовні заголовки, затримки між запитами
+
 ПРИМІТКИ:
   - Фід 54 (Україна) видалено.
   - errback_product: Playwright впав → yield з фід-зображенням без хар-к зі сторінки.
@@ -186,9 +192,13 @@ class SecurFeedFullSpider(scrapy.Spider):
         "ITEM_PIPELINES": {
             "suppliers.pipelines.SuppliersPipeline": 300,
         },
+        # ── Stealth handler замінює стандартний scrapy-playwright ──────────
+        # StealthPlaywrightDownloadHandler.`_create_browser_context` застосовує
+        # playwright-stealth до кожного нового BrowserContext одразу після створення.
+        # context.add_init_script → спрацьовує ДО будь-якого JS (включно з CF).
         "DOWNLOAD_HANDLERS": {
-            "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-            "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+            "http": "suppliers.middlewares.StealthPlaywrightDownloadHandler",
+            "https": "suppliers.middlewares.StealthPlaywrightDownloadHandler",
         },
         "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
         # ── Антибот: 2 паралельні Playwright-вкладки, затримка 1.5–4.5 сек ──
@@ -210,7 +220,7 @@ class SecurFeedFullSpider(scrapy.Spider):
         "PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT": GOTO_TIMEOUT_MS,
         "PLAYWRIGHT_LAUNCH_OPTIONS": {
             "args": [
-                "--disable-blink-features=AutomationControlled",  # ← анти-бот
+                "--disable-blink-features=AutomationControlled",  # ← шар 1 антибот
                 "--disable-dev-shm-usage",
                 "--no-sandbox",
                 "--disable-gpu",
