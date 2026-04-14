@@ -76,7 +76,16 @@ _WAIT_SELECTOR = "div.item, h1"
 _WAIT_TIMEOUT_MS = 10_000
 
 # Сигнали бану — перевіряємо перші 500 символів відповіді
-BAN_SIGNALS = ["captcha", "access denied", "cloudflare", "403 forbidden", "too many requests"]
+BAN_SIGNALS = [
+    "captcha",
+    "access denied",
+    "cloudflare",
+    "403 forbidden",
+    "too many requests",
+    "just a moment",       # Cloudflare challenge page
+    "enable javascript",   # Cloudflare JS-fallback
+    "checking your browser",
+]
 
 
 def _playwright_meta(extra: dict | None = None) -> dict:
@@ -104,15 +113,16 @@ def _playwright_meta(extra: dict | None = None) -> dict:
 
 def _playwright_feed_meta(extra: dict | None = None) -> dict:
     """
-    Playwright-мета для XML-фідів. Чекаємо networkidle — фід має бути
-    повністю завантажений перед парсингом. Без wait_for_selector — XML
-    не має DOM-елементів на які можна чекати.
+    Playwright-мета для XML-фідів.
+    domcontentloaded замість networkidle — networkidle зависає на CI
+    (Cloudflare challenge тримає відкриті з'єднання → networkidle ніколи
+    не настає → timeout → 0 товарів без помилки).
     """
     base = {
         "playwright": True,
         "download_timeout": 60,
         "playwright_page_goto_kwargs": {
-            "wait_until": "networkidle",
+            "wait_until": "domcontentloaded",   # ← було networkidle
             "timeout": 45_000,
         },
     }
@@ -362,6 +372,18 @@ class SecurFeedFullSpider(scrapy.Spider):
             f"📂 [{feed_index + 1}/{len(self.ALL_FEED_IDS)}] UA фід {feed_id} ..."
         )
 
+        # ── BAN detection для UA фіду ─────────────────────────────────
+        raw_preview = response.text[:500].lower()
+        self.logger.debug(f"UA фід {feed_id} preview: {response.text[:300]!r}")
+        if any(signal in raw_preview for signal in BAN_SIGNALS):
+            self.logger.error(
+                f"🚫 БАН UA ФІДУ {feed_id} → Cloudflare/block отримано замість XML "
+                f"| len={len(response.text)} | URL: {response.url}"
+            )
+            return self.errback_feed(
+                type("_FakeFail", (), {"request": response.request, "value": "BAN"})(),
+            )
+
         self.products_ua = {}
         with_params = 0
 
@@ -413,6 +435,18 @@ class SecurFeedFullSpider(scrapy.Spider):
         """
         feed_id = response.meta["feed_id"]
         feed_index = response.meta["feed_index"]
+
+        # ── BAN detection для RU фіду ─────────────────────────────────
+        raw_preview = response.text[:500].lower()
+        self.logger.debug(f"RU фід {feed_id} preview: {response.text[:300]!r}")
+        if any(signal in raw_preview for signal in BAN_SIGNALS):
+            self.logger.error(
+                f"🚫 БАН RU ФІДУ {feed_id} → Cloudflare/block отримано замість XML "
+                f"| len={len(response.text)} | URL: {response.url}"
+            )
+            return self.errback_feed(
+                type("_FakeFail", (), {"request": response.request, "value": "BAN"})(),
+            )
 
         xml_text = _extract_xml_from_browser_response(response.text)
         selector = Selector(text=xml_text, type="xml")
