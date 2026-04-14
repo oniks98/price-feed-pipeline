@@ -365,24 +365,26 @@ class SecurFeedFullSpider(scrapy.Spider):
         feed_id = response.meta["feed_id"]
         feed_index = response.meta["feed_index"]
 
+        # ── BAN detection для UA фіду — до будь-якого парсингу ─────────
+        raw_preview = response.text[:500].lower()
+        # INFO щоб було видно на CI (debug може бути вимкнено)
+        self.logger.info(
+            f"📂 [{feed_index + 1}/{len(self.ALL_FEED_IDS)}] UA фід {feed_id} "
+            f"| len={len(response.text)} | preview: {response.text[:200]!r}"
+        )
+        if any(signal in raw_preview for signal in BAN_SIGNALS):
+            self.logger.error(
+                f"🚫 БАН UA ФІДУ {feed_id} → Cloudflare замість XML "
+                f"| URL: {response.url}"
+            )
+            yield from self.errback_feed(
+                type("_FakeFail", (), {"request": response.request, "value": "BAN"})(),
+            ) or []
+            return
+
         xml_text = _extract_xml_from_browser_response(response.text)
         selector = Selector(text=xml_text, type="xml")
         selector.remove_namespaces()
-        self.logger.info(
-            f"📂 [{feed_index + 1}/{len(self.ALL_FEED_IDS)}] UA фід {feed_id} ..."
-        )
-
-        # ── BAN detection для UA фіду ─────────────────────────────────
-        raw_preview = response.text[:500].lower()
-        self.logger.debug(f"UA фід {feed_id} preview: {response.text[:300]!r}")
-        if any(signal in raw_preview for signal in BAN_SIGNALS):
-            self.logger.error(
-                f"🚫 БАН UA ФІДУ {feed_id} → Cloudflare/block отримано замість XML "
-                f"| len={len(response.text)} | URL: {response.url}"
-            )
-            return self.errback_feed(
-                type("_FakeFail", (), {"request": response.request, "value": "BAN"})(),
-            )
 
         self.products_ua = {}
         with_params = 0
@@ -436,24 +438,26 @@ class SecurFeedFullSpider(scrapy.Spider):
         feed_id = response.meta["feed_id"]
         feed_index = response.meta["feed_index"]
 
-        # ── BAN detection для RU фіду ─────────────────────────────────
+        # ── BAN detection для RU фіду — до будь-якого парсингу ─────────
         raw_preview = response.text[:500].lower()
-        self.logger.debug(f"RU фід {feed_id} preview: {response.text[:300]!r}")
+        # INFO щоб було видно на CI (debug може бути вимкнено)
+        self.logger.info(
+            f"📂 [{feed_index + 1}/{len(self.ALL_FEED_IDS)}] RU фід {feed_id} "
+            f"| len={len(response.text)} | preview: {response.text[:200]!r}"
+        )
         if any(signal in raw_preview for signal in BAN_SIGNALS):
             self.logger.error(
-                f"🚫 БАН RU ФІДУ {feed_id} → Cloudflare/block отримано замість XML "
-                f"| len={len(response.text)} | URL: {response.url}"
+                f"🚫 БАН RU ФІДУ {feed_id} → Cloudflare замість XML "
+                f"| URL: {response.url}"
             )
-            return self.errback_feed(
+            yield from self.errback_feed(
                 type("_FakeFail", (), {"request": response.request, "value": "BAN"})(),
-            )
+            ) or []
+            return
 
         xml_text = _extract_xml_from_browser_response(response.text)
         selector = Selector(text=xml_text, type="xml")
         selector.remove_namespaces()
-        self.logger.info(
-            f"📂 [{feed_index + 1}/{len(self.ALL_FEED_IDS)}] RU фід {feed_id} ..."
-        )
 
         total = queued = deleted = skipped = 0
         unmapped_categories: set = set()
