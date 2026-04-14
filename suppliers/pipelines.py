@@ -334,7 +334,23 @@ class SuppliersPipeline:
                     if source == "feed"
                     else channel_config.coefficient
                 )
-                cleaned["Ціна"] = channel_service.apply_price_coefficient(base_price, coef)
+
+                # ── ЦІНА + ВАЛЮТА: залежить від каналу ────────────────────
+                # site  → базова ціна в USD × коефіцієнт, валюта USD
+                # prom  → РРЦ у UAH × коефіцієнт (fallback: USD якщо РРЦ відсутня)
+                if channel_config.channel == "prom":
+                    price_rrp_uah = adapter.get("price_rrp_uah", "")
+                    if price_rrp_uah:
+                        cleaned["Ціна"]   = channel_service.apply_price_coefficient(price_rrp_uah, coef)
+                        cleaned["Валюта"] = "UAH"
+                    else:
+                        spider.logger.warning(
+                            f"⚠️ prom: відсутня РРЦ UAH, fallback USD | "
+                            f"{adapter.get('Назва_позиції', '?')[:60]}"
+                        )
+                        cleaned["Ціна"] = channel_service.apply_price_coefficient(base_price, coef)
+                else:
+                    cleaned["Ціна"] = channel_service.apply_price_coefficient(base_price, coef)
                 
                 # Код товару - стабільний між запусками, прив'язаний до SKU
                 base_sku = adapter.get("Ідентифікатор_товару", "")

@@ -286,9 +286,10 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
             description_ua = response.meta.get("description_ua", "")
             specs_list     = response.meta.get("specifications_list", [])
 
-            supplier_sku = (response.css("span.card-header__card-articul-text-value::text").get() or "").strip()
-            price_raw    = (response.css("div.card-header__card-price-new::text").get() or "").strip().replace("&nbsp;", "").replace(" ", "")
-            price        = self._clean_price(price_raw) if price_raw else ""
+            supplier_sku  = (response.css("span.card-header__card-articul-text-value::text").get() or "").strip()
+            price_raw     = (response.css("div.card-header__card-price-new::text").get() or "").strip().replace("&nbsp;", "").replace(" ", "")
+            price         = self._clean_price(price_raw) if price_raw else ""
+            price_rrp_uah = self._parse_rrp_uah(response)
 
             gallery_images = response.css('a[data-fancybox*="gallery"]::attr(href)').getall()
             if not gallery_images:
@@ -326,6 +327,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
                 "Посилання_підрозділу":     response.meta.get("subdivision_link", ""),
                 "Виробник":                 self.feed_service.get_vendor(supplier_sku),
                 "Країна_виробник":          "",
+                "price_rrp_uah":            price_rrp_uah,
                 "price_type":               self.price_type,
                 "supplier_id":              self.supplier_id,
                 "output_file":              self.output_filename,
@@ -363,6 +365,26 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
     # ──────────────────────────────────────────────────────────
     # HELPERS
     # ──────────────────────────────────────────────────────────
+
+    def _parse_rrp_uah(self, response) -> str:
+        """
+        Парсить ціну РРЦ в гривнях зі сторінки товару.
+
+        Шукає тег виду:
+            <p class="font-0-9 color-gray-80 mb-1">2 099.00 грн (РРЦ)</p>
+
+        Повертає очищену числову рядок (напр. "2099.00") або "" якщо не знайдено.
+        Використовується каналом prom як базова ціна у UAH.
+        """
+        for para in response.css("p.font-0-9.color-gray-80.mb-1"):
+            raw = "".join(para.css("::text").getall())
+            if "РРЦ" not in raw:
+                continue
+            cleaned = raw.replace("\xa0", "").replace(" ", "").strip()
+            price = self._clean_price(cleaned) if cleaned else ""
+            if price:
+                return price
+        return ""
 
     def _start_next_category(self, current_index: int):
         next_index = current_index + 1

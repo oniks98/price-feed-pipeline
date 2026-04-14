@@ -40,7 +40,14 @@ warnings.filterwarnings('ignore', category=DeprecationWarning)
 # Має бути встановлений ДО будь-якого імпорту Scrapy/Twisted,
 # бо Twisted встановлює дефолтний epollreactor при першому імпорті.
 import asyncio
+import sys
 from twisted.internet import asyncioreactor
+
+# На Windows дефолтний ProactorEventLoop несумісний з Twisted.
+# Примусово перемикаємо на SelectorEventLoop — тільки для Windows,
+# щоб не зачіпати Linux/macOS (і GitHub Actions).
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # asyncio.new_event_loop() без set_event_loop() → реактор і решта asyncio
 # коду використовують РІЗНІ event loop-и → паук стартує і тихо вмирає.
