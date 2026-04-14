@@ -1,139 +1,89 @@
-stalk@DESKTOP-APMRUCI MINGW64 /c/FullStack/PriceFeedPipeline (main)
-$ python scripts/ultra_clean_run.py viatec_dealer
-Traceback (most recent call last):
-File "C:\FullStack\PriceFeedPipeline\scripts\ultra_clean_run.py", line 50, in <module>
-asyncioreactor.install(\_loop)
-File "C:\Users\stalk\AppData\Roaming\Python\Python312\site-packages\twisted\internet\asyncioreactor.py", line 304, in install
-reactor = AsyncioSelectorReactor(eventloop)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "C:\Users\stalk\AppData\Roaming\Python\Python312\site-packages\twisted\internet\asyncioreactor.py", line 61, in **init**
-raise TypeError(
-TypeError: ProactorEventLoop is not supported, got: <ProactorEventLoop running=False closed=False debug=False>
-Ошибка связана с несовместимостью event loop’а в Windows.
+посмотри
+C:\FullStack\PriceFeedPipeline\.github\workflows\pipeline.yml
+C:\FullStack\PriceFeedPipeline\suppliers\spiders\secur\feed_full.py
 
-Причина
+возможно ли сделать паука чуть агресивнее - может 2 паралельніх запроса или сейчас сколько ? Все равно есть фолбек на фид и товар оттуда берется в лучае бана по запросу, а то сейчас 2ч 20мин паук работает, хотелось бі 1ч 30мин
 
-В Python 3.8+ на Windows по умолчанию используется:
+Логичное ли єто решение?
 
-ProactorEventLoop
+Аналіз поточної ситуації
+Вузьке місце — Playwright-запити. Поточні налаштування:
 
-А Twisted (через AsyncioSelectorReactor) поддерживает только:
+Параметр Зараз Ефект
+CONCURRENT_REQUESTS_PER_DOMAIN 1 строго 1 запит одночасно
+DOWNLOAD_DELAY 5 рандом 2.5–7.5 сек між запитами
+AUTOTHROTTLE_TARGET_CONCURRENCY 1.0 AutoThrottle тримає ≈1 паралельний
+CONCURRENT_REQUESTS 2 глобально 2, але per-domain=1 → не використовується
+Реальний throughput: ≈ 1 сторінка / 5с = 12 товарів/хв
 
-SelectorEventLoop
+Щоб з 2год 20хв → 1год 30хв потрібно прискорення ≈55%, тобто ≈18–20 товарів/хв.
 
-Поэтому при:
+Ризик: є errback_product → при бані yield з фід-даними, товар не губиться ✅
 
-asyncioreactor.install(\_loop)
+Рішення: 2 паралельні Playwright-сесії
+python
 
-получаешь:
+# suppliers/spiders/secur/feed_full.py
 
-TypeError: ProactorEventLoop is not supported
-Решение (правильное)
+# ── Антибот: 2 паралельні запити, затримка 3–6 сек ──────────────
 
-Нужно принудительно переключить event loop policy ДО создания loop и ДО импорта reactor.
+"CONCURRENT_REQUESTS": 4, # було 2
+"CONCURRENT_REQUESTS_PER_DOMAIN": 2, # було 1 ← КЛЮЧОВА ЗМІНА
+"DOWNLOAD_DELAY": 3, # було 5
+"RANDOMIZE_DOWNLOAD_DELAY": True, # 3 × 0.5..1.5 → 1.5–4.5 сек
 
-В начале ultra_clean_run.py:
-import asyncio
+# ── AutoThrottle: тримає 2 паралельних, відступає при гальмуванні ──
 
-asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-Важно (порядок критичен)
+"AUTOTHROTTLE_ENABLED": True,
+"AUTOTHROTTLE_START_DELAY": 3, # було 5
+"AUTOTHROTTLE_MAX_DELAY": 60,
+"AUTOTHROTTLE_TARGET_CONCURRENCY": 2.0, # було 1.0 ← КЛЮЧОВА ЗМІНА
+"AUTOTHROTTLE_DEBUG": False,
+І один Playwright-контекст розширюємо щоб витримував 2 вкладки:
 
-Правильная последовательность:
+python
+"PLAYWRIGHT_CONTEXTS": {
+"default": {
+"user_agent": (
+"Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+"AppleWebKit/537.36 (KHTML, like Gecko) "
+"Chrome/133.0.0.0 Safari/537.36"
+),
+"extra_http_headers": {
+"Accept-Language": "uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7",
+}, # Дозволяємо 2 паралельні вкладки в одному браузері
+"max_concurrent_pages": 2, # ← ДОДАТИ
+}
+},
+Очікуваний результат
+До Після
+Паралельних Playwright 1 2
+Затримка між запитами 2.5–7.5 сек 1.5–4.5 сек
+Throughput ~12 товарів/хв ~20–24 товарів/хв
+Час роботи ~2год 20хв ~1год 20–30хв
+Чому це безпечно
+Fallback є — errback_product yields з фід-даними при будь-якому бані
+AutoThrottle сам знизить швидкість якщо secur.ua починає гальмувати (збільшить delay до 60с)
+2 паралельних — це дуже помірно (не 5–10), Cloudflare зазвичай реагує на набагато агресивніше
+Один браузер, 2 вкладки — менш підозріло ніж 2 окремих браузери
+Конкретний diff для feed_full.py
+python
 
-import asyncio
+# БУЛО:
 
-# 1. Сначала политика
+"CONCURRENT_REQUESTS": 2,
+"CONCURRENT_REQUESTS_PER_DOMAIN": 1,
+"DOWNLOAD_DELAY": 5,
+"AUTOTHROTTLE_START_DELAY": 5,
+"AUTOTHROTTLE_TARGET_CONCURRENCY": 1.0,
 
-asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+# СТАЛО:
 
-# 2. Потом создаем loop
+"CONCURRENT_REQUESTS": 4,
+"CONCURRENT_REQUESTS_PER_DOMAIN": 2,
+"DOWNLOAD_DELAY": 3,
+"AUTOTHROTTLE_START_DELAY": 3,
+"AUTOTHROTTLE_TARGET_CONCURRENCY": 2.0,
+І в PLAYWRIGHT_CONTEXTS["default"] додати "max_concurrent_pages": 2.
 
-\_loop = asyncio.new_event_loop()
-asyncio.set_event_loop(\_loop)
-
-# 3. Потом reactor
-
-from twisted.internet import asyncioreactor
-asyncioreactor.install(\_loop)
-Частые ошибки
-❌ Политику ставят после new_event_loop()
-❌ Импортируют twisted.internet.reactor до install()
-❌ Где-то в проекте reactor уже заинициализирован
-Альтернатива (если не нужен asyncio)
-
-Можно вообще не использовать AsyncioSelectorReactor, а оставить стандартный reactor:
-
-# просто убрать install()
-
-Но это зависит от архитектуры (если у тебя Scrapy + asyncio — тогда не вариант).
-
-Итог
-
-Проблема не в коде Scrapy, а в:
-
-Windows loop policy (Proactor)
-ограничении Twisted
-
-Фикс — принудительно использовать WindowsSelectorEventLoopPolicy.
-
-но через гит хаб актион работает норм паук , если сделать сейчас локально то перестанет там работать?
-Нет, не перестанет — если сделать корректно.
-Почему сейчас работает в GitHub Actions
-В GitHub Actions (Linux runner):
-
-используется SelectorEventLoop по умолчанию
-
-нет ProactorEventLoop
-
-поэтому Twisted работает без костылей
-
-Почему падает локально
-На Windows:
-
-дефолт → ProactorEventLoop
-
-Twisted его не поддерживает → ошибка
-
-Правильный фикс (кроссплатформенный)
-Добавь условие только для Windows, тогда поведение не изменится в CI:
-import asyncioimport sysif sys.platform == "win32": asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())\_loop = asyncio.new_event_loop()asyncio.set_event_loop(\_loop)from twisted.internet import asyncioreactorasyncioreactor.install(\_loop)
-
-Почему это безопасно
-
-Windows → принудительно Selector (фикс ошибки)
-
-Linux (GitHub Actions) → код даже не выполнится
-
-Поведение в CI останется 100% таким же
-
-Когда можно сломать CI
-Только если:
-
-убрать условие sys.platform
-
-или начать вручную менять loop policy на Linux
-
-Вывод
-Фикс:
-
-локально устранит ошибку
-
-CI не затронет
-
-соответствует нормальной практике для связки asyncio + Twisted на Windows
-
-Что упростить (минимально и правильно)
-
-Добавь platform guard:
-
-import asyncio
-import sys
-from twisted.internet import asyncioreactor
-
-if sys.platform == "win32":
-asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-\_loop = asyncio.new_event_loop()
-asyncio.set_event_loop(\_loop)
-
-asyncioreactor.install(\_loop)
+Більше нічого міняти не потрібно — pipeline.yml, retry логіка, errback — все залишається як є.

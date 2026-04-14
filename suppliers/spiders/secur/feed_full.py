@@ -122,16 +122,16 @@ class SecurFeedFullSpider(scrapy.Spider):
             "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
         },
         "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",  # noqa: дублюється з settings.py для явності
-        # ── Антибот: 1 запит, рандомна затримка 2.5–7.5 сек ──────────────
-        "CONCURRENT_REQUESTS": 2,
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
-        "DOWNLOAD_DELAY": 5,
-        "RANDOMIZE_DOWNLOAD_DELAY": True,  # Scrapy: delay × 0.5..1.5 → 2.5–7.5 сек
-        # ── AutoThrottle: уповільнюється якщо сайт починає гальмувати ──
+        # ── Антибот: 2 паралельні Playwright-вкладки, затримка 1.5–4.5 сек ──
+        "CONCURRENT_REQUESTS": 4,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,           # ← було 1, ключова зміна
+        "DOWNLOAD_DELAY": 3,                           # ← було 5
+        "RANDOMIZE_DOWNLOAD_DELAY": True,              # 3 × 0.5..1.5 → 1.5–4.5 сек
+        # ── AutoThrottle: тримає 2 паралельних, відступає при гальмуванні ──
         "AUTOTHROTTLE_ENABLED": True,
-        "AUTOTHROTTLE_START_DELAY": 5,
+        "AUTOTHROTTLE_START_DELAY": 3,                 # ← було 5
         "AUTOTHROTTLE_MAX_DELAY": 60,
-        "AUTOTHROTTLE_TARGET_CONCURRENCY": 1.0,
+        "AUTOTHROTTLE_TARGET_CONCURRENCY": 2.0,        # ← було 1.0, ключова зміна
         "AUTOTHROTTLE_DEBUG": False,
         # ── Блокуємо зайві ресурси — нам потрібен тільки DOM ─────────────
         "PLAYWRIGHT_ABORT_REQUEST": lambda req: req.resource_type in {
