@@ -91,11 +91,11 @@ jobs:
             max_attempts: 2
             retry_wait: 30
 
-          - supplier: secur
-            spider: secur_feed_full
-            timeout_minutes: 20
-            max_attempts: 8
-            retry_wait: 30
+    # - supplier: secur
+    #   spider: secur_feed_full
+    #   timeout_minutes: 20
+    #   max_attempts: 8
+    #   retry_wait: 30
 
     steps:
       - name: Checkout repo
