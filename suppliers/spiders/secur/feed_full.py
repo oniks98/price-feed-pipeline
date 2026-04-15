@@ -58,6 +58,13 @@ BAN / RETRY:
      → патчить navigator.webdriver, navigator.plugins, window.chrome та ~15 інших
   3. Реальний UA, мовні заголовки, затримки між запитами
 
+CLOUDFLARE JS-CHALLENGE (як обходимо):
+  CF повертає "Трохи зачекайте…" (~30KB) — це 5-секундний JS challenge.
+  Playwright (реальний браузер) МОЖЕ його пройти, але потрібно чекати.
+  Для фідів: wait_for_selector("pre", timeout=35s) — Chrome загортає XML у <pre>
+  після того як CF challenge завершується і робить redirect назад на feed URL.
+  Якщо <pre> не з'явилась за 35с → тайм-аут → ban-сигнал → retry.
+
 ПРИМІТКИ:
   - Фід 54 (Україна) видалено.
   - errback_product: Playwright впав → yield з фід-зображенням без хар-к зі сторінки.
@@ -82,22 +89,32 @@ from suppliers.services.category_specs_enricher import CategorySpecsEnricher
 GOTO_TIMEOUT_MS = 15_000   # page.goto() timeout — 15 сек (fail fast на банах)
 DOWNLOAD_TIMEOUT = 18      # Scrapy-рівень — 18 сек (трохи більше goto)
 
+# Для XML-фідів: CF challenge займає ~5с + redirect → потрібно більше часу
+FEED_GOTO_TIMEOUT_MS = 20_000   # page.goto() для фідів — 20 сек
+FEED_CF_WAIT_TIMEOUT_MS = 35_000  # wait_for_selector("pre") — 35 сек (CF challenge ≈ 5с)
+FEED_DOWNLOAD_TIMEOUT = 65        # Scrapy-рівень для фідів — трохи більше суми вище
+
 # Два сценарії:
 #   1. Товар з хар-ками → Vue рендерить div.item (може бути повільно → 10с)
 #   2. Товар без хар-к  → div.item немає, але h1 є завжди → не таймаутимо
 _WAIT_SELECTOR = "div.item, h1"
 _WAIT_TIMEOUT_MS = 10_000
 
-# Сигнали бану — перевіряємо перші 500 символів відповіді
+# Сигнали бану — перевіряємо перші 500 символів відповіді.
+# "трохи зачекайте" — українська версія CF JS-challenge ("just a moment" по-укр.)
+# Якщо wait_for_selector("pre") не спрацював і ми все ж прочитали CF-сторінку —
+# детектуємо це як бан і робимо retry.
 BAN_SIGNALS = frozenset({
     "captcha",
     "access denied",
     "cloudflare",
     "403 forbidden",
     "too many requests",
-    "just a moment",       # Cloudflare challenge page
-    "enable javascript",   # Cloudflare JS-fallback
+    "just a moment",          # Cloudflare challenge (EN)
+    "трохи зачекайте",        # Cloudflare challenge (UA) ← ДОДАНО
+    "enable javascript",      # Cloudflare JS-fallback
     "checking your browser",
+    "performance & security", # Cloudflare generic
 })
 
 # Retry-налаштування для XML-фідів
@@ -137,17 +154,40 @@ def _playwright_meta(extra: dict | None = None) -> dict:
 def _playwright_feed_meta(extra: dict | None = None) -> dict:
     """
     Playwright-мета для XML-фідів.
-    domcontentloaded замість networkidle — networkidle зависає на CI
-    (Cloudflare challenge тримає відкриті з'єднання → networkidle ніколи
-    не настає → timeout → 0 товарів без помилки).
+
+    КЛЮЧОВА ЛОГІКА обходу Cloudflare JS-challenge:
+      1. goto() з wait_until="domcontentloaded" — завантажує CF challenge сторінку
+      2. wait_for_selector("pre", timeout=35s) — чекає поки:
+           a. CF JS виконується (~3-5с)
+           b. CF ставить cookie cf_clearance
+           c. CF робить redirect назад на feed URL
+           d. Chrome рендерить XML і загортає його у <pre>
+      3. Тільки після цього scrapy-playwright повертає response
+
+    Якщо <pre> не з'явилась (жорсткий IP-бан або CF Turnstile) → timeout →
+    errback_feed() → retry з паузою.
+
+    Чому НЕ networkidle: networkidle зависає на CI — CF challenge тримає
+    відкриті з'єднання → networkidle ніколи не настає → вічний timeout.
     """
     base = {
         "playwright": True,
-        "download_timeout": 60,
+        "download_timeout": FEED_DOWNLOAD_TIMEOUT,
         "playwright_page_goto_kwargs": {
             "wait_until": "domcontentloaded",
-            "timeout": 45_000,
+            "timeout": FEED_GOTO_TIMEOUT_MS,
         },
+        "playwright_page_methods": [
+            # Чекаємо <pre> — Chrome завжди загортає XML у <pre>.
+            # Якщо CF challenge пройшов і redirect відбувся — <pre> буде.
+            # Якщо CF заблокував — <pre> не буде → TimeoutError → errback.
+            PageMethod(
+                "wait_for_selector",
+                "pre",
+                timeout=FEED_CF_WAIT_TIMEOUT_MS,
+                state="attached",
+            ),
+        ],
     }
     if extra:
         base.update(extra)
@@ -192,10 +232,8 @@ class SecurFeedFullSpider(scrapy.Spider):
         "ITEM_PIPELINES": {
             "suppliers.pipelines.SuppliersPipeline": 300,
         },
-        # ── Stealth handler замінює стандартний scrapy-playwright ──────────
-        # StealthPlaywrightDownloadHandler.`_create_browser_context` застосовує
-        # playwright-stealth до кожного нового BrowserContext одразу після створення.
-        # context.add_init_script → спрацьовує ДО будь-якого JS (включно з CF).
+        # StealthPlaywrightDownloadHandler застосовує playwright-stealth до кожного
+        # BrowserContext: context.add_init_script → спрацьовує ДО будь-якого JS (CF).
         "DOWNLOAD_HANDLERS": {
             "http": "suppliers.middlewares.StealthPlaywrightDownloadHandler",
             "https": "suppliers.middlewares.StealthPlaywrightDownloadHandler",
@@ -216,8 +254,10 @@ class SecurFeedFullSpider(scrapy.Spider):
         "PLAYWRIGHT_ABORT_REQUEST": lambda req: req.resource_type in {
             "image", "media", "font", "stylesheet"
         },
+        # DOWNLOAD_TIMEOUT береться з FEED_DOWNLOAD_TIMEOUT для фідів через meta.
+        # Для товарних сторінок — DOWNLOAD_TIMEOUT (18с).
         "DOWNLOAD_TIMEOUT": DOWNLOAD_TIMEOUT,
-        "PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT": GOTO_TIMEOUT_MS,
+        "PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT": FEED_GOTO_TIMEOUT_MS,
         "PLAYWRIGHT_LAUNCH_OPTIONS": {
             "args": [
                 "--disable-blink-features=AutomationControlled",  # ← шар 1 антибот
@@ -666,6 +706,8 @@ class SecurFeedFullSpider(scrapy.Spider):
     def errback_feed(self, failure):
         """
         Errback для реальних мережевих помилок XML-фідів (UA та RU).
+        Також спрацьовує коли wait_for_selector("pre") завершується TimeoutError
+        (CF заблокував повністю → <pre> ніколи не з'явилась).
         Ретраїть до FEED_MAX_RETRIES разів з паузою FEED_RETRY_DELAY секунд.
 
         Повертає Deferred — це коректно ТІЛЬКИ з errback-ланцюжка.
