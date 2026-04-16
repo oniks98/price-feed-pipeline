@@ -1,0 +1,60 @@
+name: Test IP Check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check GitHub Actions IP
+        run: |
+          echo "=== GitHub Actions IP ==="
+          curl -s https://api.ipify.org
+          echo ""
+
+      - name: Check product page
+        run: |
+          echo "=== Product page status ==="
+          CODE=$(curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" \
+            -o /dev/null -w "%{http_code}" -s \
+            "https://secur.ua/signalizatsii/gsm-signalizatsii/besprovodnye-tsentrali/intelektualna-central-ajax-hub-2-corna-ajax-8745")
+          echo "HTTP $CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "✅ Сторінки товарів — НЕ заблоковані (проксі не потрібен)"
+          else
+            echo "❌ Сторінки товарів — ЗАБЛОКОВАНІ (потрібен проксі для всього)"
+          fi
+
+      - name: Check feed 50
+        run: |
+          echo "=== Feed /50 status ==="
+          CODE=$(curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" \
+            -o /dev/null -w "%{http_code}" -s \
+            "https://secur.ua/feed/export/50")
+          echo "HTTP $CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "✅ Фід 50 — НЕ заблокований"
+          else
+            echo "❌ Фід 50 — ЗАБЛОКОВАНИЙ (Cloudflare)"
+          fi
+
+      - name: Check feed 52
+        run: |
+          echo "=== Feed /52 status ==="
+          CODE=$(curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" \
+            -o /dev/null -w "%{http_code}" -s \
+            "https://secur.ua/feed/export/52")
+          echo "HTTP $CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "✅ Фід 52 — НЕ заблокований"
+          else
+            echo "❌ Фід 52 — ЗАБЛОКОВАНИЙ (Cloudflare)"
+          fi
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "════════════════════════════════════════════════════"
+          echo "Результат: дивись вище — 200 = ок, інше = Cloudflare"
+          echo "════════════════════════════════════════════════════"
