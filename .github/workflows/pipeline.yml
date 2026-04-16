@@ -91,11 +91,13 @@ jobs:
             max_attempts: 2
             retry_wait: 30
 
-    # - supplier: secur
-    #   spider: secur_feed_full
-    #   timeout_minutes: 20
-    #   max_attempts: 8
-    #   retry_wait: 30
+          # ── secur тимчасово вимкнено — Cloudflare блокує GitHub Actions IP ──
+          # Повернути коли буде вирішено питання з проксі або VPS.
+          # - supplier: secur
+          #   spider: secur_feed_full
+          #   timeout_minutes: 35
+          #   max_attempts: 5
+          #   retry_wait: 60
 
     steps:
       - name: Checkout repo
@@ -178,8 +180,6 @@ jobs:
           BOT_NAME="github-actions[bot]"
           BOT_EMAIL="github-actions[bot]@users.noreply.github.com"
 
-          # Якщо гілка data-latest ще не існує — створюємо її з порожнім комітом.
-          # Це потрібно для першого запуску нового репо.
           if git ls-remote --exit-code --heads origin data-latest; then
             git clone --branch data-latest --single-branch \
               https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
@@ -200,7 +200,8 @@ jobs:
             cd ..
           fi
 
-          for supplier in viatec secur; do
+          # ── АКТИВНІ постачальники: secur тимчасово вимкнено ──
+          for supplier in viatec; do
             mkdir -p data/${supplier}
             src="publish-dir/data/${supplier}/${supplier}_old.csv"
             if [ -f "${src}" ]; then
@@ -231,7 +232,8 @@ jobs:
       - name: Read spider statuses and set env flags
         run: |
           FAILED_SUPPLIERS=""
-          for SUPPLIER in viatec secur; do
+          # ── АКТИВНІ постачальники: secur тимчасово вимкнено ──
+          for SUPPLIER in viatec; do
             STATUS_FILE="data/output/${SUPPLIER}_status.txt"
             if [ -f "$STATUS_FILE" ] && [ "$(cat $STATUS_FILE)" = "success" ]; then
               echo "${SUPPLIER^^}_OK=true" >> $GITHUB_ENV
@@ -255,25 +257,23 @@ jobs:
           PROJECT_ROOT: ${{ github.workspace }}
 
       # Пушимо всі великі файли в data-latest через --amend.
-      # Це зберігає тільки ОДИН commit в data-latest — без history bloat.
       - name: Push large files to data-latest (amend)
         run: |
           BOT_NAME="github-actions[bot]"
           BOT_EMAIL="github-actions[bot]@users.noreply.github.com"
 
-          # Налаштовуємо ident ДО будь-яких git операцій
           cd publish-dir
           git config user.name  "${BOT_NAME}"
           git config user.email "${BOT_EMAIL}"
           cd ..
 
-          # Backup merged_prev перед перезаписом
           [ -f publish-dir/data/merged.csv ] && \
             cp publish-dir/data/merged.csv publish-dir/data/merged_prev.csv
 
           cp data/merged.csv publish-dir/data/merged.csv
 
-          for supplier in viatec secur; do
+          # ── АКТИВНІ постачальники: secur тимчасово вимкнено ──
+          for supplier in viatec; do
             mkdir -p publish-dir/data/${supplier}
             [ -f data/${supplier}/${supplier}_old.csv ] && \
               cp data/${supplier}/${supplier}_old.csv \
@@ -288,7 +288,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "✅ Змін немає — коміт пропущено"
           else
-            # --author явно щоб amend не брав порожній ident з HEAD
             git commit --amend --no-edit \
               --author="${BOT_NAME} <${BOT_EMAIL}>"
             git push origin data-latest --force
@@ -297,7 +296,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # В main залишаємо тільки маленькі файли конфігурації.
       - name: Commit sku_map.json to main
         run: |
           git config user.name  "github-actions[bot]"
@@ -322,7 +320,6 @@ jobs:
         env:
           PROM_API_TOKEN: ${{ secrets.PROM_API_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          # Вказуємо URL з data-latest замість main
           PROM_MERGED_CSV_URL: "https://raw.githubusercontent.com/${{ github.repository }}/data-latest/data/merged.csv"
 
       - name: Print Prom import URL
@@ -348,9 +345,6 @@ jobs:
 
   # ═══════════════════════════════════════════════════════════
   # STAGE 3 — NOINDEX AUTOMATION
-  # Чекає 15 хв на завершення імпорту в Промі.
-  # Запускається навіть якщо process-and-publish завершився з failure
-  # (означає, що деякі пауки впали, але дані інших вже запушено).
   # ═══════════════════════════════════════════════════════════
   noindex:
     name: Prom Noindex Automation
@@ -409,7 +403,6 @@ jobs:
 
   # ═══════════════════════════════════════════════════════════
   # STAGE 3.5 — PROSALE AUTOMATION
-  # Після noindex — щоб уникнути конкурентних сесій до Prom admin.
   # ═══════════════════════════════════════════════════════════
   prosale:
     name: Prom ProSale Automation
@@ -458,9 +451,7 @@ jobs:
           compression-level: 6
 
   # ═══════════════════════════════════════════════════════════
-  # STAGE 4 — KASTA FEED (паралельно з epicenter і rozetka)
-  # Фід завантажується напряму з oniks.org.ua — data-latest не потрібен.
-  # Push в data-latest робиться один раз у publish-feeds.
+  # STAGE 4 — KASTA FEED
   # ═══════════════════════════════════════════════════════════
   kasta-feed:
     name: Generate Kasta Feed
@@ -502,7 +493,7 @@ jobs:
           if-no-files-found: warn
 
   # ═══════════════════════════════════════════════════════════
-  # STAGE 5 — EPICENTER FEED (паралельно з kasta і rozetka)
+  # STAGE 5 — EPICENTER FEED
   # ═══════════════════════════════════════════════════════════
   epicenter-feed:
     name: Generate Epicenter Feed
@@ -544,7 +535,7 @@ jobs:
           if-no-files-found: warn
 
   # ═══════════════════════════════════════════════════════════
-  # STAGE 6 — ROZETKA FEED (паралельно з kasta і epicenter)
+  # STAGE 6 — ROZETKA FEED
   # ═══════════════════════════════════════════════════════════
   rozetka-feed:
     name: Generate Rozetka Feed
@@ -587,9 +578,6 @@ jobs:
 
   # ═══════════════════════════════════════════════════════════
   # STAGE 7 — PUBLISH FEEDS
-  # Один git clone + один --amend push замість трьох.
-  # Чекає всіх трьох генераторів — запускається навіть якщо один впав
-  # (щоб запушити ті фіди, що вдались).
   # ═══════════════════════════════════════════════════════════
   publish-feeds:
     name: Publish Feeds to data-latest
