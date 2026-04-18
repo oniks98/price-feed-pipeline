@@ -100,6 +100,17 @@ def merge() -> None:
         print("\n❌ Немає даних для злиття — жоден файл не знайдено")
         sys.exit(1)
 
+    # Очищення Оптова_ціна: цей стовпець не повинен потрапляти в merged.csv
+    # (оптова ціна — внутрішній атрибут, не для публічного імпорту)
+    try:
+        wholesale_idx = CANONICAL_HEADERS.index("Оптова_ціна")
+        for row in all_rows:
+            if wholesale_idx < len(row):
+                row[wholesale_idx] = ""
+        print(f"  🧹 Очищено колонку 'Оптова_ціна' (індекс {wholesale_idx}) у {len(all_rows)} рядках")
+    except ValueError:
+        pass  # колонки немає в схемі — нічого не робимо
+
     # Записуємо merged.csv з канонічним заголовком
     # utf-8 без BOM — Пром вимагає UTF-8 без BOM для коректного імпорту
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
