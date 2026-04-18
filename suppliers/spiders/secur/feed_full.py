@@ -8,25 +8,12 @@ Spider об'єднаний: Feed (ціни) + Playwright (зображення +
                                       умовно: хар-ки (тільки якщо XML не мав <param>)
   4. CategorySpecsEnricher → доповнення категорійними хар-ками з CSV
 
-ПОТІК ЗАПИТІВ (curl_cffi — основний шлях, Playwright — fallback):
+ПОТІК ЗАПИТІВ:
   start()
-    ├─ _fetch_feeds_direct()       [curl_cffi — TLS fingerprint Chrome, без браузера]
-    │    ├─ _process_ua_xml()      [кешує назви/описи/<param>]
-    │    └─ _iter_ru_product_requests()  [формує чергу]
-    │         └─ parse_product_page()   [Playwright — зображення + хар-ки]
-    │
-    └─ (fallback) _ua_request()    [Playwright, якщо curl_cffi заблоковано]
-         └─ parse_ua_feed()
-              └─ parse_ru_feed()
-                   └─ parse_product_page()
-
-  ЧОМУ curl_cffi А НЕ ТІЛЬКИ Playwright:
-    GitHub Actions IPs — це Azure-датацентр. Cloudflare ідентифікує ці IP
-    і замість 5-секундного JS challenge дає Turnstile (інтерактивна капча).
-    Playwright (навіть зі stealth) не може пройти Turnstile без реального user.
-    curl_cffi імітує Chrome на рівні TLS/JA3 fingerprint — CF Bot Management
-    часто пропускає такі запити, бо fingerprint не відрізняється від реального Chrome.
-    Якщо curl_cffi теж не допомагає → потрібні residential proxies.
+    └─ parse_ua_feed()     [HTTP, XML — кешує назви/описи/<param>]
+         └─ parse_ru_feed()     [HTTP, XML — збирає ціни + формує чергу]
+              └─ parse_product_page()  [Playwright — зображення + хар-ки за потреби]
+                   └─ yield item
 
 ФІДИ ТА ЛОГІКА ЦІН:
   Фід 50 (Ajax, крупний опт):
@@ -40,9 +27,12 @@ Spider об'єднаний: Feed (ціни) + Playwright (зображення +
   XML без <param> → парсимо зі сторінки (UA URL = українська мова)
   У обох випадках → доповнюємо через CategorySpecsEnricher
 
+  ВАЖЛИВО: URL з RU фіду може містити /ru/ → стрипаємо в parse_ru_feed
+  щоб Playwright завжди відкривав UA-версію сторінки.
+
 ЗОБРАЖЕННЯ:
   Фід дає лише 1 фото → Playwright завжди відкриває сторінку і парсить
-  усі великі фото (/images/big/) ідентично retail.py
+  усі великі фото (/images/big/)
 
 ГАБАРИТИ (Вага,кг / Ширина,см / Висота,см / Довжина,см):
   Pipeline автоматично витягує через field_processor.extract_dimensions_from_specs()
@@ -50,77 +40,29 @@ Spider об'єднаний: Feed (ціни) + Playwright (зображення +
 ДЕДУПЛІКАЦІЯ:
   processed_seen: set[tuple[feed_id, product_url]] — ключ містить feed_id,
   тому однаковий URL з різних фідів НЕ вважається дублем.
-
-BAN / RETRY:
-  errback_feed() — async def + asyncio.sleep (Scrapy 2.11+ не приймає Deferred з errback).
-  _ban_retry_or_next() — для BAN у parse-контексті (не може повертати Deferred).
 """
 
-import asyncio
-import re
-import csv
-from pathlib import Path
-from typing import AsyncIterator
-
 import scrapy
+import csv
+import re
+from pathlib import Path
 from scrapy.selector import Selector
 from scrapy_playwright.page import PageMethod
 
 from suppliers.services.category_specs_enricher import CategorySpecsEnricher
 
-# ── curl_cffi: опціональна залежність для CF bypass ──────────────────────────
-try:
-    from curl_cffi.requests import AsyncSession as CurlSession
-    _CURL_CFFI_AVAILABLE = True
-except ImportError:
-    CurlSession = None  # type: ignore[assignment,misc]
-    _CURL_CFFI_AVAILABLE = False
 
-
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
 # Константи Playwright
-# ─────────────────────────────────────────────────────────────────────────────
-GOTO_TIMEOUT_MS = 15_000
-DOWNLOAD_TIMEOUT = 18
-
-FEED_GOTO_TIMEOUT_MS = 20_000
-FEED_CF_WAIT_TIMEOUT_MS = 35_000
-FEED_DOWNLOAD_TIMEOUT = 65
-
-_WAIT_SELECTOR = "div.item, h1"
-_WAIT_TIMEOUT_MS = 10_000
-
-# curl_cffi: Chrome версія для імітації (JA3/TLS fingerprint)
-CURL_IMPERSONATE = "chrome133"
-# Timeout для прямого HTTP-запиту фіду (секунд)
-CURL_FEED_TIMEOUT = 30
-
-BAN_SIGNALS = frozenset({
-    "captcha",
-    "access denied",
-    "cloudflare",
-    "403 forbidden",
-    "too many requests",
-    "just a moment",
-    "трохи зачекайте",
-    "enable javascript",
-    "checking your browser",
-    "performance & security",
-    "turnstile",              # CF Turnstile challenge
-})
-
-FEED_MAX_RETRIES = 3
-FEED_RETRY_DELAY = 180  # секунд між спробами
-
-
-def _is_banned(text: str) -> bool:
-    """Перевіряє перші 500 символів на сигнали бану. O(1) по кількості сигналів."""
-    preview = text[:500].lower()
-    return any(signal in preview for signal in BAN_SIGNALS)
+# ─────────────────────────────────────────────────────────────
+GOTO_TIMEOUT_MS = 30_000   # page.goto() timeout — 30 сек
+DOWNLOAD_TIMEOUT = 35      # Scrapy-рівень — 35 сек (трохи більше goto)
+JS_WAIT_MS = 2_000         # secur.ua рендерить ~142 хар-ки через JS;
+                           # без паузи отримаємо лише ~17 з HTML
 
 
 def _playwright_meta(extra: dict | None = None) -> dict:
-    """Playwright-мета для сторінок товарів."""
+    """Playwright-мета з жорсткими timeout-ами. Тільки для сторінок товарів."""
     base = {
         "playwright": True,
         "download_timeout": DOWNLOAD_TIMEOUT,
@@ -129,63 +71,12 @@ def _playwright_meta(extra: dict | None = None) -> dict:
             "timeout": GOTO_TIMEOUT_MS,
         },
         "playwright_page_methods": [
-            PageMethod(
-                "wait_for_selector",
-                _WAIT_SELECTOR,
-                timeout=_WAIT_TIMEOUT_MS,
-                state="attached",
-            ),
+            PageMethod("wait_for_timeout", JS_WAIT_MS),
         ],
     }
     if extra:
         base.update(extra)
     return base
-
-
-def _playwright_feed_meta(extra: dict | None = None) -> dict:
-    """
-    Playwright-мета для XML-фідів (fallback коли curl_cffi не допоміг).
-
-    Чекає <pre> — Chrome загортає XML у <pre> після того як CF challenge завершується
-    і робить redirect. Якщо <pre> не з'явилась → timeout → errback_feed → retry.
-    """
-    base = {
-        "playwright": True,
-        "download_timeout": FEED_DOWNLOAD_TIMEOUT,
-        "playwright_page_goto_kwargs": {
-            "wait_until": "domcontentloaded",
-            "timeout": FEED_GOTO_TIMEOUT_MS,
-        },
-        "playwright_page_methods": [
-            PageMethod(
-                "wait_for_selector",
-                "pre",
-                timeout=FEED_CF_WAIT_TIMEOUT_MS,
-                state="attached",
-            ),
-        ],
-    }
-    if extra:
-        base.update(extra)
-    return base
-
-
-def _extract_xml_from_browser_response(text: str) -> str:
-    """
-    Браузер відкриває XML і огортає його в HTML: <html><body><pre>...xml...</pre></body></html>
-    Або повертає сирий XML якщо вже є <?xml декларація.
-    """
-    stripped = text.strip()
-    if stripped.startswith("<?xml") or stripped.startswith("<yml_catalog"):
-        return stripped
-    m = re.search(r'<pre[^>]*>(.*?)</pre>', stripped, re.DOTALL)
-    if m:
-        return m.group(1).strip()
-    for marker in ("<?xml", "<yml_catalog"):
-        start = stripped.find(marker)
-        if start != -1:
-            return stripped[start:]
-    return text
 
 
 class SecurFeedFullSpider(scrapy.Spider):
@@ -207,27 +98,17 @@ class SecurFeedFullSpider(scrapy.Spider):
             "suppliers.pipelines.SuppliersPipeline": 300,
         },
         "DOWNLOAD_HANDLERS": {
-            "http": "suppliers.middlewares.StealthPlaywrightDownloadHandler",
-            "https": "suppliers.middlewares.StealthPlaywrightDownloadHandler",
+            "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+            "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
         },
         "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
         "CONCURRENT_REQUESTS": 4,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
-        "DOWNLOAD_DELAY": 3,
-        "RANDOMIZE_DOWNLOAD_DELAY": True,
-        "AUTOTHROTTLE_ENABLED": True,
-        "AUTOTHROTTLE_START_DELAY": 3,
-        "AUTOTHROTTLE_MAX_DELAY": 60,
-        "AUTOTHROTTLE_TARGET_CONCURRENCY": 2.0,
-        "AUTOTHROTTLE_DEBUG": False,
-        "PLAYWRIGHT_ABORT_REQUEST": lambda req: req.resource_type in {
-            "image", "media", "font", "stylesheet"
-        },
+        "DOWNLOAD_DELAY": 1,
         "DOWNLOAD_TIMEOUT": DOWNLOAD_TIMEOUT,
-        "PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT": FEED_GOTO_TIMEOUT_MS,
+        "PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT": GOTO_TIMEOUT_MS,
         "PLAYWRIGHT_LAUNCH_OPTIONS": {
             "args": [
-                "--disable-blink-features=AutomationControlled",
                 "--disable-dev-shm-usage",
                 "--no-sandbox",
                 "--disable-gpu",
@@ -264,9 +145,10 @@ class SecurFeedFullSpider(scrapy.Spider):
         self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
 
         # Кеш UA-даних: назви, описи, хар-ки з <param> (УКРАЇНСЬКОЮ)
+        # Очищається перед кожним новим фідом у parse_ua_feed
         self.products_ua: dict = {}
 
-        # Дедуплікація: ключ (feed_id, product_url) — однаковий URL у різних фідах ≠ дубль
+        # Дедуплікація: ключ (feed_id, product_url) — однаковий URL у різних фідах НЕ є дублем
         self.processed_seen: set[tuple[str, str]] = set()
 
         already_scraped = self._load_already_scraped_urls()
@@ -274,11 +156,15 @@ class SecurFeedFullSpider(scrapy.Spider):
             for fid in self.ALL_FEED_IDS:
                 self.processed_seen.add((fid, url))
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
     # RESUME
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
 
     def _load_already_scraped_urls(self) -> set[str]:
+        """
+        Читає вже збережений secur_new.csv і повертає set URL.
+        Якщо файл не існує — порожній set (перший запуск).
+        """
         urls: set[str] = set()
         import os as _os
         out_path = (
@@ -301,9 +187,9 @@ class SecurFeedFullSpider(scrapy.Spider):
             self.logger.error(f"⚠️ Не вдалося завантажити прогрес resume: {e}")
         return urls
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
     # CATEGORY MAPPING
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
 
     def _load_category_mapping(self) -> dict:
         mapping: dict = {}
@@ -347,76 +233,42 @@ class SecurFeedFullSpider(scrapy.Spider):
             or ("", category_id) in self.category_mapping
         )
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # CF BYPASS: curl_cffi (основний шлях)
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
+    # CRAWLING
+    # ──────────────────────────────────────────────────────────────────
 
-    async def _fetch_feed_direct(self, url: str) -> str | None:
-        """
-        Пряме HTTP-завантаження фіду через curl_cffi.
-
-        curl_cffi імітує Chrome на рівні TLS/JA3 fingerprint — Cloudflare Bot Management
-        часто пропускає такі запити без JS challenge і без Turnstile.
-        Це принципово відрізняється від звичайного requests/aiohttp, які мають стандартний
-        Python TLS fingerprint і блокуються CF одразу.
-
-        Повертає XML-текст або None якщо недоступно / заблоковано.
-        """
-        if not _CURL_CFFI_AVAILABLE:
-            return None
-        try:
-            async with CurlSession() as session:
-                resp = await session.get(
-                    url,
-                    impersonate=CURL_IMPERSONATE,
-                    timeout=CURL_FEED_TIMEOUT,
-                    headers={
-                        "Accept-Language": "uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7",
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    },
-                )
-                if resp.status_code != 200:
-                    self.logger.warning(
-                        f"⚠️ curl_cffi HTTP {resp.status_code} для {url}"
-                    )
-                    return None
-                text = resp.text
-                if _is_banned(text):
-                    self.logger.warning(
-                        f"⚠️ curl_cffi: BAN-сигнал у відповіді {url} "
-                        f"(preview: {text[:200]!r})"
-                    )
-                    return None
-                return text
-        except Exception as e:
-            self.logger.warning(f"⚠️ curl_cffi помилка для {url}: {e}")
-            return None
-
-    async def _fetch_feeds_direct(self, feed_id: str) -> tuple[str | None, str | None]:
-        """
-        Завантажує UA і RU версії фіду через curl_cffi паралельно.
-        Повертає (ua_xml, ru_xml) або (None, None) якщо недоступно.
-        """
-        ua_url = f"https://secur.ua/feed/export/{feed_id}"
-        ru_url = f"https://secur.ua/feed/export/{feed_id}?lang=ru"
-
-        ua_text, ru_text = await asyncio.gather(
-            self._fetch_feed_direct(ua_url),
-            self._fetch_feed_direct(ru_url),
+    async def start(self):
+        self.logger.info(
+            f"🚀 Починаю обробку {len(self.ALL_FEED_IDS)} фідів: {self.ALL_FEED_IDS}"
         )
-        return ua_text, ru_text
+        yield self._ua_request(feed_index=0)
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # XML PROCESSING (shared між curl_cffi та Playwright шляхами)
-    # ──────────────────────────────────────────────────────────────────────────
+    def _ua_request(self, feed_index: int) -> scrapy.Request:
+        fid = self.ALL_FEED_IDS[feed_index]
+        return scrapy.Request(
+            url=f"https://secur.ua/feed/export/{fid}",
+            callback=self.parse_ua_feed,
+            meta={"feed_id": fid, "feed_index": feed_index},
+            dont_filter=True,
+        )
 
-    def _process_ua_xml(self, xml_text: str, feed_id: str) -> None:
+    def parse_ua_feed(self, response):
         """
-        Парсить UA XML і заповнює self.products_ua кеш.
-        Викликається і з curl_cffi шляху (в start()), і з parse_ua_feed() (Playwright fallback).
+        UA фід (XML, HTTP) — кешує для кожного товару:
+          - name_ua, description_ua
+          - specs_from_feed: хар-ки з <param> УКРАЇНСЬКОЮ мовою
+
+        Якщо <param> є → в parse_product_page не парсимо хар-ки зі сторінки.
+        Якщо <param> немає → parse_product_page парсить хар-ки зі сторінки (UA URL).
         """
-        selector = Selector(text=xml_text, type="xml")
+        feed_id = response.meta["feed_id"]
+        feed_index = response.meta["feed_index"]
+
+        selector = Selector(text=response.text, type="xml")
         selector.remove_namespaces()
+        self.logger.info(
+            f"📂 [{feed_index + 1}/{len(self.ALL_FEED_IDS)}] UA фід {feed_id} ..."
+        )
 
         self.products_ua = {}
         with_params = 0
@@ -449,18 +301,28 @@ class SecurFeedFullSpider(scrapy.Spider):
             f"({with_params} з <param> хар-ками)"
         )
 
-    def _iter_ru_product_requests(
-        self,
-        xml_text: str,
-        feed_id: str,
-        feed_index: int,
-    ):
+        yield scrapy.Request(
+            url=f"https://secur.ua/feed/export/{feed_id}?lang=ru",
+            callback=self.parse_ru_feed,
+            meta={"feed_id": feed_id, "feed_index": feed_index},
+            dont_filter=True,
+        )
+
+    def parse_ru_feed(self, response):
         """
-        Парсить RU XML і генерує scrapy.Request для кожного товару.
-        Викликається і з curl_cffi шляху (в start()), і з parse_ru_feed() (Playwright fallback).
+        RU фід (XML, HTTP) — об'єднує з UA кешем, формує чергу Playwright-запитів.
+
+        Дедуплікація: ключ (feed_id, product_url) — дозволяє одному URL
+        з'явитися в різних фідах як різні товари.
         """
-        selector = Selector(text=xml_text, type="xml")
+        feed_id = response.meta["feed_id"]
+        feed_index = response.meta["feed_index"]
+
+        selector = Selector(text=response.text, type="xml")
         selector.remove_namespaces()
+        self.logger.info(
+            f"📂 [{feed_index + 1}/{len(self.ALL_FEED_IDS)}] RU фід {feed_id} ..."
+        )
 
         total = queued = deleted = skipped = 0
         unmapped_categories: set[str] = set()
@@ -501,6 +363,9 @@ class SecurFeedFullSpider(scrapy.Spider):
                 continue
 
             product_url = feed_item.pop("_product_url", "")
+
+            # URL береться з RU фіду і може містити /ru/ (напр. secur.ua/ru/product)
+            # → стрипаємо /ru/ щоб Playwright завжди відкривав UA-версію сторінки
             product_url = product_url.replace("secur.ua/ru/", "secur.ua/")
             feed_item["Продукт_на_сайті"] = product_url
 
@@ -543,150 +408,6 @@ class SecurFeedFullSpider(scrapy.Spider):
                 f"⚠️ Фід {feed_id} — unmapped categories: {sorted(unmapped_categories)}"
             )
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # BAN RETRY (parse-контекст)
-    # ──────────────────────────────────────────────────────────────────────────
-
-    def _ban_retry_or_next(
-        self,
-        response,
-        feed_id: str,
-        feed_index: int,
-        label: str,
-    ) -> scrapy.Request | None:
-        """
-        Викликається коли BAN виявлено всередині parse-колбеку (НЕ в errback).
-        Повертає Request (retry або наступний фід) або None.
-        """
-        retry_count = response.meta.get("feed_retry_count", 0)
-
-        self.logger.error(
-            f"🚫 БАН {label} ФІДУ {feed_id} → Cloudflare замість XML | URL: {response.url}"
-        )
-
-        if retry_count < FEED_MAX_RETRIES:
-            self.logger.warning(
-                f"⚠️ Фід {feed_id}: спроба {retry_count + 1}/{FEED_MAX_RETRIES} "
-                f"— повтор через {FEED_RETRY_DELAY}с"
-            )
-            req = response.request.copy()
-            req.meta["feed_retry_count"] = retry_count + 1
-            req.dont_filter = True
-            return req
-
-        self.logger.error(
-            f"❌ Фід {feed_id} недоступний після {FEED_MAX_RETRIES} спроб — пропускаємо"
-        )
-        next_index = feed_index + 1
-        if next_index < len(self.ALL_FEED_IDS):
-            self.logger.info(
-                f"➡️  Пропускаємо до фіду [{next_index + 1}/{len(self.ALL_FEED_IDS)}]: "
-                f"{self.ALL_FEED_IDS[next_index]}"
-            )
-            return self._ua_request(feed_index=next_index)
-        return None
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # CRAWLING
-    # ──────────────────────────────────────────────────────────────────────────
-
-    async def start(self):
-        """
-        Основний цикл. Для кожного фіду:
-          1. Спробувати curl_cffi (Chrome TLS fingerprint — обходить CF без браузера)
-          2. Якщо успішно — обробити XML напряму, yield тільки product requests
-          3. Якщо ні — fallback на Playwright (для CI з residential proxies або локально)
-        """
-        self.logger.info(
-            f"🚀 Починаю обробку {len(self.ALL_FEED_IDS)} фідів: {self.ALL_FEED_IDS}"
-        )
-
-        if not _CURL_CFFI_AVAILABLE:
-            self.logger.warning(
-                "⚠️ curl_cffi не встановлено — використовую тільки Playwright. "
-                "Встанови: pip install curl_cffi"
-            )
-
-        for feed_index, fid in enumerate(self.ALL_FEED_IDS):
-            self.logger.info(
-                f"[{feed_index + 1}/{len(self.ALL_FEED_IDS)}] Фід {fid}: "
-                f"спроба curl_cffi bypass..."
-            )
-            ua_xml, ru_xml = await self._fetch_feeds_direct(fid)
-
-            if ua_xml and ru_xml:
-                self.logger.info(f"✅ curl_cffi bypass успішний для фіду {fid}")
-                self._process_ua_xml(ua_xml, fid)
-                for item_or_request in self._iter_ru_product_requests(ru_xml, fid, feed_index):
-                    yield item_or_request
-            else:
-                self.logger.warning(
-                    f"⚠️ curl_cffi не зміг отримати фід {fid} — fallback на Playwright. "
-                    f"Якщо і Playwright не допомагає (GitHub Actions) — потрібні residential proxies."
-                )
-                yield self._ua_request(feed_index=feed_index)
-
-    def _ua_request(self, feed_index: int) -> scrapy.Request:
-        fid = self.ALL_FEED_IDS[feed_index]
-        return scrapy.Request(
-            url=f"https://secur.ua/feed/export/{fid}",
-            callback=self.parse_ua_feed,
-            errback=self.errback_feed,
-            meta=_playwright_feed_meta({"feed_id": fid, "feed_index": feed_index}),
-            dont_filter=True,
-        )
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # PLAYWRIGHT FALLBACK: parse_ua_feed / parse_ru_feed
-    # (тонкі обгортки над _process_ua_xml / _iter_ru_product_requests)
-    # ──────────────────────────────────────────────────────────────────────────
-
-    def parse_ua_feed(self, response):
-        """Playwright fallback: кешує UA дані і запускає RU фід."""
-        feed_id = response.meta["feed_id"]
-        feed_index = response.meta["feed_index"]
-
-        self.logger.info(
-            f"📂 [{feed_index + 1}/{len(self.ALL_FEED_IDS)}] Playwright UA фід {feed_id} "
-            f"| len={len(response.text)} | preview: {response.text[:200]!r}"
-        )
-
-        if _is_banned(response.text):
-            req = self._ban_retry_or_next(response, feed_id, feed_index, "UA")
-            if req:
-                yield req
-            return
-
-        xml_text = _extract_xml_from_browser_response(response.text)
-        self._process_ua_xml(xml_text, feed_id)
-
-        yield scrapy.Request(
-            url=f"https://secur.ua/feed/export/{feed_id}?lang=ru",
-            callback=self.parse_ru_feed,
-            errback=self.errback_feed,
-            meta=_playwright_feed_meta({"feed_id": feed_id, "feed_index": feed_index}),
-            dont_filter=True,
-        )
-
-    def parse_ru_feed(self, response):
-        """Playwright fallback: обробляє RU XML і формує чергу product requests."""
-        feed_id = response.meta["feed_id"]
-        feed_index = response.meta["feed_index"]
-
-        self.logger.info(
-            f"📂 [{feed_index + 1}/{len(self.ALL_FEED_IDS)}] Playwright RU фід {feed_id} "
-            f"| len={len(response.text)} | preview: {response.text[:200]!r}"
-        )
-
-        if _is_banned(response.text):
-            req = self._ban_retry_or_next(response, feed_id, feed_index, "RU")
-            if req:
-                yield req
-            return
-
-        xml_text = _extract_xml_from_browser_response(response.text)
-        yield from self._iter_ru_product_requests(xml_text, feed_id, feed_index)
-
         next_index = feed_index + 1
         if next_index < len(self.ALL_FEED_IDS):
             self.logger.info(
@@ -697,15 +418,22 @@ class SecurFeedFullSpider(scrapy.Spider):
         else:
             self.logger.info("🎉 Всі фіди прочитані! Очікую завершення Playwright-черги...")
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # PLAYWRIGHT: зображення + хар-ки
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
+    # PLAYWRIGHT: зображення + хар-ки (якщо XML не мав <param>)
+    # ──────────────────────────────────────────────────────────────────
 
     def parse_product_page(self, response):
         """
         UA-сторінка товару (Playwright):
-          - ЗАВЖДИ: парсить усі великі зображення
-          - УМОВНО: парсить хар-ки, якщо XML не мав жодного <param>
+
+        ЗАВЖДИ:
+          - Парсить усі великі зображення → замінює одне фід-фото
+
+        УМОВНО (якщо XML не мав жодного <param>):
+          - Парсить хар-ки зі сторінки (UA URL → УКРАЇНСЬКА мова)
+          - Якщо XML мав <param> → пропускаємо, вже є хар-ки з фіду
+
+        Якщо HTTP != 200 → yield з фід-даними (не губимо товар).
         """
         feed_item = response.meta["feed_item"]
         feed_id = response.meta.get("feed_id", "")
@@ -720,20 +448,18 @@ class SecurFeedFullSpider(scrapy.Spider):
             yield feed_item
             return
 
-        if _is_banned(response.text):
-            self.logger.warning(f"🚫 БАН ДЕТЕКТОВАНО → {response.url}")
-            feed_item["specifications_list"] = specs_from_feed
-            yield feed_item
-            return
-
+        # ── 1. ЗОБРАЖЕННЯ (завжди) ────────────────────────────────────
         page_image_url = self._parse_images(response)
         if page_image_url:
             feed_item["Посилання_зображення"] = page_image_url
 
+        # ── 2. ХАРАКТЕРИСТИКИ (УКРАЇНСЬКОЮ) ──────────────────────────
         if specs_from_feed:
+            # XML мав <param> → використовуємо їх (UA мова з кешу)
             specs_list = specs_from_feed
             source_label = "XML"
         else:
+            # XML без <param> → парсимо зі сторінки (UA URL = українська мова)
             specs_list = self._parse_specifications(response)
             source_label = "сторінка"
 
@@ -749,48 +475,6 @@ class SecurFeedFullSpider(scrapy.Spider):
             f"Фото: {len(page_image_url.split(', ')) if page_image_url else 0}"
         )
         yield feed_item
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # ERRBACKS
-    # ──────────────────────────────────────────────────────────────────────────
-
-    async def errback_feed(self, failure):
-        """
-        Errback для мережевих помилок XML-фідів (Playwright fallback шлях).
-
-        ВИПРАВЛЕННЯ: замінено reactor.callLater + Deferred на async def + asyncio.sleep.
-        Scrapy 2.11+ задепрецейовано повернення Deferred з errback-ів.
-        async def errback коректно підтримується через AsyncioSelectorReactor.
-        """
-        request = failure.request
-        retry_count = request.meta.get("feed_retry_count", 0)
-        feed_id = request.meta.get("feed_id", "?")
-        feed_index = request.meta.get("feed_index", 0)
-
-        if retry_count < FEED_MAX_RETRIES:
-            self.logger.warning(
-                f"⚠️ Помилка завантаження фіду {feed_id} "
-                f"(спроба {retry_count + 1}/{FEED_MAX_RETRIES}): {failure.value} "
-                f"— повтор через {FEED_RETRY_DELAY}с | URL: {request.url}"
-            )
-            new_req = request.copy()
-            new_req.meta["feed_retry_count"] = retry_count + 1
-            new_req.dont_filter = True
-            await asyncio.sleep(FEED_RETRY_DELAY)
-            return new_req
-
-        self.logger.error(
-            f"❌ Фід {feed_id} недоступний після {FEED_MAX_RETRIES} спроб "
-            f"— пропускаємо | URL: {request.url}"
-        )
-        next_index = feed_index + 1
-        if next_index < len(self.ALL_FEED_IDS):
-            self.logger.info(
-                f"➡️  Пропускаємо до фіду [{next_index + 1}/{len(self.ALL_FEED_IDS)}]: "
-                f"{self.ALL_FEED_IDS[next_index]}"
-            )
-            return self._ua_request(feed_index=next_index)
-        return None
 
     def errback_product(self, failure):
         """Playwright впав (timeout/network) → yield з фід-даними. Товар не губиться."""
@@ -815,9 +499,9 @@ class SecurFeedFullSpider(scrapy.Spider):
         )
         yield feed_item
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
     # ITEM BUILDING
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
 
     def _build_feed_item(
         self,
@@ -838,6 +522,7 @@ class SecurFeedFullSpider(scrapy.Spider):
         url = offer.xpath("url/text()").get() or ""
         available = offer.xpath("@available").get() == "true"
         vendor_code = offer.xpath("vendorCode/text()").get() or ""
+
         brand = (
             offer.xpath("brand/text()").get()
             or offer.xpath("vendor/text()").get()
@@ -847,6 +532,8 @@ class SecurFeedFullSpider(scrapy.Spider):
         pictures = offer.xpath("picture/text()").getall()
         feed_image_url = ", ".join(pictures) if pictures else ""
 
+        # available=True  → "" → pipeline підставить DEFAULT_QUANTITY
+        # available=False → "0" → pipeline залишає як є
         quantity = "" if available else "0"
 
         category_info = (
@@ -856,6 +543,8 @@ class SecurFeedFullSpider(scrapy.Spider):
         )
 
         return {
+            # Службове поле — URL з RU фіду, може містити /ru/
+            # Стрипається і нормалізується в parse_ru_feed
             "_product_url": url,
 
             "supplier_id":  self.supplier_id,
@@ -876,13 +565,13 @@ class SecurFeedFullSpider(scrapy.Spider):
             "Валюта":         self.currency,
             "Одиниця_виміру": "шт.",
 
-            "Посилання_зображення": feed_image_url,
+            "Посилання_зображення": feed_image_url,  # замінюється в parse_product_page
             "Наявність":            "В наявності" if available else "Немає в наявності",
             "Кількість":            quantity,
 
             "Виробник":         brand,
             "Країна_виробник":  "",
-            "Продукт_на_сайті": url,
+            "Продукт_на_сайті": url,  # перезаписується UA URL в parse_ru_feed
 
             "Пошукові_запити":     "",
             "Пошукові_запити_укр": "",
@@ -924,9 +613,9 @@ class SecurFeedFullSpider(scrapy.Spider):
 
         return dealer_price
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # PARSE FEED SPECS — хар-ки з XML <param>
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
+    # PARSE FEED SPECS — хар-ки з XML <param> (УКРАЇНСЬКОЮ з UA фіду)
+    # ──────────────────────────────────────────────────────────────────
 
     def _parse_feed_specs(self, offer) -> list:
         """
@@ -945,11 +634,15 @@ class SecurFeedFullSpider(scrapy.Spider):
                 specs.append({"name": name, "unit": unit, "value": value})
         return specs
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
     # PARSE IMAGES
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
 
     def _parse_images(self, response) -> str:
+        """
+        Парсить усі великі зображення зі сторінки (/images/big/).
+        Пріоритет: слайдер keen-slider → всі img (без /preview/).
+        """
         slider_images = response.css(
             'div.keen-slider__slide img[src*="/images/big/"]::attr(src)'
         ).getall()
@@ -967,11 +660,16 @@ class SecurFeedFullSpider(scrapy.Spider):
         filtered = [u for u in all_big if "/preview/" not in u]
         return ", ".join(response.urljoin(u) for u in filtered)
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
     # PARSE SPECIFICATIONS зі сторінки
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
 
     def _parse_specifications(self, response) -> list:
+        """
+        Парсить хар-ки зі сторінки товару (UA URL → УКРАЇНСЬКА мова).
+        Потребує Playwright: secur.ua рендерить хар-ки через JS.
+        Викликається тільки якщо XML-фід не мав жодного <param>.
+        """
         specs_list = []
         items = response.xpath('//div[@class="item"][.//div[@class="subtitle"]]')
         for item in items:
@@ -989,9 +687,9 @@ class SecurFeedFullSpider(scrapy.Spider):
                 })
         return specs_list
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
     # UTILS
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
 
     def closed(self, reason):
         self.logger.info(f"🎉 Паук {self.name} завершено! Причина: {reason}")
