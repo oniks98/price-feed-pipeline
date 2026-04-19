@@ -303,11 +303,14 @@ def main() -> None:
 
     currency_rates = parse_currency_rates(xml)
 
-    coefficients = load_coefficients()
-    offer_map = build_offer_data_map(xml, coefficients)
-    print(f"🏷️  Офферів у фіді: {len(offer_map)}")
-
+    # Спочатку фільтруємо недоступні — offer_map будується тільки по доступних
     updated_xml = filter_unavailable_offers(xml)
+
+    coefficients = load_coefficients()
+    print(f"📂 CSV шлях: {COEFFICIENTS_PATH} | існує: {COEFFICIENTS_PATH.exists()}")
+    offer_map = build_offer_data_map(updated_xml, coefficients)
+    print(f"🏷️  Доступних офферів: {len(offer_map)}")
+
     updated_xml = apply_prices(updated_xml, offer_map, currency_rates)
     updated_xml = transform_prom_image_urls(updated_xml)
     updated_xml = fill_missing_vendor(updated_xml)
