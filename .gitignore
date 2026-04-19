@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.vscode/
+pw-profile/
+
+# Логи — не потрібні в репо
+*.log
+error_*.png
+
