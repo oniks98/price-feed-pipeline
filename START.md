@@ -79,6 +79,13 @@ git reset --soft origin/main
 без конфліктів історії
 потім пул з репо і знову коміт локально
 
+# Це повністю очистить робочу директорію та синхронізує гілку
+
+git reset --hard HEAD~1
+git clean -fd
+git pull --rebase
+git push --force
+
 # Сортування минус-слів у гугл таблиці
 
 =SORT(UNIQUE(TOCOL(SPLIT(A:A;" ");1)))
@@ -94,3 +101,12 @@ https://api.github.com/repos/oniks98/price-feed-pipeline
 
 pip install openpyxl rapidfuzz
 pip install openpyxl rapidfuzz requests
+
+# Очистка каста
+
+python scripts/kasta_bulk_select.py
+
+CMD открыть: Win + R → cmd → Enter.
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="C:\chrome-kasta-debug"
+
+https://hub.kasta.ua/products?contract_id=bd045b2c-ceb9-4c9e-a3ba-cc414e5e76d9&status=OnSale&status=ZeroStock
