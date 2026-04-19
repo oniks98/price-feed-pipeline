@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import List, Dict, Optional
 from decimal import Decimal
 
+from suppliers.services.dealer_price_service import DEFAULT_COEF_RETAIL, DEFAULT_COEF_DEALER
+
 
 class ChannelConfig:
     """Конфігурація одного каналу продажу"""
@@ -17,6 +19,8 @@ class ChannelConfig:
         prefix: str,
         coefficient: Decimal,
         coefficient_feed: Decimal,
+        coef_retail: Decimal,
+        coef_dealer: Decimal,
         group_number: str,
         group_name: str,
         subdivision_id: str,
@@ -29,6 +33,9 @@ class ChannelConfig:
         self.prefix = prefix
         self.coefficient = coefficient
         self.coefficient_feed = coefficient_feed
+        # Нові коефіцієнти для viatec dealer pricing
+        self.coef_retail = coef_retail
+        self.coef_dealer = coef_dealer
         self.group_number = group_number
         self.group_name = group_name
         self.subdivision_id = subdivision_id
@@ -40,6 +47,7 @@ class ChannelConfig:
     def __repr__(self):
         return (
             f"ChannelConfig(channel={self.channel}, "
+            f"coef_retail={self.coef_retail}, coef_dealer={self.coef_dealer}, "
             f"coef={self.coefficient}, coef_feed={self.coefficient_feed}, "
             f"prefix={self.prefix})"
         )
@@ -123,14 +131,25 @@ class ChannelService:
 
     def _build_channel_config(self, row: dict) -> "ChannelConfig":
         """Будує ChannelConfig з рядка CSV."""
+        # Зворотня сумісність: legacy coefficient/coefficient_feed
         coefficient = self._parse_decimal(row.get("coefficient", "1.0"), row)
         coefficient_feed = self._parse_decimal(row.get("coefficient_feed", "1.0"), row)
+
+        # Нові коефіцієнти для dealer-пайплайну
+        coef_retail = self._parse_decimal(
+            row.get("coef_retail", ""), row, fallback=DEFAULT_COEF_RETAIL
+        )
+        coef_dealer = self._parse_decimal(
+            row.get("coef_dealer", ""), row, fallback=DEFAULT_COEF_DEALER
+        )
 
         return ChannelConfig(
             channel=row.get("channel", "").strip(),
             prefix=row.get("prefix", "").strip(),
             coefficient=coefficient,
             coefficient_feed=coefficient_feed,
+            coef_retail=coef_retail,
+            coef_dealer=coef_dealer,
             group_number=row.get("Номер_групи", "").strip(),
             group_name=row.get("Назва_групи", "").strip(),
             subdivision_id=row.get("Ідентифікатор_підрозділу", "").strip(),
@@ -140,15 +159,22 @@ class ChannelService:
             feed=row.get("feed", "").strip(),
         )
 
-    def _parse_decimal(self, raw: str, row: dict) -> Decimal:
+    def _parse_decimal(
+        self,
+        raw: str,
+        row: dict,
+        fallback: Decimal | None = None,
+    ) -> Decimal:
         """Безпечний парсинг Decimal з CSV рядка."""
+        if fallback is None:
+            fallback = Decimal("1.0")
         clean = raw.strip().strip('"').replace(",", ".")
         try:
-            return Decimal(clean) if clean else Decimal("1.0")
+            return Decimal(clean) if clean else fallback
         except Exception:
             if self.logger:
                 self.logger.warning(f"⚠️ Некоректний коефіцієнт {raw!r} у рядку: {row}")
-            return Decimal("1.0")
+            return fallback
 
     # ------------------------------------------------------------------
     # LOOKUPS

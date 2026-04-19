@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import re
+from decimal import Decimal
 from pathlib import Path
 from itemadapter import ItemAdapter
 from scrapy.exceptions import DropItem
@@ -90,6 +91,13 @@ from keywords.core.generator import ProductKeywordsGenerator
 
 # Імпортуємо сервіси
 from suppliers.services.supplier_config import SupplierConfig
+from suppliers.services.dealer_price_service import (
+    DealerPriceService,
+    VIATEC_PROM_THRESHOLD,
+    VIATEC_SITE_THRESHOLD,
+    SECUR_PROM_THRESHOLD,
+    SECUR_SITE_THRESHOLD,
+)
 from suppliers.services.channel_service import ChannelService
 from suppliers.services.availability_service import AvailabilityService
 from suppliers.services.specs_utils import merge_all_specs
@@ -328,29 +336,89 @@ class SuppliersPipeline:
 
                 # ---- CHANNEL-SPECIFIC FIELDS ------------------------- #
 
-                # ✅ ВИПРАВЛЕННЯ 1: для фіду використовуємо coefficient_feed
-                coef = (
-                    channel_config.coefficient_feed
-                    if source == "feed"
-                    else channel_config.coefficient
-                )
+                # ── ЦІНА + ВАЛЮТА + ОПТОВА_ЦІНА ────────────────────────────
+                # Viatec dealer (usd_rate є в item):
+                #   dealer_uah = dealer_usd × usd_rate  → Оптова_ціна
+                #   prom: retail/dealer >= 1.35 → retail × coef_retail
+                #         retail/dealer <  1.35 → dealer × coef_dealer
+                #   site: retail/dealer >= 1.15 → retail × coef_retail
+                #         retail/dealer <  1.15 → dealer × coef_dealer
+                # Secur dealer (dealer_price_uah є в item, вже в UAH):
+                #   prom: поріг 1.30, site: поріг 1.15
+                # Legacy / інші пауки (без жодного з вище): коефіцієнтний режим
+                usd_rate_raw         = adapter.get("usd_rate", "")
+                dealer_price_uah_raw = adapter.get("dealer_price_uah", "")
+                price_rrp_uah        = adapter.get("price_rrp_uah", "")
 
-                # ── ЦІНА + ВАЛЮТА: залежить від каналу ────────────────────
-                # site  → базова ціна в USD × коефіцієнт, валюта USD
-                # prom  → РРЦ у UAH × коефіцієнт (fallback: USD якщо РРЦ відсутня)
-                if channel_config.channel == "prom":
-                    price_rrp_uah = adapter.get("price_rrp_uah", "")
-                    if price_rrp_uah:
-                        cleaned["Ціна"]   = channel_service.apply_price_coefficient(price_rrp_uah, coef)
-                        cleaned["Валюта"] = "UAH"
-                    else:
-                        spider.logger.warning(
-                            f"⚠️ prom: відсутня РРЦ UAH, fallback USD | "
-                            f"{adapter.get('Назва_позиції', '?')[:60]}"
+                if usd_rate_raw:
+                    # ── Viatec: USD → UAH конвертація ──
+                    dealer_uah = DealerPriceService.dealer_uah(base_price, usd_rate_raw)
+                    cleaned["Оптова_ціна"] = DealerPriceService.format_price(dealer_uah)
+
+                    if channel_config.channel == "prom":
+                        price = DealerPriceService.prom_price(
+                            retail_uah=price_rrp_uah,
+                            dealer_uah_val=dealer_uah,
+                            coef_retail=channel_config.coef_retail,
+                            coef_dealer=channel_config.coef_dealer,
+                            threshold=VIATEC_PROM_THRESHOLD,
                         )
-                        cleaned["Ціна"] = channel_service.apply_price_coefficient(base_price, coef)
+                    else:
+                        price = DealerPriceService.site_price(
+                            retail_uah=price_rrp_uah,
+                            dealer_uah_val=dealer_uah,
+                            coef_retail=channel_config.coef_retail,
+                            coef_dealer=channel_config.coef_dealer,
+                            threshold=VIATEC_SITE_THRESHOLD,
+                        )
+                    cleaned["Ціна"]   = DealerPriceService.format_price(price)
+                    cleaned["Валюта"] = "UAH"
+
+                elif dealer_price_uah_raw:
+                    # ── Secur: вже в UAH, конвертація не потрібна ──
+                    dealer_uah = DealerPriceService.to_decimal(
+                        dealer_price_uah_raw, Decimal("0")
+                    )
+                    cleaned["Оптова_ціна"] = DealerPriceService.format_price(dealer_uah)
+
+                    if channel_config.channel == "prom":
+                        price = DealerPriceService.prom_price(
+                            retail_uah=price_rrp_uah,
+                            dealer_uah_val=dealer_uah,
+                            coef_retail=channel_config.coef_retail,
+                            coef_dealer=channel_config.coef_dealer,
+                            threshold=SECUR_PROM_THRESHOLD,
+                        )
+                    else:
+                        price = DealerPriceService.site_price(
+                            retail_uah=price_rrp_uah,
+                            dealer_uah_val=dealer_uah,
+                            coef_retail=channel_config.coef_retail,
+                            coef_dealer=channel_config.coef_dealer,
+                            threshold=SECUR_SITE_THRESHOLD,
+                        )
+                    cleaned["Ціна"]   = DealerPriceService.format_price(price)
+                    cleaned["Валюта"] = "UAH"
                 else:
-                    cleaned["Ціна"] = channel_service.apply_price_coefficient(base_price, coef)
+                    # ── Legacy: коефіцієнтний режим (не-dealer або інші постачальники) ──
+                    coef = (
+                        channel_config.coefficient_feed
+                        if source == "feed"
+                        else channel_config.coefficient
+                    )
+                    if channel_config.channel == "prom":
+                        price_rrp_uah = adapter.get("price_rrp_uah", "")
+                        if price_rrp_uah:
+                            cleaned["Ціна"]   = channel_service.apply_price_coefficient(price_rrp_uah, coef)
+                            cleaned["Валюта"] = "UAH"
+                        else:
+                            spider.logger.warning(
+                                f"⚠️ prom: відсутня РРЦ UAH, fallback USD | "
+                                f"{adapter.get('Назва_позиції', '?')[:60]}"
+                            )
+                            cleaned["Ціна"] = channel_service.apply_price_coefficient(base_price, coef)
+                    else:
+                        cleaned["Ціна"] = channel_service.apply_price_coefficient(base_price, coef)
                 
                 # Код товару - стабільний між запусками, прив'язаний до SKU
                 base_sku = adapter.get("Ідентифікатор_товару", "")

@@ -10,9 +10,11 @@ Spider для парсингу дилерських цін з viatec.ua (USD)
 РЕФАКТОРИНГ:
 - priority замість remaining_products — прибирає зростання пам'яті
   Scrapy сам керує чергою; _skip_product більше не потрібен
+- USD курс: парсинг з навігації (lk-nav), fallback → DEFAULT_USD_RATE
 """
 import scrapy
 import csv
+from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urljoin
 import os
@@ -20,6 +22,10 @@ from dotenv import load_dotenv
 from suppliers.spiders.base import ViatecBaseSpider, BaseDealerSpider
 from suppliers.services.category_specs_enricher import CategorySpecsEnricher
 from suppliers.services.viatec_feed_service import ViatecFeedService
+from suppliers.services.dealer_price_service import (
+    DealerPriceService as ViatecPriceService,
+    DEFAULT_USD_RATE,
+)
 
 PRIORITY_PRODUCT  = 10
 PRIORITY_CATEGORY = 0
@@ -42,6 +48,9 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        import logging
+        logging.getLogger("scrapy.crawler").setLevel(logging.WARNING)
+
         _project_root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         load_dotenv(_project_root / "suppliers" / ".env")
         self.email    = os.getenv("VIATEC_EMAIL")
@@ -52,6 +61,9 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
                 "❌ Відсутні VIATEC_EMAIL / VIATEC_PASSWORD. "
                 "Локально: додайте в suppliers/.env. CI: додайте в GitHub Secrets."
             )
+
+        # USD курс: дефолт до парсингу зі сторінки
+        self.usd_rate: Decimal = DEFAULT_USD_RATE
 
         self.category_mapping = self._load_category_mapping()
         self.category_urls    = list(self.category_mapping.keys())
@@ -75,7 +87,6 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         """
         Читає вже збережений viatec_new.csv і повертає set URL.
         Якщо файл не існує — порожній set (перший запуск).
-        Ідентично secur::_load_already_scraped_urls()
         """
         urls: set = set()
         out_path = root / "data" / "output" / self.output_filename
@@ -154,6 +165,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
             self.logger.error("Авторизація не виконана!")
             return
         self.logger.info("✅ УСПІШНИЙ ЛОГІН")
+
         if not self.category_urls:
             self.logger.error("Немає категорій для парсингу.")
             return
@@ -168,6 +180,20 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         )
 
     # ──────────────────────────────────────────────────────────
+    # USD RATE
+    # ──────────────────────────────────────────────────────────
+
+    def _try_update_usd_rate(self, response, source: str = "") -> None:
+        """
+        Оновлює self.usd_rate курсом USD б/г зі сторінки.
+        Логує тільки при зміні курсу. При невдачі — мовчки залишає поточний.
+        """
+        rate = ViatecPriceService.parse_usd_rate_from_response(response)
+        if rate is not None and rate != self.usd_rate:
+            self.usd_rate = rate
+            self.logger.info(f"💱 USD б/г курс: {self.usd_rate} ({source})")
+
+    # ──────────────────────────────────────────────────────────
     # PARSE CATEGORY
     # ──────────────────────────────────────────────────────────
 
@@ -176,6 +202,10 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         category_index = response.meta["category_index"]
         page_number    = response.meta.get("page_number", 1)
         category_info  = self.category_mapping.get(category_url, {})
+
+        # Оновлюємо курс якщо ще не отримали зі сторінки після логіну
+        if self.usd_rate == DEFAULT_USD_RATE:
+            self._try_update_usd_rate(response, source="parse_category")
 
         self.logger.info(
             f"📂 Категорія [{category_index + 1}/{len(self.category_urls)}] "
@@ -330,6 +360,8 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
                 "price_rrp_uah":            price_rrp_uah,
                 "price_type":               self.price_type,
                 "supplier_id":              self.supplier_id,
+                # USD курс на момент парсингу — pipeline використовує для конвертації
+                "usd_rate":                 str(self.usd_rate),
                 "output_file":              self.output_filename,
                 "Продукт_на_сайті":         response.meta.get("original_url", response.url),
                 "category_url":             response.meta.get("category_url", ""),
@@ -360,7 +392,6 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         self.failed_products.append({
             "url": url, "reason": str(failure.value), "product_name": product_name
         })
-        # Scrapy автоматично бере наступний з черги — нічого більше не потрібно
 
     # ──────────────────────────────────────────────────────────
     # HELPERS

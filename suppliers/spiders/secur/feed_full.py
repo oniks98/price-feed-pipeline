@@ -16,11 +16,14 @@ Spider об'єднаний: Feed (ціни) + Playwright (зображення +
                    └─ yield item
 
 ФІДИ ТА ЛОГІКА ЦІН:
-  Фід 50 (Ajax, крупний опт):
-    → ціна з <price> (роздрібна), множиться на coefficient_feed у pipeline
-  Фід 52 (Імпорт, крупний опт):
-    → ціна з <dealerPrice> (дилерська), множиться на coefficient_feed
-    → захист: якщо dealerPrice > price → беремо меншу (price)
+  Обидва фіди (50 і 52) мають <price> (роздрібна/РРЦ) і <dealerPrice> (дилерська).
+  _resolve_price повертає (retail, dealer):
+    dealer = min(dealerPrice, price) — якщо dealerPrice > price → WARNING + беремо price
+    Якщо dealerPrice відсутня → dealer = retail (fallback)
+  В item:
+    Ціна          = dealer (для pipeline validation)
+    price_rrp_uah = retail (РРЦ для prom-каналу)
+    dealer_price_uah = dealer (pipeline пише в Оптова_ціна і рахує канальні ціни)
 
 ХАРАКТЕРИСТИКИ (ЗАВЖДИ УКРАЇНСЬКОЮ):
   XML має <param> → використовуємо їх (з UA фіду = українська мова)
@@ -133,6 +136,11 @@ class SecurFeedFullSpider(scrapy.Spider):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        import logging
+        logging.getLogger("scrapy.crawler").setLevel(logging.WARNING)
+        logging.getLogger("scrapy-playwright").setLevel(logging.WARNING)
+
         self.output_filename = "secur_new.csv"
         self.currency = "UAH"
         self.price_type = "retail"
@@ -470,7 +478,7 @@ class SecurFeedFullSpider(scrapy.Spider):
 
         self.logger.info(
             f"✅ {feed_item.get('Назва_позиції', '')[:50]} | "
-            f"Ціна: {feed_item.get('Ціна', '')} UAH | "
+            f"Дилер: {feed_item.get('Ціна', '')} UAH | "
             f"Хар-к: {len(specs_list)} ({source_label}) | "
             f"Фото: {len(page_image_url.split(', ')) if page_image_url else 0}"
         )
@@ -515,8 +523,8 @@ class SecurFeedFullSpider(scrapy.Spider):
     ) -> dict | None:
         product_id = offer.xpath("@id").get()
 
-        price_raw = self._resolve_price(offer, feed_id)
-        if not price_raw:
+        retail_price, dealer_price = self._resolve_price(offer, feed_id)
+        if dealer_price is None:
             return None
 
         url = offer.xpath("url/text()").get() or ""
@@ -561,9 +569,12 @@ class SecurFeedFullSpider(scrapy.Spider):
             "Опис_укр":          description_ua,
 
             "Тип_товару":     "r",
-            "Ціна":           str(price_raw),
+            "Ціна":           str(dealer_price),
             "Валюта":         self.currency,
             "Одиниця_виміру": "шт.",
+
+            "price_rrp_uah":    str(retail_price) if retail_price is not None else "",
+            "dealer_price_uah": str(dealer_price),
 
             "Посилання_зображення": feed_image_url,  # замінюється в parse_product_page
             "Наявність":            "В наявності" if available else "Немає в наявності",
@@ -589,29 +600,37 @@ class SecurFeedFullSpider(scrapy.Spider):
             "specifications_list": [],
         }
 
-    def _resolve_price(self, offer, feed_id: str) -> float | None:
+    def _resolve_price(
+        self, offer, feed_id: str
+    ) -> tuple[float | None, float | None]:
         """
-        Фід 50 (Ajax):   → завжди <price> (роздрібна)
-        Фід 52 (Імпорт): → <dealerPrice>, захист: якщо > price → беремо price
+        Повертає (retail_price, dealer_price) для будь-якого фіду.
+
+        retail_price  = <price>        (РРЦ / роздрібна)
+        dealer_price  = <dealerPrice>  (дилерська)
+
+        Захист: якщо dealerPrice > price → WARNING, dealer = price.
+        Якщо <dealerPrice> відсутня → dealer = retail (fallback).
+        Повертає (None, None) якщо <price> відсутня.
         """
         retail_price = self._to_float(offer.xpath("price/text()").get())
+        if retail_price is None:
+            return None, None
 
-        if feed_id == "50":
-            return retail_price
+        dealer_raw = self._to_float(offer.xpath("dealerPrice/text()").get())
 
-        dealer_price = self._to_float(offer.xpath("dealerPrice/text()").get())
+        if dealer_raw is None:
+            # <dealerPrice> відсутня — fallback на роздрібну
+            return retail_price, retail_price
 
-        if not dealer_price:
-            return retail_price
-
-        if retail_price is not None and dealer_price > retail_price:
+        if dealer_raw > retail_price:
             self.logger.warning(
-                f"⚠️ dealerPrice ({dealer_price}) > price ({retail_price}) "
+                f"⚠️ dealerPrice ({dealer_raw}) > price ({retail_price}) "
                 f"для id={offer.xpath('@id').get()} — використовуємо price"
             )
-            return retail_price
+            return retail_price, retail_price
 
-        return dealer_price
+        return retail_price, dealer_raw
 
     # ──────────────────────────────────────────────────────────────────
     # PARSE FEED SPECS — хар-ки з XML <param> (УКРАЇНСЬКОЮ з UA фіду)
