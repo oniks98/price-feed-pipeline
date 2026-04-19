@@ -10,9 +10,9 @@
 
 Пороги по постачальниках:
   VIATEC_PROM_THRESHOLD = 1.35
-  VIATEC_SITE_THRESHOLD = 1.3
+  VIATEC_SITE_THRESHOLD = 1.7
   SECUR_PROM_THRESHOLD  = 1.3
-  SECUR_SITE_THRESHOLD  = 1.3
+  SECUR_SITE_THRESHOLD  = 1.7
 """
 from __future__ import annotations
 
@@ -24,19 +24,19 @@ from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 VIATEC_PROM_THRESHOLD: Decimal = Decimal("1.35")
 """retail / dealer >= 1.35 → prom отримує роздрібну × coef_retail (viatec)."""
 
-VIATEC_SITE_THRESHOLD: Decimal = Decimal("1.3")
-"""retail / dealer >= 1.3 → site отримує роздрібну × coef_retail (viatec)."""
+VIATEC_SITE_THRESHOLD: Decimal = Decimal("1.7")
+"""retail / dealer >= 1.7 → site отримує роздрібну × coef_retail (viatec)."""
 
 SECUR_PROM_THRESHOLD: Decimal = Decimal("1.3")
 """retail / dealer >= 1.30 → prom отримує роздрібну × coef_retail (secur)."""
 
-SECUR_SITE_THRESHOLD: Decimal = Decimal("1.3")
-"""retail / dealer >= 1.3 → site отримує роздрібну × coef_retail (secur)."""
+SECUR_SITE_THRESHOLD: Decimal = Decimal("1.7")
+"""retail / dealer >= 1.7 → site отримує роздрібну × coef_retail (secur)."""
 
 
 # ── Дефолти ───────────────────────────────────────────────────────────────────
 
-DEFAULT_USD_RATE: Decimal = Decimal("43.8")
+DEFAULT_USD_RATE: Decimal = Decimal("44.2")
 """Курс USD за замовчуванням — якщо парсинг не вдався (viatec)."""
 
 DEFAULT_COEF_RETAIL: Decimal = Decimal("1")
