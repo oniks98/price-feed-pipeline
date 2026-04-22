@@ -13,48 +13,106 @@ jobs:
           curl -s https://api.ipify.org
           echo ""
 
-      - name: Check product page
+      # ── СТОРІНКА ТОВАРУ (secur.ua — Cloudflare) ─────────────────────
+      - name: Check product page (secur.ua)
         run: |
-          echo "=== Product page status ==="
+          echo "=== Сторінка товару (secur.ua) ==="
           CODE=$(curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" \
             -o /dev/null -w "%{http_code}" -s \
             "https://secur.ua/signalizatsii/gsm-signalizatsii/besprovodnye-tsentrali/intelektualna-central-ajax-hub-2-corna-ajax-8745")
           echo "HTTP $CODE"
           if [ "$CODE" = "200" ]; then
-            echo "✅ Сторінки товарів — НЕ заблоковані (проксі не потрібен)"
+            echo "✅ Сторінки товарів — НЕ заблоковані → Playwright може працювати"
           else
-            echo "❌ Сторінки товарів — ЗАБЛОКОВАНІ (потрібен проксі для всього)"
+            echo "❌ Сторінки товарів — ЗАБЛОКОВАНІ → Playwright марний, тільки фіди"
           fi
 
-      - name: Check feed 50
+      # ── СТАРІ ФІДИ (secur.ua — за Cloudflare) ───────────────────────
+      - name: Check OLD feed 50 (secur.ua)
         run: |
-          echo "=== Feed /50 status ==="
+          echo "=== СТАРИЙ Фід /50 (secur.ua) ==="
           CODE=$(curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" \
             -o /dev/null -w "%{http_code}" -s \
             "https://secur.ua/feed/export/50")
           echo "HTTP $CODE"
           if [ "$CODE" = "200" ]; then
-            echo "✅ Фід 50 — НЕ заблокований"
+            echo "✅ Фід 50 (старий) — НЕ заблокований"
           else
-            echo "❌ Фід 50 — ЗАБЛОКОВАНИЙ (Cloudflare)"
+            echo "❌ Фід 50 (старий) — ЗАБЛОКОВАНИЙ (Cloudflare, очікується)"
           fi
 
-      - name: Check feed 52
+      - name: Check OLD feed 52 (secur.ua)
         run: |
-          echo "=== Feed /52 status ==="
+          echo "=== СТАРИЙ Фід /52 (secur.ua) ==="
           CODE=$(curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" \
             -o /dev/null -w "%{http_code}" -s \
             "https://secur.ua/feed/export/52")
           echo "HTTP $CODE"
           if [ "$CODE" = "200" ]; then
-            echo "✅ Фід 52 — НЕ заблокований"
+            echo "✅ Фід 52 (старий) — НЕ заблокований"
           else
-            echo "❌ Фід 52 — ЗАБЛОКОВАНИЙ (Cloudflare)"
+            echo "❌ Фід 52 (старий) — ЗАБЛОКОВАНИЙ (Cloudflare, очікується)"
+          fi
+
+      # ── НОВІ ФІДИ З ТОКЕНОМ (export.secur.ua) ───────────────────────
+      - name: Check NEW Import feed UA (token)
+        run: |
+          echo "=== НОВИЙ Імпорт UA (export.secur.ua, токен) ==="
+          CODE=$(curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" \
+            -o /dev/null -w "%{http_code}" -s \
+            "https://export.secur.ua/feed/export/v2/9f69564b-341a-4878-8167-9931d2481bba")
+          echo "HTTP $CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "✅ Новий Імпорт UA — доступний з GitHub Actions"
+          else
+            echo "❌ Новий Імпорт UA — недоступний (HTTP $CODE)"
+          fi
+
+      - name: Check NEW Import feed RU (token)
+        run: |
+          echo "=== НОВИЙ Імпорт RU (export.secur.ua, токен) ==="
+          CODE=$(curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" \
+            -o /dev/null -w "%{http_code}" -s \
+            "https://export.secur.ua/feed/export/v2/9f69564b-341a-4878-8167-9931d2481bba?lang=ru")
+          echo "HTTP $CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "✅ Новий Імпорт RU — доступний з GitHub Actions"
+          else
+            echo "❌ Новий Імпорт RU — недоступний (HTTP $CODE)"
+          fi
+
+      - name: Check NEW Ajax feed UA (token)
+        run: |
+          echo "=== НОВИЙ Ajax UA (export.secur.ua, токен) ==="
+          CODE=$(curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" \
+            -o /dev/null -w "%{http_code}" -s \
+            "https://export.secur.ua/feed/export/v2/8f60b225-2273-4456-ba5a-297f3f786120")
+          echo "HTTP $CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "✅ Новий Ajax UA — доступний з GitHub Actions"
+          else
+            echo "❌ Новий Ajax UA — недоступний (HTTP $CODE)"
+          fi
+
+      - name: Check NEW Ajax feed RU (token)
+        run: |
+          echo "=== НОВИЙ Ajax RU (export.secur.ua, токен) ==="
+          CODE=$(curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" \
+            -o /dev/null -w "%{http_code}" -s \
+            "https://export.secur.ua/feed/export/v2/8f60b225-2273-4456-ba5a-297f3f786120?lang=ru")
+          echo "HTTP $CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "✅ Новий Ajax RU — доступний з GitHub Actions"
+          else
+            echo "❌ Новий Ajax RU — недоступний (HTTP $CODE)"
           fi
 
       - name: Summary
         run: |
           echo ""
           echo "════════════════════════════════════════════════════"
-          echo "Результат: дивись вище — 200 = ок, інше = Cloudflare"
+          echo "Ключові питання після тесту:"
+          echo "  1. Сторінка товару — 200? → Playwright працює чи ні"
+          echo "  2. Старі фіди — 403? → Cloudflare блокує (очікується)"
+          echo "  3. Нові фіди UA + RU — 200? → токен працює з GitHub Actions"
           echo "════════════════════════════════════════════════════"
