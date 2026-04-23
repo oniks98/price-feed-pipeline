@@ -111,3 +111,27 @@ CMD открыть: Win + R → cmd → Enter.
 "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="C:\chrome-kasta-debug"
 
 https://hub.kasta.ua/products?contract_id=bd045b2c-ceb9-4c9e-a3ba-cc414e5e76d9&status=OnSale&status=ZeroStock
+
+# Заміна старих файлів у data-latest
+
+# 1. Сбросить локальную data-latest до актуального состояния remote
+
+git fetch origin
+git reset --hard origin/data-latest
+
+# 2. Убедиться что получил свежий коммит
+
+git log --oneline -1
+
+# должен показать 2334a6c
+
+# 3. Скопировать/заменить файлы в data
+
+# 4. Закоммитить через amend (как делает pipeline)
+
+git add data/secur/
+git commit --amend --no-edit
+
+# 5. Force push (обязательно, т.к. amend меняет хэш)
+
+git push origin data-latest --force
