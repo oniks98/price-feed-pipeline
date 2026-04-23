@@ -63,6 +63,7 @@ env:
 #                   data/{supplier}/{supplier}_old.csv  ← baseline для diff
 #                   data/{supplier}/import_products.csv ← дельта для Прому
 #                   data/merged.csv + merged_prev.csv
+#                   data/prom_import_status.json        ← статус останнього імпорту
 #                   data/markets/{kasta,epicenter,rozetka}_feed.xml + _prev.xml
 #
 # ДОДАВАННЯ НОВОГО ПОСТАЧАЛЬНИКА:
@@ -244,7 +245,16 @@ jobs:
         env:
           PROJECT_ROOT: ${{ github.workspace }}
 
+      # Перевіряємо статус попереднього імпорту Prom.
+      # Якщо попередній run завершився з failed — об'єднуємо merged_prev.csv
+      # з новим merged.csv щоб Prom отримав повну актуальну картину.
+      - name: Merge pending Prom data (retry logic)
+        run: python scripts/merge_pending.py
+        env:
+          PROJECT_ROOT: ${{ github.workspace }}
+
       # Пушимо всі великі файли в data-latest через --amend.
+      # prom_import_status.json також потрапляє в amend через `git add .`
       - name: Push large files to data-latest (amend)
         run: |
           BOT_NAME="github-actions[bot]"
@@ -302,12 +312,48 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Тригер записує результат (success/failed) в data/prom_import_status.json.
+      # Файл потрапляє в data-latest через amend наступного run.
       - name: Trigger Prom API import
         run: python scripts/prom_api_trigger.py
         env:
           PROM_API_TOKEN: ${{ secrets.PROM_API_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          PROJECT_ROOT: ${{ github.workspace }}
           PROM_MERGED_CSV_URL: "https://raw.githubusercontent.com/${{ github.repository }}/data-latest/data/merged.csv"
+
+      # Пушимо prom_import_status.json після тригера (він ще не в amend цього run).
+      # Використовуємо окремий amend щоб не чіпати основні файли.
+      - name: Push prom_import_status to data-latest
+        if: always()
+        run: |
+          BOT_NAME="github-actions[bot]"
+          BOT_EMAIL="github-actions[bot]@users.noreply.github.com"
+
+          STATUS_SRC="${{ github.workspace }}/data/prom_import_status.json"
+          STATUS_DST="publish-dir/data/prom_import_status.json"
+
+          if [ ! -f "${STATUS_SRC}" ]; then
+            echo "⚠️  prom_import_status.json не знайдено — пропускаємо"
+            exit 0
+          fi
+
+          cp "${STATUS_SRC}" "${STATUS_DST}"
+
+          cd publish-dir
+          git config user.name  "${BOT_NAME}"
+          git config user.email "${BOT_EMAIL}"
+          git add data/prom_import_status.json
+          if git diff --staged --quiet; then
+            echo "✅ prom_import_status.json не змінився — коміт пропущено"
+          else
+            git commit --amend --no-edit \
+              --author="${BOT_NAME} <${BOT_EMAIL}>"
+            git push origin data-latest --force
+            echo "✅ prom_import_status.json запушено в data-latest"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Print Prom import URL
         run: |
