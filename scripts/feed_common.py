@@ -47,6 +47,14 @@ PROM_IMAGE_RE: re.Pattern[str] = re.compile(
 DEFAULT_VENDOR: str = "Anker"
 DEFAULT_COUNTRY: str = "Китай"
 
+# Виробники-псевдоніми: vendor містить «електрон» (case-insensitive) → замінюємо на Anker.
+# Країну замінюємо лише якщо вона рівно «Україна» → «Китай».
+_VENDOR_ALIAS_RE: re.Pattern[str] = re.compile(r"електрон", re.IGNORECASE)
+_VENDOR_ALIAS_TARGET: str = "Anker"
+_COUNTRY_ALIAS_MAP: dict[str, str] = {
+    "Україна": "Китай",
+}
+
 # ---------------------------------------------------------------------------
 # Type aliases
 # ---------------------------------------------------------------------------
@@ -369,6 +377,58 @@ def transform_prom_image_urls(xml: str) -> str:
     )
     print(f"🖼️  Нормалізовано URL зображень Prom.ua → w640_h640: {count}")
     return result
+
+
+def replace_vendor_aliases(xml: str) -> str:
+    """
+    Нормалізує виробників-псевдоніми:
+      - vendor містить «електрон» (case-insensitive) → замінюється на _VENDOR_ALIAS_TARGET
+      - country_of_origin замінюється лише якщо значення є у _COUNTRY_ALIAS_MAP
+        (тобто «Україна» → «Китай»; інші країни не чіпаємо)
+    """
+    replaced = 0
+
+    def on_offer(m: re.Match) -> str:
+        nonlocal replaced
+        offer_id: str = m.group(1)
+        tail_attrs: str = m.group(2)
+        body: str = m.group(3)
+
+        vendor_match = re.search(r"<vendor>(.*?)</vendor>", body, re.DOTALL)
+        if not vendor_match or not _VENDOR_ALIAS_RE.search(vendor_match.group(1).strip()):
+            return m.group(0)
+
+        # Замінюємо vendor
+        body = body.replace(
+            vendor_match.group(0),
+            f"<vendor>{_VENDOR_ALIAS_TARGET}</vendor>",
+            1,
+        )
+
+        # Замінюємо country_of_origin лише якщо значення є у _COUNTRY_ALIAS_MAP
+        country_match = re.search(r"<country_of_origin>(.*?)</country_of_origin>", body, re.DOTALL)
+        if country_match:
+            country_val = country_match.group(1).strip()
+            new_country = _COUNTRY_ALIAS_MAP.get(country_val)
+            if new_country:
+                body = body.replace(
+                    country_match.group(0),
+                    f"<country_of_origin>{new_country}</country_of_origin>",
+                    1,
+                )
+
+        replaced += 1
+        return f'<offer id="{offer_id}"{tail_attrs}>{body}</offer>'
+
+    xml = re.sub(
+        r'<offer\s+id="(\d+)"([^>]*)>(.*?)</offer>',
+        on_offer,
+        xml,
+        flags=re.DOTALL,
+    )
+    if replaced:
+        print(f"🔄  Замінено псевдоніми виробників: {replaced} товарів")
+    return xml
 
 
 def fill_missing_vendor(xml: str) -> str:
