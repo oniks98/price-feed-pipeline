@@ -33,12 +33,21 @@ SENTINEL_CODES: frozenset[int] = frozenset({777777})
 # ---------------------------------------------------------------------------
 # Логування
 # ---------------------------------------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+LOG_PATH = Path(r"C:\FullStack\PriceFeedPipeline\logs\check_product_code.log")
+LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+_formatter = logging.Formatter(
+    fmt="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout)],
 )
+
+_console_handler = logging.StreamHandler(sys.stdout)
+_console_handler.setFormatter(_formatter)
+
+_file_handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
+_file_handler.setFormatter(_formatter)
+
+logging.basicConfig(level=logging.INFO, handlers=[_console_handler, _file_handler])
 log = logging.getLogger(__name__)
 
 
@@ -190,6 +199,20 @@ def main() -> None:
     log.info("  Кодів з перевищенням       : %d", len(over_limit))
     log.info("  Кодів з нестачею           : %d", len(under_limit))
     log.info("  Відсутніх у послідовності  : %d", len(gaps))
+
+    if over_limit:
+        log.warning("--- КОДИ З ПЕРЕВИЩЕННЯМ (фінальний список) ---")
+        for code, cnt in over_limit:
+            log.warning("  %d  →  %d входжень  (надлишок: %d)", code, cnt, cnt - EXPECTED_COUNT)
+
+    if under_limit:
+        log.warning("--- КОДИ З НЕСТАЧЕЮ (фінальний список) ---")
+        for code, cnt in under_limit:
+            log.warning("  %d  →  %d входжень  (нестача: %d)", code, cnt, EXPECTED_COUNT - cnt)
+
+    if gaps:
+        log.warning("--- ВІДСУТНІ КОДИ (фінальний список) ---")
+        log.warning("  %s", ", ".join(str(g) for g in gaps))
 
     if not violations and not gaps:
         log.info("✅ Всі перевірки пройдено успішно.")

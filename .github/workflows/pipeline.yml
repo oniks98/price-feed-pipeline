@@ -512,6 +512,28 @@ jobs:
           sleep 900
           echo "✅ Пауза завершена, генеруємо фід"
 
+      - name: Restore *_old.csv from data-latest
+        run: |
+          if git ls-remote --exit-code --heads origin data-latest; then
+            git clone --branch data-latest --single-branch --depth 1 \
+              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
+              data-latest-dir
+            for supplier in viatec secur; do
+              src="data-latest-dir/data/${supplier}/${supplier}_old.csv"
+              if [ -f "${src}" ]; then
+                mkdir -p data/${supplier}
+                cp "${src}" "data/${supplier}/${supplier}_old.csv"
+                echo "✅ Відновлено ${supplier}_old.csv"
+              else
+                echo "⚠️  ${supplier}_old.csv не знайдено в data-latest"
+              fi
+            done
+          else
+            echo "⚠️  Гілка data-latest не існує — оптові ціни будуть пропущені (fallback на ціну XML)"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Generate Kasta feed
         run: python scripts/generate_kasta_feed.py
         env:
@@ -554,6 +576,28 @@ jobs:
           sleep 900
           echo "✅ Пауза завершена, генеруємо фід"
 
+      - name: Restore *_old.csv from data-latest
+        run: |
+          if git ls-remote --exit-code --heads origin data-latest; then
+            git clone --branch data-latest --single-branch --depth 1 \
+              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
+              data-latest-dir
+            for supplier in viatec secur; do
+              src="data-latest-dir/data/${supplier}/${supplier}_old.csv"
+              if [ -f "${src}" ]; then
+                mkdir -p data/${supplier}
+                cp "${src}" "data/${supplier}/${supplier}_old.csv"
+                echo "✅ Відновлено ${supplier}_old.csv"
+              else
+                echo "⚠️  ${supplier}_old.csv не знайдено в data-latest"
+              fi
+            done
+          else
+            echo "⚠️  Гілка data-latest не існує — оптові ціни будуть пропущені (fallback на ціну XML)"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Generate Epicenter feed
         run: python scripts/generate_epicenter_feed.py
         env:
@@ -595,6 +639,28 @@ jobs:
           echo "⏳ Пауза 15 хвилин — чекаємо завершення імпорту в Промі..."
           sleep 900
           echo "✅ Пауза завершена, генеруємо фід"
+
+      - name: Restore *_old.csv from data-latest
+        run: |
+          if git ls-remote --exit-code --heads origin data-latest; then
+            git clone --branch data-latest --single-branch --depth 1 \
+              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
+              data-latest-dir
+            for supplier in viatec secur; do
+              src="data-latest-dir/data/${supplier}/${supplier}_old.csv"
+              if [ -f "${src}" ]; then
+                mkdir -p data/${supplier}
+                cp "${src}" "data/${supplier}/${supplier}_old.csv"
+                echo "✅ Відновлено ${supplier}_old.csv"
+              else
+                echo "⚠️  ${supplier}_old.csv не знайдено в data-latest"
+              fi
+            done
+          else
+            echo "⚠️  Гілка data-latest не існує — оптові ціни будуть пропущені (fallback на ціну XML)"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate Rozetka feed
         run: python scripts/generate_rozetka_feed.py
