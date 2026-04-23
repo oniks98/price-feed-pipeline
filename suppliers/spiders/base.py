@@ -388,8 +388,31 @@ class ViatecBaseSpider(BaseSupplierSpider):
             
             return "<br>".join(result_parts)
         
-        self.logger.warning(f"В контейнері опису не знайдено ні <ul>, ні <p> на {response.url}")
-        return ""
+        # Fallback: raw text + <br> теги безпосередньо в <div> (без <p>/<ul> wrapper)
+        # Приклад: <div>● Текст;<br>● Ще текст;<br></div>
+        inner_div = description_container.css("div")
+        raw_html = inner_div[0].get() if inner_div else ""
+        # Знімаємо зовнішній <div ...> ... </div>
+        inner_html = re.sub(r"^<div[^>]*>", "", raw_html, count=1)
+        inner_html = re.sub(r"</div>\s*$", "", inner_html).strip()
+
+        if not inner_html:
+            self.logger.warning(f"Порожній контейнер опису на {response.url}")
+            return ""
+
+        # Нормалізуємо <br> варіанти → єдиний <br>
+        inner_html = re.sub(r"<br\s*/?>", "<br>", inner_html, flags=re.IGNORECASE)
+        # Знімаємо всі HTML-теги КРІМ <br> (span, a, b, тощо)
+        inner_html = re.sub(r"<(?!br\b)[^>]+>", "", inner_html, flags=re.IGNORECASE)
+        # Збираємо рядки, пропускаємо порожні
+        lines = [line.strip() for line in inner_html.split("<br>") if line.strip()]
+
+        if not lines:
+            self.logger.warning(f"Після обробки fallback опис порожній на {response.url}")
+            return ""
+
+        self.logger.debug(f"Fallback (raw text+br): {len(lines)} рядків на {response.url}")
+        return "<br>".join(lines)
     
     def _extract_specifications(self, response) -> List[Dict[str, str]]:
         """
