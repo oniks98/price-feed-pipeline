@@ -30,7 +30,7 @@ from typing import Dict, List, Set, Tuple
 # type:   тип для логіки pipeline
 SUPPLIER_CONFIG: dict[str, dict[str, str]] = {
     "viatec":   {"spider": "viatec_dealer",  "type": "dealer"},
-    "secur":    {"spider": "secur_feed_full", "type": "retail"},
+    "secur":    {"spider": "secur_feed", "type": "retail"},
     # Нові постачальники — додавати тут:
     # "neolight": {"spider": "neolight_retail", "type": "retail"},
     # "lun":      {"spider": "lun_retail",      "type": "retail"},
@@ -379,7 +379,6 @@ def process_supplier(supplier: str, product_type: str) -> None:
         "availability_changed": 0,
         "both_changed": 0,
         "price_changed": 0,
-        "chars_changed": 0,
         "not_in_new": 0,
         "already_unavailable": 0,
         "new_products": 0,
@@ -409,18 +408,7 @@ def process_supplier(supplier: str, product_type: str) -> None:
             if price_changed:
                 stats["price_changed"] += 1
 
-            # Перевіряємо зміни в характеристиках (після Де_знаходиться_товар)
-            chars_changed = False
-            old_chars = old_row[chars_start_idx:] if chars_start_idx < len(old_row) else []
-            new_chars = new_row[chars_start_idx:] if chars_start_idx < len(new_row) else []
-            max_len = max(len(old_chars), len(new_chars))
-            old_chars_padded = old_chars + [""] * (max_len - len(old_chars))
-            new_chars_padded = new_chars + [""] * (max_len - len(new_chars))
-            if old_chars_padded != new_chars_padded:
-                chars_changed = True
-                stats["chars_changed"] += 1
-
-            if not availability_changed and not quantity_changed and not price_changed and not chars_changed:
+            if not availability_changed and not quantity_changed and not price_changed:
                 stats["unchanged"] += 1
                 continue
 
@@ -485,7 +473,6 @@ def process_supplier(supplier: str, product_type: str) -> None:
     print(f"  Змінилася наявність:     {stats['availability_changed']}")
     print(f"  Змінилося обидва:        {stats['both_changed']}")
     print(f"  Змінилася ціна:          {stats['price_changed']}")
-    print(f"  Змінились характеристики: {stats['chars_changed']}")
     print(f"  Відсутні в новому:       {stats['not_in_new']}")
     print(f"  Вже були відсутні:       {stats['already_unavailable']}")
     print(f"  Нові товари:             {stats['new_products']}")

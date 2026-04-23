@@ -91,13 +91,11 @@ jobs:
             max_attempts: 2
             retry_wait: 30
 
-          # ── secur тимчасово вимкнено — Cloudflare блокує GitHub Actions IP ──
-          # Повернути коли буде вирішено питання з проксі або VPS.
-          # - supplier: secur
-          #   spider: secur_feed_full
-          #   timeout_minutes: 35
-          #   max_attempts: 5
-          #   retry_wait: 60
+          - supplier: secur
+            spider: secur_feed
+            timeout_minutes: 35
+            max_attempts: 2
+            retry_wait: 30
 
     steps:
       - name: Checkout repo
@@ -112,15 +110,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}
-
-      - name: Install Playwright browser
-        run: playwright install chromium --with-deps
-
       - name: Run spider
         uses: nick-fields/retry@v3
         with:
@@ -132,6 +121,7 @@ jobs:
           PROJECT_ROOT: ${{ github.workspace }}
           VIATEC_EMAIL: ${{ secrets.VIATEC_EMAIL }}
           VIATEC_PASSWORD: ${{ secrets.VIATEC_PASSWORD }}
+          # secur_feed використовує тільки HTTP-фіди — Playwright не потрібен
 
       - name: Upload CSV + sku_map artifacts
         uses: actions/upload-artifact@v4
@@ -200,8 +190,7 @@ jobs:
             cd ..
           fi
 
-          # ── АКТИВНІ постачальники: secur тимчасово вимкнено ──
-          for supplier in viatec; do
+          for supplier in viatec secur; do
             mkdir -p data/${supplier}
             src="publish-dir/data/${supplier}/${supplier}_old.csv"
             if [ -f "${src}" ]; then
@@ -232,8 +221,7 @@ jobs:
       - name: Read spider statuses and set env flags
         run: |
           FAILED_SUPPLIERS=""
-          # ── АКТИВНІ постачальники: secur тимчасово вимкнено ──
-          for SUPPLIER in viatec; do
+          for SUPPLIER in viatec secur; do
             STATUS_FILE="data/output/${SUPPLIER}_status.txt"
             if [ -f "$STATUS_FILE" ] && [ "$(cat $STATUS_FILE)" = "success" ]; then
               echo "${SUPPLIER^^}_OK=true" >> $GITHUB_ENV
@@ -272,8 +260,7 @@ jobs:
 
           cp data/merged.csv publish-dir/data/merged.csv
 
-          # ── АКТИВНІ постачальники: secur тимчасово вимкнено ──
-          for supplier in viatec; do
+          for supplier in viatec secur; do
             mkdir -p publish-dir/data/${supplier}
             [ -f data/${supplier}/${supplier}_old.csv ] && \
               cp data/${supplier}/${supplier}_old.csv \

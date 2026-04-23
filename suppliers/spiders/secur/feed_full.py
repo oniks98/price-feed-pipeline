@@ -86,8 +86,8 @@ class SecurFeedFullSpider(scrapy.Spider):
     """
     Об'єднаний паук: ціни з фіду + зображення і хар-ки зі сторінки товару.
 
-    Ajax (крупний опт):   https://secur.ua/feed/export/50  → ціна з <price>
-    Імпорт (крупний опт): https://secur.ua/feed/export/52  → ціна з <dealerPrice>
+    Ajax (крупний опт):   https://secur.ua/feed/export/50  
+    Імпорт (крупний опт): https://secur.ua/feed/export/52  
     """
 
     name = "secur_feed_full"
