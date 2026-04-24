@@ -27,6 +27,7 @@ from feed_common import (
     load_coefficients,
     load_wholesale_price_index,
     parse_currency_rates,
+    replace_vendor_aliases,
     transform_prom_image_urls,
 )
 
@@ -67,6 +68,7 @@ def main() -> None:
 
     updated_xml = apply_prices(updated_xml, offer_map, currency_rates)
     updated_xml = transform_prom_image_urls(updated_xml)
+    updated_xml = replace_vendor_aliases(updated_xml)
     updated_xml = fill_missing_vendor(updated_xml)
     updated_xml = add_name_ua(updated_xml)
 
