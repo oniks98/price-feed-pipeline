@@ -347,52 +347,60 @@ class ViatecBaseSpider(BaseSupplierSpider):
     
     def _extract_description_with_br(self, response) -> str:
         """
-        Витягує опис зі збереженням переносів <br> та обробкою списків <ul>
+        Витягує опис товару зі збереженням переносів <br>.
+
+        Підтримувані варіанти структури (viatec.ua):
+
+        1. <ul><li>...</li></ul>          → маркований список через ●
+        2. <p>текст</p>                   → абзаци через <br>
+           (аналог-лінк <p class="card-header__analog-link"> — пропускається)
+        3. <p class="analog-link"/><div>  → аналог-лінк + звичайний <div> з текстом
+           текст</div>                       (fallthrough: p_tags є, але після фільтра
+                                              порожньо → читаємо вміст <div>)
+        4. <div>текст;<br>текст</div>     → рядки через <br> (fallback)
         """
         description_container = response.css("div.card-header__card-info-text")
         if not description_container:
             self.logger.warning(f"Не знайдено контейнер опису на {response.url}")
             return ""
-        
-        # Перевірка на наявність <ul>
+
+        # ── 1. <ul> список ──────────────────────────────────────────────────
         ul_list = description_container.css("ul")
         if ul_list:
-            list_items = ul_list.css("li")
-            
             description_parts = []
-            for item in list_items:
-                inner_content = item.get()
-                inner_content = re.sub(r'</?li[^>]*>', '', inner_content).strip()
-                if not inner_content.startswith('●'):
-                    description_parts.append(f"● {inner_content}")
-                else:
-                    description_parts.append(inner_content)
-            
+            for item in ul_list.css("li"):
+                inner_content = re.sub(r"</?li[^>]*>", "", item.get()).strip()
+                if not inner_content.startswith("●"):
+                    inner_content = f"● {inner_content}"
+                description_parts.append(inner_content)
             return "<br>".join(description_parts)
-        
-        # Обробка <p> тегів
+
+        # ── 2 + 3. <p> теги (з фільтрацією analog-link) ────────────────────
         p_tags = description_container.css("p")
         if p_tags:
-            # self.logger.info(f"Знайдено <p> теги в описі на {response.url}")
             result_parts = []
             for p in p_tags:
+                # Пропускаємо рекламний лінк "Є товари з аналогічними характеристиками"
                 if p.css("::attr(class)").get() == "card-header__analog-link":
                     continue
-                
-                p_html = p.get()
-                inner_html = re.sub(r'^<p[^>]*>|</p>$', '', p_html).strip()
-                
-                if inner_html:
-                    inner_html = inner_html.replace("<br/>", "<br>").replace("<br />", "<br>")
-                    result_parts.append(inner_html)
-            
-            return "<br>".join(result_parts)
-        
-        # Fallback: raw text + <br> теги безпосередньо в <div> (без <p>/<ul> wrapper)
-        # Приклад: <div>● Текст;<br>● Ще текст;<br></div>
-        inner_div = description_container.css("div")
-        raw_html = inner_div[0].get() if inner_div else ""
-        # Знімаємо зовнішній <div ...> ... </div>
+                inner = re.sub(r"^<p[^>]*>|</p>$", "", p.get()).strip()
+                if inner:
+                    inner = re.sub(r"<br\s*/?>", "<br>", inner)
+                    result_parts.append(inner)
+
+            # Варіант 2: знайшли реальні <p> з текстом → повертаємо
+            if result_parts:
+                return "<br>".join(result_parts)
+
+            # Варіант 3: всі <p> були відфільтровані (тільки analog-link),
+            # текст знаходиться в сусідньому <div> → fallthrough нижче
+
+        # ── 4. Fallback: <div> з текстом / текстом + <br> ───────────────────
+        # Варіант 3 теж потрапляє сюди: беремо перший вкладений <div>
+        inner_divs = description_container.css("div")
+        raw_html = inner_divs[0].get() if inner_divs else ""
+
+        # Знімаємо зовнішній тег <div ...> ... </div>
         inner_html = re.sub(r"^<div[^>]*>", "", raw_html, count=1)
         inner_html = re.sub(r"</div>\s*$", "", inner_html).strip()
 
@@ -402,7 +410,7 @@ class ViatecBaseSpider(BaseSupplierSpider):
 
         # Нормалізуємо <br> варіанти → єдиний <br>
         inner_html = re.sub(r"<br\s*/?>", "<br>", inner_html, flags=re.IGNORECASE)
-        # Знімаємо всі HTML-теги КРІМ <br> (span, a, b, тощо)
+        # Знімаємо всі HTML-теги КРІМ <br>
         inner_html = re.sub(r"<(?!br\b)[^>]+>", "", inner_html, flags=re.IGNORECASE)
         # Збираємо рядки, пропускаємо порожні
         lines = [line.strip() for line in inner_html.split("<br>") if line.strip()]
@@ -411,9 +419,9 @@ class ViatecBaseSpider(BaseSupplierSpider):
             self.logger.warning(f"Після обробки fallback опис порожній на {response.url}")
             return ""
 
-        self.logger.debug(f"Fallback (raw text+br): {len(lines)} рядків на {response.url}")
+        self.logger.debug(f"Fallback (div text+br): {len(lines)} рядків на {response.url}")
         return "<br>".join(lines)
-    
+
     def _extract_specifications(self, response) -> List[Dict[str, str]]:
         """
         Витягує характеристики товару з таблиці (українські назви)
