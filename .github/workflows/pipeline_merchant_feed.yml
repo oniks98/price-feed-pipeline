@@ -26,9 +26,10 @@ on:
           - "false"
           - "true"
 
+# Чекає в черзі якщо pipeline.yml зараз записує в data-latest — запобігає race condition на amend/force-push.
 concurrency:
-  group: merchant-feed
-  cancel-in-progress: true
+  group: data-latest-writer
+  cancel-in-progress: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"

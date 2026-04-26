@@ -46,10 +46,11 @@ on:
 
   workflow_dispatch:
 
-# Якщо новий run стартує поки старий ще йде — старий скасовується.
+# Якщо новий run стартує поки старий ще йде — він чекає в черзі (не скасовує).
+# Спільна група з merchant-feed запобігає race condition на data-latest.
 concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: true
+  group: data-latest-writer
+  cancel-in-progress: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
