@@ -3,7 +3,7 @@
 Потрібно для локального тестування generate_*_feed.py без переключення гілок.
 
 Запуск:
-    python scripts/fetch_wholesale_csvs.py
+    python scripts/copy_csvs_main.py
 """
 
 import subprocess

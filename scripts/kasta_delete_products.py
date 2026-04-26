@@ -1,4 +1,4 @@
-"""kasta_bulk_select.py
+"""kasta_delete_products.py
 Відмічає рівно KEEP_CHECKED рядків у ReactVirtualized-таблиці Kasta.
 
 Архітектура:

@@ -3,10 +3,10 @@
 """
 Мерж pending merged.csv з новим merged.csv перед відправкою в Prom.
 
-Запускається в pipeline ПІСЛЯ merge_csv.py і ДО prom_api_trigger.py.
+Запускається в pipeline ПІСЛЯ prom_merge_csv.py і ДО prom_api_trigger.py.
 
 Логіка:
-  1. Читає prom_import_status.json через prom_status.
+  1. Читає prom_import_status.json через prom_import_status.
   2. Якщо status == "failed" і є pending_hashes → є дані які Prom не отримав.
   3. Завантажує merged_prev.csv (це останній merged.csv що Prom не прийняв).
   4. Мержить: merged_prev.csv як база + новий merged.csv поверх по ключу
@@ -31,7 +31,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from prom_status import load_status, has_pending_imports
+from prom_import_status import load_status, has_pending_imports
 
 BASE_PATH = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
 
@@ -149,7 +149,7 @@ def main() -> None:
 
     if not MERGED_CSV.exists():
         print(f"\n❌ merged.csv не знайдено: {MERGED_CSV}")
-        print("   Щось пішло не так в merge_csv.py")
+        print("   Щось пішло не так в prom_merge_csv.py")
         sys.exit(1)
 
     print(f"\n📂 Читаємо merged_prev.csv ({prev_path.stat().st_size // 1024} KB)...")

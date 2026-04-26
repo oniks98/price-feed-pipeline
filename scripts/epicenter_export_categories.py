@@ -3,7 +3,7 @@
   data/markets/epicenter_mappings.xlsx
 
 Запуск:
-    python scripts/fetch_epicenter_categories.py
+    python scripts/epicenter_export_categories.py
 
 Опції атрибутів завантажуються ТІЛЬКИ для set_code, що вже заповнені
 в колонці epicenter_category_id листа «Маппінг» (якщо файл вже існує).

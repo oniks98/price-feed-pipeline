@@ -1,15 +1,12 @@
-# prom_noindex_automation.py (v2.6.3 - VALIDATION DETECT BY URL)
+# prom_noindex_automation.py
 # Python 3.10+ | Playwright sync
 #
-# ИЗМЕНЕНИЯ v2.6.3 (откат опасного timeout + надёжное обнаружение валидации):
-# - ОТКАТ: убран save_and_return(timeout_sec=3) — слишком мало для медленного сервера
-# - НОВОЕ: обнаружение блокировки через URL после клика Save
-#   Нормальное сохранение меняет URL (уходим со страницы товара).
-#   Блокировка валидации — URL остаётся /cms/product/edit/...
-# - СОХРАНЕНО: wait_list_short() и FIX has=row в delete_tag_in_list()
+# Масово виставляє noindex на товари в Prom.ua через браузер.
+# Читає список SKU з NOINDEX_SKU_LIST, відкриває кажен товар і знімає з індексуації.
 #
-# ГИБРИДНЫЙ ПОДХОД (ЛУЧШЕЕ ИЗ ВСЕХ ВЕРСИЙ):
-# 1. Snapshot подход: снимаем слепок href на каждой странице
+# Запуск:
+#   python scripts/prom_noindex_automation.py
+#
 # 2. Проверка тега в списке: берём ТОЛЬКО строки где реально есть tag в DOM
 # 3. FATAL blacklist: защита от проблемных товаров
 # 4. Fresh reload между pass: защита от SPA-кеша

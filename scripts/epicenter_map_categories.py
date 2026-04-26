@@ -1,5 +1,8 @@
 """
-map_epicenter_categories.py
+epicenter_map_categories.py
+
+Запуск:
+    python scripts/epicenter_map_categories.py
 
 Reads epicenter_mappings.xlsx, matches categories from sheet "Маппінг"
 against sheet "Категорії Епіцентру" using word/stem overlap (≥60%),

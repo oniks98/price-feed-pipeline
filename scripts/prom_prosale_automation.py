@@ -1,13 +1,12 @@
-# prom_prosale_automation.py (v1.3.0)
+# prom_prosale_automation.py
 # Python 3.10+ | Playwright sync
 #
-# ЗМІНИ v1.3.0:
-# - ВИПРАВЛЕНО: .b-react-overlay__header більше не існує в новому Prom UI.
-#   Модалка тепер рендериться через React Portal (#react-portal).
-#   Новий надійний селектор модалки: [data-qaid="add_product_popup"]
-# - ВИПРАВЛЕНО: Після появи модалки контент грузиться ще 2-3 сек.
-#   Тепер чекаємо на реально готовий елемент: [data-qaid="select_dropdown"]
-#   (дропдаун нотаток), а не просто хедер.
+# Масово додає ProSale до товарів в Prom.ua через браузер.
+# Читає список SKU з PROSALE_SKU_LIST, відкриває кажен товар і активує ProSale.
+#
+# Запуск:
+#   python scripts/prom_prosale_automation.py
+#
 # - ВИПРАВЛЕНО: close_modal_if_open і _close_modal теж оновлені під новий селектор.
 # - ВИПРАВЛЕНО: fLkiL.click() падав через "input intercepts pointer events".
 #   Замінено на fLkiL.dispatch_event('click') — пряма JS-подія.

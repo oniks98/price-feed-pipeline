@@ -242,7 +242,7 @@ jobs:
           PROJECT_ROOT: ${{ github.workspace }}
 
       - name: Merge CSVs
-        run: python scripts/merge_csv.py
+        run: python scripts/prom_merge_csv.py
         env:
           PROJECT_ROOT: ${{ github.workspace }}
 
@@ -250,7 +250,7 @@ jobs:
       # Якщо попередній run завершився з failed — об'єднуємо merged_prev.csv
       # з новим merged.csv щоб Prom отримав повну актуальну картину.
       - name: Merge pending Prom data (retry logic)
-        run: python scripts/merge_pending.py
+        run: python scripts/prom_merge_pending.py
         env:
           PROJECT_ROOT: ${{ github.workspace }}
 

@@ -1,5 +1,5 @@
 """
-python scripts/fill_coef_kasta.py
+kasta_export_coef.py
 ──────────────────
 Заполняет столбик coef_kasta в markets_coefficients.csv
 на основе данных из mappings.xlsx (лист «Категорія+») и royalty.xlsx.
@@ -10,6 +10,9 @@ python scripts/fill_coef_kasta.py
      → берём max(Відсоток роялті) = X
   3. Y = round(110 / (100 - (8.5 + X)), 2)
   4. Записываем Y в coef_kasta нужной строки CSV
+
+Запуск:
+    python scripts/kasta_export_coef.py
 """
 
 from __future__ import annotations

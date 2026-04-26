@@ -1,7 +1,13 @@
 """
-python scripts/map_epicenter_attributes.py
+epicenter_map_attributes.py
+---------------------------
+Зіставляє атрибути Epicenter з параметрами Prom (фаззі-матчинг ≥ 80%).
+Читає epicenter_mappings.xlsx, записує prom_param_name, підсвічує червоним обов'язкові поля.
 
-Algorithm:
+Запуск:
+    python scripts/epicenter_map_attributes.py
+
+Алгоритм:
 1. Download Prom XML feed and index param names by categoryId.
 2. Read sheet "Маппінг": for each row with prom_category_id + epicenter_category_id.
 3. Find matching rows in sheet "Сети атрибутів" by set_code == epicenter_category_id.

@@ -4,7 +4,7 @@
 Об'єднання import_products.csv всіх активних постачальників в один merged.csv.
 
 Використання:
-  python scripts/merge_csv.py
+  python scripts/prom_merge_csv.py
 
 Читає:  data/{supplier}/import_products.csv  — для кожного з SUPPLIER_CONFIG
 Пише:   data/merged.csv                      — фінальний файл для Прому (raw link)

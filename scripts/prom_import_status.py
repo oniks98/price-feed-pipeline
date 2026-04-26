@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Сервіс читання/запису статусу імпорту Prom.ua.
+prom_import_status.py
+---------------------
+Бібліотека читання/запису статусу імпорту Prom.ua.
+Не запускається напряму — імпортується в prom_merge_pending.py і prom_api_trigger.py.
 
 Файл: data/prom_import_status.json (зберігається в data-latest)
 
@@ -19,8 +22,8 @@
   - pending_hashes — черга версій merged.csv які Prom ще не отримав.
   - При success: consecutive_failures=0, pending_hashes=[].
   - При failed:  consecutive_failures+=1, hash поточного run додається в pending_hashes.
-  - merge_pending.py читає статус перед merge і об'єднує дані якщо є pending.
-  - Файл амендиться в data-latest разом з merged.csv — окремих комітів немає.
+  - prom_merge_pending.py читає статус перед merge і об'єднує дані якщо є pending.
+  - Файл апендиться в data-latest разом з merged.csv — окремих комітів немає.
 
 Єдина відповідальність: читання і запис статус-файлу. Бізнес-логіка — в caller.
 """

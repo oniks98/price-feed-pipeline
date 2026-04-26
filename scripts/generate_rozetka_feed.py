@@ -22,7 +22,7 @@
 from decimal import Decimal
 from pathlib import Path
 
-from feed_common import (
+from generate_utils_feed import (
     apply_prices,
     build_offer_data_map,
     fetch_xml,

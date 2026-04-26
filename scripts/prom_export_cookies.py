@@ -1,5 +1,5 @@
 """
-export_prom_cookies.py
+prom_export_cookies.py
 ----------------------
 Запускати ЛОКАЛЬНО після ручного входу в Prom.
 
@@ -9,7 +9,7 @@ export_prom_cookies.py
 Вміст prom_cookies.json треба додати в GitHub Secret PROM_COOKIES.
 
 Запуск:
-    python scripts/export_prom_cookies.py
+    python scripts/prom_export_cookies.py
 """
 
 import json

@@ -3,7 +3,7 @@
 Результат зберігається у data/markets/mapping.csv для ручної перевірки та корекції.
 
 Запуск:
-    python scripts/map_kasta_categories.py
+    python scripts/kasta_map_categories.py
 
 Алгоритм:
     1. Для кожного рядка kasta_coefficients.csv беремо category_name (напр. "Камеры видеонаблюдения")

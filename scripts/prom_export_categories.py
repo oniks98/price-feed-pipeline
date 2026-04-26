@@ -1,4 +1,6 @@
 """
+prom_export_categories.py
+-------------------------
 Синхронізує категорії з фіду PROM з локальними файлами маркетплейсів.
 Експортує ТІЛЬКИ ті категорії, під якими є реальні товари у фіді.
 Додає НОВІ категорії (яких ще немає по ID) до:
@@ -6,7 +8,7 @@
   - data/markets/mappings.xlsx (лист 'Категорія+') — маппінг категорій
 
 Запуск:
-    python scripts/export_prom_categories.py
+    python scripts/prom_export_categories.py
 """
 
 import csv

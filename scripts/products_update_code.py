@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-update_kod_product.py
+products_update_code.py
 ---------------------
 Алгоритм:
   1. Завантажує sku_map.json: { "000030614": 100100, ... }
