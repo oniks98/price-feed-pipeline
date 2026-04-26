@@ -1,0 +1,153 @@
+name: Merchant Center Feed
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Запускається 1 раз на добу о 22:00 Київ — за 2 год до опівночі,
+# щоб Google гарантовано забрав свіжий фід при оновленні о 00:00.
+#
+#   Kyiv  │ Зима (UTC+2) │ Літо (UTC+3)
+#   22:00 │   20:00 UTC  │  19:00 UTC
+#
+# GitHub Cron не підтримує умови по місяцю через OR — залишаємо один запис
+# і приймаємо зсув ±1 год як прийнятний (фід все одно свіжий).
+# За потреби точності — розкоментуй і додай місяці як у pipeline.yml.
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  schedule:
+    - cron: "0 19 * * *"   # 22:00 Kyiv літо (UTC+3) / 21:00 взимку — прийнятно
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (не пушити в data-latest)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+concurrency:
+  group: merchant-feed
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  generate-and-publish:
+    name: Generate & Publish Merchant Feed
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo (main)
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate Merchant Center feed
+        run: python scripts/generate_merchant_feed.py
+        env:
+          PROJECT_ROOT: ${{ github.workspace }}
+
+      - name: Verify output
+        run: |
+          if [ ! -f data/markets/merchant_feed.xml ]; then
+            echo "❌ merchant_feed.xml не знайдено — перериваємо"
+            exit 1
+          fi
+          SIZE=$(wc -c < data/markets/merchant_feed.xml)
+          ITEMS=$(grep -c '<item>' data/markets/merchant_feed.xml || true)
+          echo "✅ merchant_feed.xml: ${SIZE} байт, ${ITEMS} товарів"
+
+      - name: Skip push (dry-run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: echo "⚠️  dry-run — push до data-latest пропущено"
+
+      - name: Clone data-latest
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          if git ls-remote --exit-code --heads origin data-latest; then
+            git clone --branch data-latest --single-branch \
+              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
+              publish-dir
+            echo "✅ data-latest клоновано"
+          else
+            echo "⚠️  Гілка data-latest не існує — створюємо"
+            mkdir -p publish-dir
+            cd publish-dir
+            git init
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git remote add origin \
+              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            git checkout -b data-latest
+            git commit --allow-empty -m "chore: init data-latest branch"
+            git push origin data-latest
+            cd ..
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rotate _prev and copy new feed
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          mkdir -p publish-dir/data/markets
+
+          CURRENT="publish-dir/data/markets/merchant_feed.xml"
+          PREV="publish-dir/data/markets/merchant_feed_prev.xml"
+          NEW="data/markets/merchant_feed.xml"
+
+          [ -f "${CURRENT}" ] && cp "${CURRENT}" "${PREV}" && echo "✅ _prev ротовано"
+          cp "${NEW}" "${CURRENT}"
+          echo "✅ merchant_feed.xml скопійовано"
+
+      - name: Push to data-latest (amend)
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          BOT_NAME="github-actions[bot]"
+          BOT_EMAIL="github-actions[bot]@users.noreply.github.com"
+
+          cd publish-dir
+          git config user.name  "${BOT_NAME}"
+          git config user.email "${BOT_EMAIL}"
+          git add data/markets/merchant_feed.xml
+          git add data/markets/merchant_feed_prev.xml 2>/dev/null || true
+
+          if git diff --staged --quiet; then
+            echo "✅ Фід не змінився — коміт пропущено"
+          else
+            if git log --oneline -1 &>/dev/null; then
+              git commit --amend --no-edit \
+                --author="${BOT_NAME} <${BOT_EMAIL}>"
+            else
+              git commit -m "chore: merchant feed $(date -u '+%Y-%m-%d %H:%M UTC')" \
+                --author="${BOT_NAME} <${BOT_EMAIL}>"
+            fi
+            git push origin data-latest --force
+            echo "✅ merchant_feed.xml запушено в data-latest"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Print feed URL
+        run: |
+          echo ""
+          echo "════════════════════════════════════════════════════"
+          echo "🔗 Merchant Center feed URL:"
+          echo "   https://raw.githubusercontent.com/${{ github.repository }}/data-latest/data/markets/merchant_feed.xml"
+          echo ""
+          echo "📋 Вставити в: Merchant Center → Фіди → Запланований fetch"
+          echo "   Розклад Google: щодня о 00:00"
+          echo "════════════════════════════════════════════════════"

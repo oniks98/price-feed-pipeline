@@ -4,8 +4,8 @@
 
 ## 🕷️ Парсинг (спайдери)
 
-| Скрипт | Опис |
-|---|---|
+| Скрипт               | Опис                                                           |
+| -------------------- | -------------------------------------------------------------- |
 | `ultra_clean_run.py` | Запускає Scrapy-спайдер із повним очищенням кешу перед стартом |
 
 ```bash
@@ -20,14 +20,14 @@ python scripts/ultra_clean_run.py secur_feed_full
 
 ## 📦 Обробка товарів
 
-| Скрипт | Опис |
-|---|---|
-| `update_products.py` | Порівнює новий прайс зі старим, фіксує зміни цін, оновлює *_old.csv |
-| `merge_csv.py` | Зливає всі постачальники в єдиний merged.csv |
-| `merge_pending.py` | Зливає pending-файли (часткові оновлення) перед основним merge |
-| `fetch_wholesale_csvs.py` | Завантажує оптові CSV-прайси від постачальників |
-| `update_kod_product.py` | Оновлює / синхронізує Код_товару між файлами |
-| `check_product_code.py` | Перевіряє унікальність і послідовність Код_товару в export-products.xlsx; лог → logs/check_product_code.log |
+| Скрипт                    | Опис                                                                                                        |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `update_products.py`      | Порівнює новий прайс зі старим, фіксує зміни цін, оновлює \*\_old.csv                                       |
+| `merge_csv.py`            | Зливає всі постачальники в єдиний merged.csv                                                                |
+| `merge_pending.py`        | Зливає pending-файли (часткові оновлення) перед основним merge                                              |
+| `fetch_wholesale_csvs.py` | Завантажує оптові CSV-прайси від постачальників                                                             |
+| `update_kod_product.py`   | Оновлює / синхронізує Код_товару між файлами                                                                |
+| `check_product_code.py`   | Перевіряє унікальність і послідовність Код_товару в export-products.xlsx; лог → logs/check_product_code.log |
 
 ```bash
 python scripts/update_products.py viatec dealer
@@ -45,21 +45,24 @@ python scripts/check_product_code.py
 
 ## 📡 Генерація фідів маркетплейсів
 
-| Скрипт | Опис |
-|---|---|
-| `feed_common.py` | Спільна бібліотека: завантаження XML, розрахунок цін, коефіцієнти, фільтрація — імпортується всіма генераторами |
-| `generate_kasta_feed.py` | Генерує kasta_feed.xml (оптова ціна × коеф. категорії, fallback → DEFAULT_COEFFICIENT × XML-ціна) |
-| `generate_epicenter_feed.py` | Генерує epicenter_feed.xml |
-| `generate_rozetka_feed.py` | Генерує rozetka_feed.xml |
+| Скрипт                       | Опис                                                                                                            |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `feed_common.py`             | Спільна бібліотека: завантаження XML, розрахунок цін, коефіцієнти, фільтрація — імпортується всіма генераторами |
+| `generate_kasta_feed.py`     | Генерує kasta_feed.xml (оптова ціна × коеф. категорії, fallback → DEFAULT_COEFFICIENT × XML-ціна)               |
+| `generate_epicenter_feed.py` | Генерує epicenter_feed.xml                                                                                      |
+| `generate_rozetka_feed.py`   | Генерує rozetka_feed.xml                                                                                        |
 
 ```bash
+python scripts/generate_merchant_feed.py
 python scripts/generate_kasta_feed.py
 python scripts/generate_epicenter_feed.py
 python scripts/generate_rozetka_feed.py
 ```
 
 Актуальні фіди (гілка `data-latest`):
+
 ```
+https://raw.githubusercontent.com/oniks98/price-feed-pipeline/data-latest/data/markets/merchant_feed.xml
 https://raw.githubusercontent.com/oniks98/price-feed-pipeline/data-latest/data/markets/kasta_feed.xml
 https://raw.githubusercontent.com/oniks98/price-feed-pipeline/data-latest/data/markets/epicenter_feed.xml
 https://raw.githubusercontent.com/oniks98/price-feed-pipeline/data-latest/data/markets/rozetka_feed.xml
@@ -69,13 +72,13 @@ https://raw.githubusercontent.com/oniks98/price-feed-pipeline/data-latest/data/m
 
 ## 🗂️ Маппінг категорій та атрибутів
 
-| Скрипт | Опис |
-|---|---|
-| `export_prom_categories.py` | Синхронізує категорії з фіду Prom.ua з локальними файлами маркетплейсів |
-| `fetch_epicenter_categories.py` | Завантажує актуальне дерево категорій Epicenter |
-| `map_epicenter_categories.py` | Зіставляє категорії Prom ↔ Epicenter (rapidfuzz) |
-| `map_epicenter_attributes.py` | Маппінг атрибутів товарів під формат Epicenter |
-| `map_kasta_categories.py` | Зіставляє категорії Prom ↔ Kasta |
+| Скрипт                          | Опис                                                                    |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| `export_prom_categories.py`     | Синхронізує категорії з фіду Prom.ua з локальними файлами маркетплейсів |
+| `fetch_epicenter_categories.py` | Завантажує актуальне дерево категорій Epicenter                         |
+| `map_epicenter_categories.py`   | Зіставляє категорії Prom ↔ Epicenter (rapidfuzz)                        |
+| `map_epicenter_attributes.py`   | Маппінг атрибутів товарів під формат Epicenter                          |
+| `map_kasta_categories.py`       | Зіставляє категорії Prom ↔ Kasta                                        |
 
 ```bash
 python scripts/export_prom_categories.py
@@ -89,13 +92,13 @@ python scripts/map_kasta_categories.py
 
 ## 🛒 Автоматизація Prom.ua
 
-| Скрипт | Опис |
-|---|---|
-| `export_prom_cookies.py` | Витягує cookies активної сесії Prom і зберігає в prom_cookies.json |
-| `prom_api_trigger.py` | Тригер імпорту товарів у Prom.ua через API після git push |
-| `prom_noindex_automation.py` | Масово виставляє noindex на вказані товари |
-| `prom_prosale_automation.py` | Масово додає ProSale до вказаних товарів |
-| `prom_status.py` | Перевіряє поточний статус товарів на Prom.ua |
+| Скрипт                       | Опис                                                               |
+| ---------------------------- | ------------------------------------------------------------------ |
+| `export_prom_cookies.py`     | Витягує cookies активної сесії Prom і зберігає в prom_cookies.json |
+| `prom_api_trigger.py`        | Тригер імпорту товарів у Prom.ua через API після git push          |
+| `prom_noindex_automation.py` | Масово виставляє noindex на вказані товари                         |
+| `prom_prosale_automation.py` | Масово додає ProSale до вказаних товарів                           |
+| `prom_status.py`             | Перевіряє поточний статус товарів на Prom.ua                       |
 
 ```bash
 python scripts/export_prom_cookies.py
@@ -109,8 +112,8 @@ python scripts/prom_status.py
 
 ## 🧹 Очистка Kasta
 
-| Скрипт | Опис |
-|---|---|
+| Скрипт                 | Опис                                                                   |
+| ---------------------- | ---------------------------------------------------------------------- |
 | `kasta_bulk_select.py` | Масово знімає / виставляє товари на Kasta через браузер з debug-портом |
 
 ```bash
@@ -165,10 +168,10 @@ git push origin data-latest --force
 
 ## 📊 Розмір репозиторію (для контролю)
 
-| Дата | Size (GitHub API) |
-|---|---|
-| 12.04.26 | 16 744 |
-| 19.04.26 | 41 847 |
+| Дата     | Size (GitHub API) |
+| -------- | ----------------- |
+| 12.04.26 | 16 744            |
+| 19.04.26 | 41 847            |
 
 ```
 https://api.github.com/repos/oniks98/price-feed-pipeline
