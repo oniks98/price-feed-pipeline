@@ -170,6 +170,50 @@ def load_coefficients(
     return coefficients
 
 
+def load_default_coefficient(csv_path: Path, coef_column: str) -> Decimal:
+    """
+    Читає DEFAULT_COEFFICIENT з рядка category_id=0 (uncategorized)
+    у markets_coefficients.csv.
+
+    Кидає FileNotFoundError якщо файл відсутній,
+    ValueError якщо рядок category_id=0 не знайдено або значення невалідне.
+    Не має тихого fallback — некоректний коефіцієнт призведе до невірних цін.
+    """
+    if not csv_path.exists():
+        raise FileNotFoundError(
+            f"markets_coefficients.csv не знайдено: {csv_path}. "
+            "Неможливо визначити DEFAULT_COEFFICIENT."
+        )
+
+    encoding = _detect_csv_encoding(csv_path)
+
+    with csv_path.open(encoding=encoding, errors="replace", newline="") as f:
+        first = f.readline()
+        delimiter = ";" if ";" in first else ","
+        f.seek(0)
+
+        for row in csv.DictReader(f, delimiter=delimiter):
+            cat_id = (row.get("category_id") or "").strip().strip("\ufeff")
+            if cat_id != "0":
+                continue
+
+            raw = (row.get(coef_column) or "").strip().replace(",", ".")
+            try:
+                value = Decimal(raw)
+            except Exception:
+                raise ValueError(
+                    f"Невірне значення DEFAULT_COEFFICIENT у CSV: {raw!r} "
+                    f"(колонка {coef_column!r}, category_id=0)"
+                )
+            print(f"📌 DEFAULT_COEFFICIENT ({coef_column}): {value} (з CSV, category_id=0)")
+            return value
+
+    raise ValueError(
+        f"Рядок category_id=0 (uncategorized) не знайдено у {csv_path} "
+        f"— неможливо визначити DEFAULT_COEFFICIENT для {coef_column!r}"
+    )
+
+
 def load_wholesale_price_index(root: Path) -> dict[str, Decimal]:
     """
     Будує {Код_товару: Оптова_ціна} з усіх supplier *_old.csv файлів
