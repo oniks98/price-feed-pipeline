@@ -41,10 +41,16 @@ class ViatecRetailSpider(ViatecBaseSpider, BaseRetailSpider):
 
         _root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         csv_path = str(_root / "data" / "viatec" / "viatec_category.csv")
-        self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
+        try:
+            self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
+        except Exception as exc:
+            raise RuntimeError(f"❌ CategorySpecsEnricher не ініціалізовано: {exc}") from exc
 
         # ── XML-фід: виробники за артикулом (пріоритет перед CSV-словариком) ──
-        self.feed_service = ViatecFeedService(logger=self.logger)
+        try:
+            self.feed_service = ViatecFeedService(logger=self.logger)
+        except Exception as exc:
+            raise RuntimeError(f"❌ ViatecFeedService не ініціалізовано: {exc}") from exc
 
         # ── RESUME: завантажуємо вже спарсені товари з попереднього запуску ──
         already_scraped = self._load_already_scraped_urls(_root)
@@ -88,6 +94,8 @@ class ViatecRetailSpider(ViatecBaseSpider, BaseRetailSpider):
             Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
             / "data" / "viatec" / "viatec_category.csv"
         )
+        if not csv_path.exists():
+            raise RuntimeError(f"❌ Файл категорій не знайдено: {csv_path}")
         try:
             with open(csv_path, encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
@@ -104,9 +112,13 @@ class ViatecRetailSpider(ViatecBaseSpider, BaseRetailSpider):
                         "subdivision_id":   row.get("Ідентифікатор_підрозділу", ""),
                         "subdivision_link": row.get("Посилання_підрозділу", ""),
                     }
-            self.logger.info(f"✅ Завантажено {len(mapping)} категорій (site channel)")
-        except Exception as e:
-            self.logger.error(f"❌ Помилка завантаження категорій: {e}")
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"❌ Не вдалося завантажити category mapping: {exc}") from exc
+        if not mapping:
+            raise RuntimeError(f"❌ Category mapping порожній (немає site-рядків): {csv_path}")
+        self.logger.info(f"✅ Завантажено {len(mapping)} категорій (site channel)")
         return mapping
 
     # ──────────────────────────────────────────────────────────

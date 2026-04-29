@@ -150,7 +150,10 @@ class SecurFeedFullSpider(scrapy.Spider):
         import os as _os
         _root = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         csv_path = str(_root / "data" / "secur" / "secur_category.csv")
-        self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
+        try:
+            self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
+        except Exception as exc:
+            raise RuntimeError(f"❌ CategorySpecsEnricher не ініціалізовано: {exc}") from exc
 
         # Кеш UA-даних: назви, описи, хар-ки з <param> (УКРАЇНСЬКОЮ)
         # Очищається перед кожним новим фідом у parse_ua_feed
@@ -206,6 +209,8 @@ class SecurFeedFullSpider(scrapy.Spider):
             Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
             / "data" / "secur" / "secur_category.csv"
         )
+        if not csv_path.exists():
+            raise RuntimeError(f"❌ Файл категорій не знайдено: {csv_path}")
         try:
             with open(csv_path, encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
@@ -227,9 +232,13 @@ class SecurFeedFullSpider(scrapy.Spider):
                         "category_url":     row.get("Линк категории поставщика", "").strip().strip('"'),
                         "feed":             allowed_feed,
                     }
-            self.logger.info(f"✅ Завантажено {len(mapping)} category mappings")
-        except Exception as e:
-            self.logger.error(f"❌ Помилка завантаження category mappings: {e}")
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"❌ Не вдалося завантажити category mapping: {exc}") from exc
+        if not mapping:
+            raise RuntimeError(f"❌ Category mapping порожній (немає site-рядків): {csv_path}")
+        self.logger.info(f"✅ Завантажено {len(mapping)} category mappings")
         return mapping
 
     def _is_deleted_category(self, category_id: str) -> bool:

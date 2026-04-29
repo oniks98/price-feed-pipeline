@@ -117,7 +117,10 @@ class SecurRetailSpider(BaseRetailSpider):
         import os as _os
         _root = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         csv_path = str(_root / "data" / "secur" / "secur_category.csv")
-        self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
+        try:
+            self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
+        except Exception as exc:
+            raise RuntimeError(f"❌ CategorySpecsEnricher не ініціалізовано: {exc}") from exc
 
         already_scraped = self._load_already_scraped_urls()
         self.processed_products.update(already_scraped)
@@ -133,6 +136,8 @@ class SecurRetailSpider(BaseRetailSpider):
             Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
             / "data" / "secur" / "secur_category.csv"
         )
+        if not csv_path.exists():
+            raise RuntimeError(f"❌ Файл категорій не знайдено: {csv_path}")
         try:
             with open(csv_path, encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
@@ -149,9 +154,13 @@ class SecurRetailSpider(BaseRetailSpider):
                         "subdivision_id":   row.get("Ідентифікатор_підрозділу", ""),
                         "subdivision_link": row.get("Посилання_підрозділу", ""),
                     }
-            self.logger.info(f"✅ Завантажено {len(mapping)} категорій (site channel)")
-        except Exception as e:
-            self.logger.error(f"❌ Помилка завантаження категорій: {e}")
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"❌ Не вдалося завантажити category mapping: {exc}") from exc
+        if not mapping:
+            raise RuntimeError(f"❌ Category mapping порожній (немає site-рядків): {csv_path}")
+        self.logger.info(f"✅ Завантажено {len(mapping)} категорій (site channel)")
         return mapping
 
     # ──────────────────────────────────────────────────────────────────

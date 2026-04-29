@@ -112,7 +112,10 @@ class SecurFeedSpider(scrapy.Spider):
         self.category_mapping: dict[tuple[str, str], dict] = self._load_category_mapping()
 
         csv_path = str(self._root / "data" / "secur" / "secur_category.csv")
-        self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
+        try:
+            self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
+        except Exception as exc:
+            raise RuntimeError(f"❌ CategorySpecsEnricher не ініціалізовано: {exc}") from exc
 
         # Кеш UA-даних поточного фіду: {product_id → {name_ua, description_ua, specs_from_feed}}
         self.products_ua: dict[str, dict] = {}
@@ -156,6 +159,8 @@ class SecurFeedSpider(scrapy.Spider):
         """
         mapping: dict = {}
         csv_path = self._root / "data" / "secur" / "secur_category.csv"
+        if not csv_path.exists():
+            raise RuntimeError(f"❌ Файл категорій не знайдено: {csv_path}")
         try:
             with open(csv_path, encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
@@ -177,9 +182,13 @@ class SecurFeedSpider(scrapy.Spider):
                         "category_url":     row.get("Линк категории поставщика", "").strip().strip('"'),
                         "feed":             feed_id,
                     }
-            self.logger.info(f"✅ Category mappings: {len(mapping)}")
+        except RuntimeError:
+            raise
         except Exception as exc:
-            self.logger.error(f"❌ Category mapping load failed: {exc}")
+            raise RuntimeError(f"❌ Не вдалося завантажити category mapping: {exc}") from exc
+        if not mapping:
+            raise RuntimeError(f"❌ Category mapping порожній (немає site-рядків): {csv_path}")
+        self.logger.info(f"✅ Category mappings: {len(mapping)}")
         return mapping
 
     def _is_deleted_category(self, category_id: str) -> bool:
