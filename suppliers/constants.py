@@ -34,16 +34,18 @@ OUTPUT_DIR: Final[Path] = BASE_DATA_DIR / "output"
 #   3 = 3 знаки (рідкісні випадки)
 #
 # Приклади:
-#   viatec_dealer: 2  → USD з копійками (123.45)
-#   viatec_retail: 0  → UAH цілі (1235)
-#   eserver: 0        → UAH цілі (1235)
+#   viatec_dealer: 2      → USD з копійками (123.45)
+#   viatec_feed_full: 2   → USD з копійками (123.45)
+#   viatec_retail: 0      → UAH цілі (1235)
+#   eserver: 0            → UAH цілі (1235)
 # =============================================================================
 
 DEFAULT_PRICE_DECIMALS: Final[int] = 0  # UAH за замовчуванням
 
 PRICE_DECIMALS: Final[Mapping[str, int]] = {
     # USD постачальники (ціни з копійками)
-    "viatec_dealer": 2,  # USD з копійками
+    "viatec_dealer": 2,     # USD з копійками
+    "viatec_feed_full": 2,  # USD з копійками (фід-driven варіант dealer)
     # UAH постачальники (ціни цілі)
     "viatec_retail": 0,  # UAH цілі
     "eserver": 0,
@@ -80,6 +82,7 @@ DEFAULT_CURRENCY: Final[str] = "UAH"
 
 SUPPLIER_CURRENCIES: Final[Mapping[str, str]] = {
     "viatec_dealer": "USD",
+    "viatec_feed_full": "USD",  # фід-driven варіант dealer
     "viatec_retail": "UAH",
     "eserver": "UAH",
     "secur": "UAH",
