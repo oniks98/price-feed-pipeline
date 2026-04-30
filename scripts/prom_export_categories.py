@@ -29,6 +29,10 @@ MAPPINGS_NAME_COL = "Категорії фіду"
 
 MARKETS_CSV = Path(__file__).parents[1] / "data" / "markets" / "markets_coefficients.csv"
 
+# category_id зарезервований як рядок дефолтних коефіцієнтів.
+# Щоб змінити дефолти — редагуй цей рядок у CSV, не чіпай код.
+DEFAULT_COEFS_ROW_ID = "1"
+
 
 def fetch_xml(url: str) -> str:
     response = requests.get(url, timeout=120)
@@ -161,30 +165,50 @@ def update_mappings_excel(active_categories: dict[str, dict], all_categories: di
         print(f"   + [{cat_id}] {build_display_name(cat_id, all_categories)}")
 
 
+def _load_coef_fields(fieldnames: list[str]) -> list[str]:
+    """Повертає список колонок коефіцієнтів (всі що починаються на 'coef_')."""
+    return [f for f in fieldnames if f.startswith("coef_")]
+
+
+def _load_default_coefs(rows: list[dict], coef_fields: list[str]) -> dict[str, str]:
+    """
+    Читає дефолтні коефіцієнти з рядка DEFAULT_COEFS_ROW_ID у CSV.
+    Щоб змінити дефолти — редагуй рядок з category_id=1 у файлі.
+    Якщо рядок не знайдено — падає з явною помилкою (не мовчки підставляє хардкод).
+    """
+    sentinel = next(
+        (row for row in rows if row.get("category_id") == DEFAULT_COEFS_ROW_ID),
+        None,
+    )
+    if sentinel is None:
+        raise ValueError(
+            f"Рядок дефолтних коефіцієнтів (category_id={DEFAULT_COEFS_ROW_ID}) "
+            f"не знайдено в {MARKETS_CSV}. "
+            f"Додай рядок: {DEFAULT_COEFS_ROW_ID};new_default_categories;<coef_kasta>;<coef_epicenter>;<coef_rozetka>"
+        )
+    coefs = {field: sentinel[field] for field in coef_fields if field in sentinel}
+    coef_str = ";".join(f"{k}={v}" for k, v in coefs.items())
+    print(f"📐 Дефолтні коефіцієнти (category_id={DEFAULT_COEFS_ROW_ID}): {coef_str}")
+    return coefs
+
+
 def update_markets_csv(active_categories: dict[str, dict], all_categories: dict[str, dict]) -> None:
     """Дописує в markets_coefficients.csv тільки НОВІ категорії з дефолтними коефіцієнтами."""
     if not MARKETS_CSV.exists():
         print(f"⚠️  markets_coefficients.csv не знайдено: {MARKETS_CSV}")
         return
 
-    # Зчитуємо існуючі рядки та визначаємо існуючі ID
     with MARKETS_CSV.open("r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f, delimiter=";")
         fieldnames = reader.fieldnames or []
         rows = list(reader)
 
-    existing_ids = {row["category_id"] for row in rows}
+    coef_fields = _load_coef_fields(fieldnames)
+    default_coefs = _load_default_coefs(rows, coef_fields)
 
-    # Беремо дефолтні коефіцієнти з останнього рядка файлу
-    if rows:
-        last = rows[-1]
-        default_coefs = {
-            "coef_kasta":     last.get("coef_kasta", "1.02"),
-            "coef_epicenter": last.get("coef_epicenter", "1.22"),
-            "coef_rozetka":   last.get("coef_rozetka", "1.32"),
-        }
-    else:
-        default_coefs = {"coef_kasta": "1.02", "coef_epicenter": "1.22", "coef_rozetka": "1.32"}
+    # Виключаємо sentinel-рядок і системний (id=0) з множини існуючих —
+    # вони не є реальними категоріями, але вже є в файлі.
+    existing_ids = {row["category_id"] for row in rows}
 
     new_categories = {
         cat_id: cat
@@ -198,16 +222,17 @@ def update_markets_csv(active_categories: dict[str, dict], all_categories: dict[
 
     with MARKETS_CSV.open("a", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
-        for cat_id, _ in sorted(new_categories.items(), key=lambda x: int(x[0])):
+        for cat_id in sorted(new_categories, key=lambda x: int(x)):
             writer.writerow({
                 "category_id":   cat_id,
                 "category_name": build_display_name(cat_id, all_categories),
                 **default_coefs,
             })
 
+    coef_display = ";".join(default_coefs.values())
     print(f"✅ Додано {len(new_categories)} нових категорій → {MARKETS_CSV}")
     for cat_id in sorted(new_categories, key=lambda x: int(x)):
-        print(f"   + [{cat_id}] {build_display_name(cat_id, all_categories)}  {default_coefs['coef_kasta']};{default_coefs['coef_epicenter']};{default_coefs['coef_rozetka']}")
+        print(f"   + [{cat_id}] {build_display_name(cat_id, all_categories)}  {coef_display}")
 
 
 if __name__ == "__main__":

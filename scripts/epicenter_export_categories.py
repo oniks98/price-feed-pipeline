@@ -1,6 +1,7 @@
 """
 Завантажує категорії Епіцентру через API V2 і генерує файл маппінгу:
   data/markets/epicenter_mappings.xlsx
+  Категорії ПРОМу завантажує з mappings.xlsx
 
 Запуск:
     python scripts/epicenter_export_categories.py

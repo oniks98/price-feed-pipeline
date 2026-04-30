@@ -31,7 +31,7 @@ import openpyxl
 BASE_DIR = Path(r"C:\FullStack\PriceFeedPipeline\data\markets")
 
 MAPPINGS_PATH   = BASE_DIR / "mappings.xlsx"
-ROYALTY_PATH    = BASE_DIR / "royalty.xlsx"
+ROYALTY_PATH    = BASE_DIR / "royalty_kasta.xlsx"
 CSV_PATH        = BASE_DIR / "markets_coefficients.csv"
 
 MAPPINGS_SHEET  = "Категорія+"
