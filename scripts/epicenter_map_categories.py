@@ -4,9 +4,9 @@ epicenter_map_categories.py
 Запуск:
     python scripts/epicenter_map_categories.py
 
-Reads epicenter_mappings.xlsx, matches categories from sheet "Маппінг"
-against sheet "Категорії Епіцентру" using word/stem overlap (≥60%),
-and writes back: epicenter_category_id, Назва категорії Епіцентру, parentCode.
+Читає epicenter_mappings.xlsx, зіставляє категорії з аркуша "Маппінг"
+з аркушем "Категорії Епіцентру" за збігом слів/стемів (≥80%)
+та записує назад: epicenter_category_id, Назва категорії Епіцентру, parentCode.
 """
 
 import re
@@ -18,14 +18,14 @@ from rapidfuzz import fuzz
 # ──────────────────────────────────────────────
 # Config
 # ──────────────────────────────────────────────
-XLSX_PATH = Path(r"C:\FullStack\Scrapy\data\markets\epicenter_mappings.xlsx")
+ROOT        = Path(__file__).parents[1]
+OUTPUT_PATH = ROOT / "data" / "markets" / "epicenter_mappings.xlsx"
 
 SHEET_MAPPING = "Маппінг"
 SHEET_EPICENTER = "Категорії Епіцентру"
 
 # Columns in "Маппінг"
-COL_PROMO_UK = "Категорія Прому  укр"
-COL_PROMO_RU = "Категорія Прому  рус"
+COL_PROMO = "Категорія Прому"
 COL_EPI_ID = "epicenter_category_id"
 COL_EPI_NAME = "Назва категорії Епіцентру"
 COL_PARENT = "parentCode"
@@ -108,19 +108,15 @@ def token_overlap_score(query_tokens: list[str], target_tokens: list[str]) -> fl
 
 
 def best_match(
-    query_uk: str,
-    query_ru: str,
+    query: str,
     epi_rows: list[dict],
 ) -> dict | None:
     """
-    Find the best matching Epicenter row for given Ukrainian + Russian query strings.
+    Find the best matching Epicenter row for a given query string.
     Returns the row dict or None if no match reaches MATCH_THRESHOLD.
     """
-    seg_uk = extract_last_segment(query_uk)
-    seg_ru = extract_last_segment(query_ru)
-
-    q_tokens_uk = tokenize(seg_uk)
-    q_tokens_ru = tokenize(seg_ru)
+    seg = extract_last_segment(query)
+    q_tokens = tokenize(seg)
 
     best_score = 0.0
     best_row: dict | None = None
@@ -128,26 +124,20 @@ def best_match(
     for row in epi_rows:
         target_tokens = tokenize(row[EPI_COL_NAME_UK] or "")
 
-        # Score against Ukrainian query
-        score_uk = token_overlap_score(q_tokens_uk, target_tokens) if q_tokens_uk else 0
-        # Score against Russian query (fallback / extra signal)
-        score_ru = token_overlap_score(q_tokens_ru, target_tokens) if q_tokens_ru else 0
+        score_tokens = token_overlap_score(q_tokens, target_tokens) if q_tokens else 0
+        ratio = fuzz.partial_ratio(normalize(seg), normalize(row[EPI_COL_NAME_UK] or ""))
 
-        # Also try full fuzzy ratio on normalized strings (handles short labels well)
-        ratio_uk = fuzz.partial_ratio(normalize(seg_uk), normalize(row[EPI_COL_NAME_UK] or ""))
-        ratio_ru = fuzz.partial_ratio(normalize(seg_ru), normalize(row[EPI_COL_NAME_UK] or ""))
-
-        score = max(score_uk, score_ru, ratio_uk, ratio_ru)
+        score = max(score_tokens, ratio)
 
         if score > best_score:
             best_score = score
             best_row = row
 
     if best_score >= MATCH_THRESHOLD:
-        print(f"  ✓ [{best_score:.0f}%] '{seg_uk}' → '{best_row[EPI_COL_NAME_UK]}'")
+        print(f"  ✓ [{best_score:.0f}%] '{seg}' → '{best_row[EPI_COL_NAME_UK]}'")
         return best_row
 
-    print(f"  ✗ [{best_score:.0f}%] '{seg_uk}' — no match")
+    print(f"  ✗ [{best_score:.0f}%] '{seg}' — no match")
     return None
 
 
@@ -185,10 +175,10 @@ def read_sheet_as_dicts(ws) -> tuple[list[dict], dict[str, int]]:
 # ──────────────────────────────────────────────
 
 def main() -> None:
-    if not XLSX_PATH.exists():
-        raise FileNotFoundError(f"File not found: {XLSX_PATH}")
+    if not OUTPUT_PATH.exists():
+        raise FileNotFoundError(f"File not found: {OUTPUT_PATH}")
 
-    wb = openpyxl.load_workbook(XLSX_PATH)
+    wb = openpyxl.load_workbook(OUTPUT_PATH)
 
     if SHEET_MAPPING not in wb.sheetnames:
         raise ValueError(
@@ -225,44 +215,50 @@ def main() -> None:
     col_epi_name = ensure_col(COL_EPI_NAME)
     col_parent = ensure_col(COL_PARENT)
 
-    col_uk = map_headers.get(COL_PROMO_UK)
-    col_ru = map_headers.get(COL_PROMO_RU)
+    col_promo = map_headers.get(COL_PROMO)
 
-    if not col_uk:
+    if not col_promo:
         raise ValueError(
-            f"Column '{COL_PROMO_UK}' not found. Found: {list(map_headers.keys())}"
-        )
-    if not col_ru:
-        raise ValueError(
-            f"Column '{COL_PROMO_RU}' not found. Found: {list(map_headers.keys())}"
+            f"Column '{COL_PROMO}' not found. Found: {list(map_headers.keys())}"
         )
 
     # Iterate data rows (skip header row 1)
     updated = 0
     skipped = 0
+    already_matched = 0
 
     for row_idx in range(2, ws_map.max_row + 1):
-        val_uk = ws_map.cell(row_idx, col_uk).value or ""
-        val_ru = ws_map.cell(row_idx, col_ru).value or ""
+        val = ws_map.cell(row_idx, col_promo).value or ""
 
-        if not str(val_uk).strip() and not str(val_ru).strip():
+        if not str(val).strip():
             continue  # empty row
 
-        print(f"Row {row_idx}: '{val_uk}' / '{val_ru}'")
+        # Skip rows where all three output columns are already filled
+        already_epi_id   = ws_map.cell(row_idx, col_epi_id).value
+        already_epi_name = ws_map.cell(row_idx, col_epi_name).value
 
-        match = best_match(str(val_uk), str(val_ru), epi_rows)
+        if already_epi_id and already_epi_name:
+            already_matched += 1
+            continue  # matching already done — skip
+
+        print(f"Row {row_idx}: '{val}'")
+
+        match = best_match(str(val), epi_rows)
 
         if match:
-            ws_map.cell(row_idx, col_epi_id).value = match.get(EPI_COL_CODE, "")
+            ws_map.cell(row_idx, col_epi_id).value   = match.get(EPI_COL_CODE, "")
             ws_map.cell(row_idx, col_epi_name).value = match.get(EPI_COL_NAME_UK, "")
-            ws_map.cell(row_idx, col_parent).value = match.get(EPI_COL_PARENT, "")
+            ws_map.cell(row_idx, col_parent).value   = match.get(EPI_COL_PARENT, "")
             updated += 1
         else:
             skipped += 1
 
-    wb.save(XLSX_PATH)
-    print(f"\nDone. Updated: {updated} rows | Skipped (no match): {skipped} rows.")
-    print(f"Saved → {XLSX_PATH}")
+    wb.save(OUTPUT_PATH)
+    print(
+        f"\nDone. Updated: {updated} | Skipped (no match): {skipped} "
+        f"| Already matched (skipped): {already_matched}"
+    )
+    print(f"Saved → {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":
