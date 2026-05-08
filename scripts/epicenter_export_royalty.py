@@ -1,54 +1,79 @@
 """
-Script  : epicenter_export_royalty.py
-Source  : https://admin.epicentrm.com.ua/public/commissions  (Angular SPA)
-Output  : C:\\FullStack\\PriceFeedPipeline\\data\\markets\\royalty_epicenter.xlsx
+Скрипт  : python scripts/epicenter_export_royalty.py
+Джерела :
+    - Комісії    : https://admin.epicentrm.com.ua/public/commissions  (Angular SPA)
+    - ID категорій: Google Sheets (стовпець A = ID, стовпець G = назва категорії останнього рівня)
 
-Columns : ID категорії | Группа | Відсоток роялті | parentCode
+Результат : C:\\FullStack\\PriceFeedPipeline\\data\\markets\\royalty_epicenter.xlsx
+Стовпці   : ID категорії | Группа | Відсоток роялті | parentCode
 
-ID source: DOM CSS class nodeId-XXXX (API interception disabled — API returns
-           localisation data, not the category tree).
+Визначення ID:
+    Назви категорій, отримані зі SPA, зіставляються зі стовпцем G Google-таблиці.
+    Відповідне значення стовпця A стає category_id.
+    У файл потрапляють лише категорії останнього рівня (замаплені).
+    Кореневі та проміжні категорії ігноруються.
 
-Install deps (once):
-    pip install playwright openpyxl beautifulsoup4
+Встановлення залежностей (один раз):
+    pip install playwright openpyxl beautifulsoup4 requests
     playwright install chromium
 
-Usage:
-    python epicenter_export_royalty.py             # live fetch + export
-    python epicenter_export_royalty.py --dry-run   # print to console only
-    python epicenter_export_royalty.py --show-api  # log intercepted API URLs
+Запуск:
+    python epicenter_export_royalty.py               # отримати дані та зберегти в XLSX
+    python epicenter_export_royalty.py --dry-run     # вивести результат у консоль
+    python epicenter_export_royalty.py --show-api    # логувати перехоплені API-запити
+    python epicenter_export_royalty.py --diagnose    # порівняти назви зі SPA і Google Sheet
+    python epicenter_export_royalty.py --sheet-only  # показати перші N рядків Google Sheet і завершити
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import logging
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass, fields
 from pathlib import Path
+from typing import Iterator
+
+import requests
 
 # ---------------------------------------------------------------------------
-# Config
+# Конфігурація
 # ---------------------------------------------------------------------------
 
 TARGET_URL  = "https://admin.epicentrm.com.ua/public/commissions"
 OUTPUT_PATH = Path(r"C:\FullStack\PriceFeedPipeline\data\markets\royalty_epicenter.xlsx")
+
+# Google-таблиця з канонічними ID категорій
+# Стовпець A = ID категорії  |  Стовпець G = Категорія останнього рівня
+SHEET_ID  = "1Zzt9KHX5E5RPforoM924fDfdB3rx6O2TgxOKZy7t-fw"
+SHEET_GID = "631872394"
+
+# Індекси стовпців у таблиці (0-based після csv.reader)
+COL_ID   = 0   # A
+COL_NAME = 6   # G
 
 PAGE_TIMEOUT_MS   = 30_000
 EXPAND_TIMEOUT_MS = 5_000
 SETTLE_MS         = 600
 MAX_EXPAND_PASSES = 20
 
+DIAGNOSE_SAMPLE = 30
+
 # ---------------------------------------------------------------------------
-# Schema  (single source of truth — 4 columns)
+# Схема (єдине джерело правди)
 # ---------------------------------------------------------------------------
 
 @dataclass(slots=True)
 class CategoryRow:
-    category_id   : str   # ID категорії  (nodeId-XXXX from DOM)
-    category_name : str   # Группа
+    category_id   : str   # ID категорії  (з Google Sheets)
+    category_name : str   # Группа        (зі SPA)
     commission_pct: str   # Відсоток роялті
-    parent_code   : str   # parentCode     (category_id of immediate parent)
+    parent_code   : str   # category_id безпосереднього батька
+
 
 FIELDNAMES: list[str] = [f.name for f in fields(CategoryRow)]
 
@@ -60,7 +85,7 @@ HEADERS: dict[str, str] = {
 }
 
 # ---------------------------------------------------------------------------
-# Logging
+# Логування
 # ---------------------------------------------------------------------------
 
 logging.basicConfig(
@@ -70,8 +95,161 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+
 # ---------------------------------------------------------------------------
-# Playwright: fetch + expand all collapsed nodes
+# Нормалізація (єдина функція для обох джерел)
+# ---------------------------------------------------------------------------
+
+def _normalize(name: str) -> str:
+    """
+    Агресивна нормалізація для зіставлення назв із двох різних джерел:
+      1. NFC — усуває розбіжності NFD/NFC (різні байти для одного символу)
+      2. Видалення невидимих Unicode-символів (zero-width space, м'який перенос тощо)
+      3. Заміна всіх видів пробілів (\xa0, \u2009 і под.) на звичайний пробіл
+      4. Нижній регістр + collapse пробілів
+    """
+    name = unicodedata.normalize("NFC", name)
+    name = "".join(
+        ch for ch in name
+        if unicodedata.category(ch) not in ("Cc", "Cf")
+    )
+    name = re.sub(r"\s+", " ", name)
+    return name.strip().lower()
+
+
+# ---------------------------------------------------------------------------
+# Google Sheets — завантаження сирого CSV
+# ---------------------------------------------------------------------------
+
+def _sheet_csv_url(sheet_id: str, gid: str) -> str:
+    return (
+        f"https://docs.google.com/spreadsheets/d/{sheet_id}"
+        f"/export?format=csv&gid={gid}"
+    )
+
+
+def _fetch_sheet_csv(sheet_id: str = SHEET_ID, gid: str = SHEET_GID) -> list[list[str]]:
+    """Завантажує CSV і повертає всі рядки (включно з заголовком)."""
+    url = _sheet_csv_url(sheet_id, gid)
+    log.info("Завантаження Google Sheet: %s", url)
+    try:
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        resp.encoding = "utf-8"  # Google Sheets CSV завжди UTF-8
+    except requests.RequestException as exc:
+        log.error("Не вдалося завантажити Google Sheet: %s", exc)
+        sys.exit(1)
+    return list(csv.reader(io.StringIO(resp.text)))
+
+
+def fetch_id_map(sheet_id: str = SHEET_ID, gid: str = SHEET_GID) -> dict[str, str]:
+    """
+    Завантажує Google Sheet як CSV та повертає {normalized_name: category_id}.
+
+    Враховуються лише рядки, де заповнені обидва поля: ID (стовп. A) і назва (стовп. G).
+    """
+    all_rows = _fetch_sheet_csv(sheet_id, gid)
+    header   = all_rows[0] if all_rows else []
+    log.info(
+        "Заголовок таблиці (%d стовпців): %s",
+        len(header),
+        " | ".join(f"[{i}]{v}" for i, v in enumerate(header)),
+    )
+
+    id_map: dict[str, str] = {}
+    skipped = 0
+
+    for row in all_rows[1:]:
+        if len(row) <= COL_NAME:
+            skipped += 1
+            continue
+
+        raw_id   = row[COL_ID].strip()
+        raw_name = row[COL_NAME].strip()
+
+        if not raw_id or not raw_name:
+            skipped += 1
+            continue
+
+        key = _normalize(raw_name)
+        if key in id_map and id_map[key] != raw_id:
+            log.warning(
+                "Дублікат назви %r у таблиці — залишено ID=%s, ігноровано ID=%s",
+                raw_name, id_map[key], raw_id,
+            )
+            continue
+
+        id_map[key] = raw_id
+
+    log.info("Мапа ID завантажена: %d записів | пропущено рядків: %d", len(id_map), skipped)
+    return id_map
+
+
+# ---------------------------------------------------------------------------
+# Діагностика: порівняння назв зі SPA і Google Sheet
+# ---------------------------------------------------------------------------
+
+def cmd_sheet_only(n: int = DIAGNOSE_SAMPLE) -> None:
+    """Виводить перші N рядків Google Sheet (стовпці A і G) і завершує роботу."""
+    all_rows = _fetch_sheet_csv()
+    print(f"\n{'='*60}")
+    print(f"Google Sheet — перші {n} рядків (стовп. A = ID, стовп. G = назва)")
+    print(f"{'='*60}")
+    header = all_rows[0] if all_rows else []
+    print(f"  Заголовок: {header}")
+    print()
+    for i, row in enumerate(all_rows[1 : n + 1], 1):
+        col_a = row[COL_ID]   if len(row) > COL_ID   else "(немає)"
+        col_g = row[COL_NAME] if len(row) > COL_NAME else "(немає)"
+        print(f"  {i:>3}. A={col_a!r:>8}  G={col_g!r}  norm={_normalize(col_g)!r}")
+    print(f"{'='*60}\n")
+
+
+def cmd_diagnose(html: str, id_map: dict[str, str], n: int = DIAGNOSE_SAMPLE) -> None:
+    """
+    Порівнює назви зі SPA і Google Sheet.
+    Виводить repr() кожної назви — видно невидимі символи.
+    """
+    spa_names = [node.name for node in _iter_parsed_nodes(html)]
+    sheet_keys = list(id_map.keys())
+
+    print(f"\n{'='*60}")
+    print(f"ДІАГНОСТИКА: перші {n} назв зі SPA")
+    print(f"{'='*60}")
+    for i, name in enumerate(spa_names[:n], 1):
+        norm    = _normalize(name)
+        matched = "✓" if norm in id_map else "✗"
+        print(f"  {matched} {i:>3}. raw={name!r}")
+        print(f"           norm={norm!r}")
+
+    print(f"\n{'='*60}")
+    print(f"ДІАГНОСТИКА: перші {n} ключів із Google Sheet")
+    print(f"{'='*60}")
+    for i, key in enumerate(sheet_keys[:n], 1):
+        print(f"  {i:>3}. {key!r}")
+
+    print(f"\n{'='*60}")
+    print("ЧАСТКОВІ ЗБІГИ (перші 5 SPA-назв vs усі ключі sheet)")
+    print(f"{'='*60}")
+    for spa_name in spa_names[:5]:
+        norm = _normalize(spa_name)
+        candidates = [k for k in sheet_keys if norm in k or k in norm]
+        print(f"  SPA raw:  {spa_name!r}")
+        print(f"  SPA norm: {norm!r}")
+        if candidates:
+            for c in candidates[:3]:
+                print(f"    ~sheet: {c!r}  ->  ID={id_map[c]}")
+        else:
+            print("    (жодного часткового збігу)")
+        print()
+
+    print(f"{'='*60}")
+    print(f"Підсумок: SPA={len(spa_names)} назв | Sheet={len(sheet_keys)} ключів")
+    print(f"{'='*60}\n")
+
+
+# ---------------------------------------------------------------------------
+# Playwright — завантаження та повне розгортання дерева SPA
 # ---------------------------------------------------------------------------
 
 COLLAPSED_SEL = "span.toggle-children-collapsed"
@@ -82,39 +260,36 @@ def _expand_all(page) -> None:
     for pass_num in range(1, MAX_EXPAND_PASSES + 1):
         collapsed = page.query_selector_all(COLLAPSED_SEL)
         if not collapsed:
-            log.info("Pass %d: no collapsed nodes left -> done", pass_num)
+            log.info("Прохід %d: згорнутих вузлів немає -> завершено", pass_num)
             break
-        log.info("Pass %d: clicking %d collapsed arrows...", pass_num, len(collapsed))
+        log.info("Прохід %d: клік по %d стрілках...", pass_num, len(collapsed))
         for btn in collapsed:
             try:
                 btn.scroll_into_view_if_needed()
                 btn.click(timeout=EXPAND_TIMEOUT_MS)
             except Exception as exc:
-                log.debug("Click skipped: %s", exc)
+                log.debug("Клік пропущено: %s", exc)
         page.wait_for_timeout(SETTLE_MS)
     else:
         log.warning(
-            "Reached MAX_EXPAND_PASSES=%d — tree may be incomplete",
+            "Досягнуто MAX_EXPAND_PASSES=%d — дерево може бути неповним",
             MAX_EXPAND_PASSES,
         )
 
 
 def fetch_page(url: str, show_api: bool = False) -> str:
-    """
-    Launch headless Chromium, expand all tree nodes, return full page HTML.
-    API interception is used only for --show-api diagnostics.
-    """
+    """Запускає headless Chromium, розгортає всі вузли дерева, повертає HTML сторінки."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         log.error(
-            "playwright not installed. Run:\n"
+            "playwright не встановлено. Виконайте:\n"
             "  pip install playwright\n"
             "  playwright install chromium"
         )
         sys.exit(1)
 
-    log.info("Launching Chromium -> %s", url)
+    log.info("Запуск Chromium -> %s", url)
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
         page    = browser.new_page()
@@ -133,7 +308,7 @@ def fetch_page(url: str, show_api: bool = False) -> str:
         page.wait_for_timeout(1_000)
 
         if show_api:
-            log.info("Intercepted API URLs (%d):", len(intercepted))
+            log.info("Перехоплені API-запити (%d):", len(intercepted))
             for u in intercepted:
                 log.info("  %s", u)
 
@@ -144,25 +319,15 @@ def fetch_page(url: str, show_api: bool = False) -> str:
         html = page.content()
         browser.close()
 
-    log.info("HTML fetched: %d bytes", len(html))
+    log.info("HTML отримано: %d байт", len(html))
     return html
 
 
 # ---------------------------------------------------------------------------
-# DOM helpers
+# Допоміжні функції для роботи з DOM
 # ---------------------------------------------------------------------------
 
-_RE_NODE_ID = re.compile(r"nodeId-(\d+)")
 _RE_PERCENT = re.compile(r"[\d.,]+")
-
-
-def _node_id_from_class(tag) -> str:
-    """Extract numeric ID from CSS class nodeId-XXXX."""
-    for cls in (tag.get("class") or []):
-        m = _RE_NODE_ID.search(cls)
-        if m:
-            return m.group(1)
-    return ""
 
 
 def _title_text(node_div) -> str:
@@ -176,9 +341,7 @@ def _commission_text(node_div) -> str:
         return ""
     raw = ctrl.get_text(strip=True)
     m = _RE_PERCENT.search(raw)
-    if not m:
-        return ""
-    return m.group(0).replace(",", ".")
+    return m.group(0).replace(",", ".") if m else ""
 
 
 def _level(node_div) -> int:
@@ -190,15 +353,20 @@ def _level(node_div) -> int:
 
 
 # ---------------------------------------------------------------------------
-# DOM parse -> rows
+# Проміжний результат парсингу (до визначення ID)
 # ---------------------------------------------------------------------------
 
-def parse_rows(html: str) -> list[CategoryRow]:
-    """
-    Parse the fully-expanded tree HTML into CategoryRow list.
+@dataclass(slots=True)
+class _ParsedNode:
+    name  : str
+    pct   : str
+    level : int
 
-    ID  : CSS class nodeId-XXXX on the inner node-wrapper element.
-    parentCode : category_id of the closest ancestor with a lower tree level.
+
+def _iter_parsed_nodes(html: str) -> Iterator[_ParsedNode]:
+    """
+    Повертає вузли з повністю розгорнутого HTML SPA.
+    Вузли без заголовку пропускаються.
     """
     from bs4 import BeautifulSoup
 
@@ -208,51 +376,70 @@ def parse_rows(html: str) -> list[CategoryRow]:
         lambda tag: tag.name == "div"
         and any("tree-node-level-" in c for c in (tag.get("class") or []))
     )
-    log.info("DOM: found %d tree-node divs", len(all_divs))
+    log.info("DOM: знайдено %d div-елементів дерева", len(all_divs))
 
-    rows:         list[CategoryRow]       = []
-    parent_stack: list[tuple[int, str]]   = []   # (level, category_id)
-    no_id = no_name = 0
-
+    skipped = 0
     for div in all_divs:
-        lvl  = _level(div)
         name = _title_text(div)
         if not name:
-            no_name += 1
+            skipped += 1
             continue
+        yield _ParsedNode(name=name, pct=_commission_text(div), level=_level(div))
 
-        pct = _commission_text(div)
+    if skipped:
+        log.debug("DOM: пропущено %d div без заголовку", skipped)
 
-        # ID from node-wrapper CSS class
-        wrapper = div.find(class_=lambda c: c and "node-wrapper" in c)
-        cat_id  = _node_id_from_class(wrapper) if wrapper else ""
-        if not cat_id:
-            no_id += 1
-            log.debug("No nodeId for: %r", name)
 
-        # Maintain parent stack: pop entries with level >= current
-        while parent_stack and parent_stack[-1][0] >= lvl:
+# ---------------------------------------------------------------------------
+# Побудова фінальних рядків — тільки листові (замаплені) категорії
+# ---------------------------------------------------------------------------
+
+def build_rows(html: str, id_map: dict[str, str]) -> list[CategoryRow]:
+    """
+    Об'єднує вузли зі SPA з ID із Google Sheets.
+
+    Правила:
+    - Стек батьків оновлюється для ВСІХ вузлів — для коректного розрахунку parentCode.
+    - До результату потрапляють ТІЛЬКИ вузли, знайдені в id_map (листові категорії).
+    - Кореневі та проміжні категорії (не в Google Sheet) відкидаються.
+    """
+    rows: list[CategoryRow] = []
+    parent_stack: list[tuple[int, str]] = []   # (рівень, cat_id або "")
+    skipped_root = 0
+
+    for node in _iter_parsed_nodes(html):
+        key    = _normalize(node.name)
+        cat_id = id_map.get(key, "")
+
+        # Оновлення стеку батьків для всіх вузлів (включно з незамапленими)
+        while parent_stack and parent_stack[-1][0] >= node.level:
             parent_stack.pop()
 
         parent_code = parent_stack[-1][1] if parent_stack else ""
-        parent_stack.append((lvl, cat_id))
+        parent_stack.append((node.level, cat_id))
+
+        # Кореневі/проміжні вузли — не пишемо у файл
+        if not cat_id:
+            skipped_root += 1
+            continue
 
         rows.append(CategoryRow(
             category_id   = cat_id,
-            category_name = name,
-            commission_pct= pct,
+            category_name = node.name,
+            commission_pct= node.pct,
             parent_code   = parent_code,
         ))
 
     log.info(
-        "Parsed: %d rows | no ID: %d | no name (skipped): %d",
-        len(rows), no_id, no_name,
+        "Побудовано %d рядків | відкинуто кореневих/проміжних: %d",
+        len(rows),
+        skipped_root,
     )
     return rows
 
 
 # ---------------------------------------------------------------------------
-# Export -> XLSX  (plain: no colour, no bold, no fill)
+# Експорт -> XLSX  (без кольору, жирного, заливки)
 # ---------------------------------------------------------------------------
 
 def export_xlsx(rows: list[CategoryRow], path: Path) -> None:
@@ -260,53 +447,62 @@ def export_xlsx(rows: list[CategoryRow], path: Path) -> None:
         import openpyxl
         from openpyxl.utils import get_column_letter
     except ImportError:
-        log.error("openpyxl not installed. Run: pip install openpyxl")
+        log.error("openpyxl не встановлено. Виконайте: pip install openpyxl")
         sys.exit(1)
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Epicentr Royalty"
 
-    # Plain headers — no colour, no bold, no fill
     for col, field in enumerate(FIELDNAMES, 1):
         ws.cell(row=1, column=col, value=HEADERS[field])
 
-    # Data rows
     for r_idx, row in enumerate(rows, 2):
         for c_idx, field in enumerate(FIELDNAMES, 1):
             ws.cell(row=r_idx, column=c_idx, value=getattr(row, field))
 
-    # Column widths
     for col, width in {1: 14, 2: 48, 3: 18, 4: 14}.items():
         ws.column_dimensions[get_column_letter(col)].width = width
 
     path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(path)
-    log.info("Saved %d rows -> %s", len(rows), path)
+    log.info("Збережено %d рядків -> %s", len(rows), path)
 
 
 # ---------------------------------------------------------------------------
-# Main
+# Точка входу
 # ---------------------------------------------------------------------------
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Epicentr commissions -> XLSX")
-    parser.add_argument("--dry-run",  action="store_true", help="Print to console instead of XLSX")
-    parser.add_argument("--show-api", action="store_true", help="Log intercepted API URLs (diagnostic)")
+    parser.add_argument("--dry-run",    action="store_true", help="Вивести результат у консоль замість XLSX")
+    parser.add_argument("--show-api",   action="store_true", help="Логувати перехоплені API-запити (діагностика)")
+    parser.add_argument("--diagnose",   action="store_true", help="Порівняти назви зі SPA і Google Sheet (показує repr)")
+    parser.add_argument("--sheet-only", action="store_true", help="Показати перші рядки Google Sheet і завершити")
     args = parser.parse_args()
 
-    html = fetch_page(TARGET_URL, show_api=args.show_api)
-    rows = parse_rows(html)
+    if args.sheet_only:
+        cmd_sheet_only()
+        return
+
+    id_map = fetch_id_map()
+    html   = fetch_page(TARGET_URL, show_api=args.show_api)
+
+    if args.diagnose:
+        cmd_diagnose(html, id_map)
+        return
+
+    rows = build_rows(html, id_map)
 
     if not rows:
-        log.error("No rows parsed. Exiting.")
+        log.error("Рядків не знайдено. Завершення.")
         sys.exit(1)
 
     if args.dry_run:
         print("\t".join(HEADERS[f] for f in FIELDNAMES))
         for r in rows:
             print("\t".join(str(getattr(r, f)) for f in FIELDNAMES))
-        log.info("Dry-run: %d rows", len(rows))
+        log.info("Dry-run: %d рядків", len(rows))
     else:
         export_xlsx(rows, OUTPUT_PATH)
 
