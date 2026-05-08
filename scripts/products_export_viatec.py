@@ -30,7 +30,7 @@ from bs4 import BeautifulSoup, Tag
 
 # ── Configuration (edit here only) ───────────────────────────────────────────
 
-CATALOG_URL: str = "https://viatec.ua/catalog/rozetki-vimikachi/proizvoditel:dahua,ezviz,946,1030,1207,6633,223477,030309,videx,makel,schneiderelectric,hager,eti,hikvision"
+CATALOG_URL: str = "https://viatec.ua/catalog/network-injectors"
 
 OUTPUT_CSV: Path = Path(
     r"C:\FullStack\PriceFeedPipeline\data\markets\products_export_viatec.csv"

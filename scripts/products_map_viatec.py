@@ -1,5 +1,5 @@
 """
-products_map_viatec.py
+python scripts/products_map_viatec.py
 ======================
 Сопоставление категорий viatec → Prom.ua с точностью >= 80%.
 
