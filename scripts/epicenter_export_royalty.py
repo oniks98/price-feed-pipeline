@@ -5,24 +5,16 @@
     - ID категорій: Google Sheets (стовпець A = ID, стовпець G = назва категорії останнього рівня)
 
 Результат : C:\\FullStack\\PriceFeedPipeline\\data\\markets\\royalty_epicenter.xlsx
-Стовпці   : ID категорії | Группа | Відсоток роялті | parentCode
+Стовпці   : ID категорії | Відкрита категорія | Відсоток роялті | parentCode
 
 Визначення ID:
     Назви категорій, отримані зі SPA, зіставляються зі стовпцем G Google-таблиці.
     Відповідне значення стовпця A стає category_id.
     У файл потрапляють лише категорії останнього рівня (замаплені).
-    Кореневі та проміжні категорії ігноруються.
-
-Встановлення залежностей (один раз):
-    pip install playwright openpyxl beautifulsoup4 requests
-    playwright install chromium
+    Кореневі, проміжні та закриті категорії ігноруються.
 
 Запуск:
-    python epicenter_export_royalty.py               # отримати дані та зберегти в XLSX
-    python epicenter_export_royalty.py --dry-run     # вивести результат у консоль
-    python epicenter_export_royalty.py --show-api    # логувати перехоплені API-запити
-    python epicenter_export_royalty.py --diagnose    # порівняти назви зі SPA і Google Sheet
-    python epicenter_export_royalty.py --sheet-only  # показати перші N рядків Google Sheet і завершити
+    python scripts/epicenter_export_royalty.py               # отримати дані та зберегти в XLSX
 """
 
 from __future__ import annotations
@@ -48,9 +40,15 @@ TARGET_URL  = "https://admin.epicentrm.com.ua/public/commissions"
 OUTPUT_PATH = Path(r"C:\FullStack\PriceFeedPipeline\data\markets\royalty_epicenter.xlsx")
 
 # Google-таблиця з канонічними ID категорій
-# Стовпець A = ID категорії  |  Стовпець G = Категорія останнього рівня
+# Лист 1: «Відкриті категорії позначені зеленим»
+#   Стовпець A = ID категорії  |  Стовпець G = Категорія останнього рівня
 SHEET_ID  = "1Zzt9KHX5E5RPforoM924fDfdB3rx6O2TgxOKZy7t-fw"
 SHEET_GID = "631872394"
+
+# Лист 2: «Тількі відкриті категорії» — whitelist відкритих категорій
+# Стовпець F (індекс 5) — назва відкритої категорії
+OPEN_SHEET_GID  = "917096831"   
+OPEN_COL_NAME   = 5                    # стовпець F (0-based)
 
 # Індекси стовпців у таблиці (0-based після csv.reader)
 COL_ID   = 0   # A
@@ -70,7 +68,7 @@ DIAGNOSE_SAMPLE = 30
 @dataclass(slots=True)
 class CategoryRow:
     category_id   : str   # ID категорії  (з Google Sheets)
-    category_name : str   # Группа        (зі SPA)
+    category_name : str   # Відкрита категорія        (зі SPA)
     commission_pct: str   # Відсоток роялті
     parent_code   : str   # category_id безпосереднього батька
 
@@ -79,7 +77,7 @@ FIELDNAMES: list[str] = [f.name for f in fields(CategoryRow)]
 
 HEADERS: dict[str, str] = {
     "category_id"   : "ID категорії",
-    "category_name" : "Группа",
+    "category_name" : "Відкрита категорія",
     "commission_pct": "Відсоток роялті",
     "parent_code"   : "parentCode",
 }
@@ -183,6 +181,67 @@ def fetch_id_map(sheet_id: str = SHEET_ID, gid: str = SHEET_GID) -> dict[str, st
 
     log.info("Мапа ID завантажена: %d записів | пропущено рядків: %d", len(id_map), skipped)
     return id_map
+
+
+def fetch_open_names(
+    sheet_id: str = SHEET_ID,
+    gid: str = OPEN_SHEET_GID,
+    col: int = OPEN_COL_NAME,
+) -> frozenset[str]:
+    """
+    Завантажує лист «Тількі відкриті категорії» і повертає frozenset
+    нормалізованих назв відкритих категорій (стовп. F).
+
+    Повертає frozenset() якщо GID не налаштовано або лист недоступний.
+    """
+    if gid == "ВСТАВТЕ_GID_ТУТ":
+        log.warning(
+            "⚠️  OPEN_SHEET_GID не налаштовано — фільтр відкритих категорій вимкнено. "
+            "Вставте GID листа 'Тількі відкриті категорії' у конфіг скрипта."
+        )
+        return frozenset()
+
+    try:
+        all_rows = _fetch_sheet_csv(sheet_id, gid)
+    except SystemExit:
+        log.error("Не вдалося завантажити лист відкритих категорій (gid=%s) — фільтр вимкнено.", gid)
+        return frozenset()
+
+    names: set[str] = set()
+    for row in all_rows[1:]:
+        if len(row) <= col:
+            continue
+        raw = row[col].strip()
+        if raw:
+            names.add(_normalize(raw))
+
+    log.info(
+        "Відкриті категорії (лист 2, стовп. F): %d назв завантажено",
+        len(names),
+    )
+    return frozenset(names)
+
+
+def filter_open_categories(
+    id_map: dict[str, str],
+    open_names: frozenset[str],
+) -> dict[str, str]:
+    """
+    Залишає в id_map лише категорії, що є у whitelist open_names.
+    Якщо open_names порожній — повертає id_map без змін (фільтр вимкнено).
+    """
+    if not open_names:
+        log.info("Фільтр відкритих категорій: вимкнено (whitelist порожній).")
+        return id_map
+
+    filtered = {k: v for k, v in id_map.items() if k in open_names}
+    closed   = len(id_map) - len(filtered)
+    log.info(
+        "Фільтр відкритих категорій: залишено %d | відкинуто закритих: %d",
+        len(filtered),
+        closed,
+    )
+    return filtered
 
 
 # ---------------------------------------------------------------------------
@@ -475,18 +534,21 @@ def export_xlsx(rows: list[CategoryRow], path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Epicentr commissions -> XLSX")
-    parser.add_argument("--dry-run",    action="store_true", help="Вивести результат у консоль замість XLSX")
-    parser.add_argument("--show-api",   action="store_true", help="Логувати перехоплені API-запити (діагностика)")
-    parser.add_argument("--diagnose",   action="store_true", help="Порівняти назви зі SPA і Google Sheet (показує repr)")
-    parser.add_argument("--sheet-only", action="store_true", help="Показати перші рядки Google Sheet і завершити")
+    parser.add_argument("--dry-run",         action="store_true", help="Вивести результат у консоль замість XLSX")
+    parser.add_argument("--show-api",         action="store_true", help="Логувати перехоплені API-запити (діагностика)")
+    parser.add_argument("--diagnose",         action="store_true", help="Порівняти назви зі SPA і Google Sheet (показує repr)")
+    parser.add_argument("--sheet-only",       action="store_true", help="Показати перші рядки Google Sheet і завершити")
+    parser.add_argument("--no-open-filter",   action="store_true", help="Вимкнути фільтр відкритих категорій (debug)")
     args = parser.parse_args()
 
     if args.sheet_only:
         cmd_sheet_only()
         return
 
-    id_map = fetch_id_map()
-    html   = fetch_page(TARGET_URL, show_api=args.show_api)
+    id_map     = fetch_id_map()
+    open_names = frozenset() if args.no_open_filter else fetch_open_names()
+    id_map     = filter_open_categories(id_map, open_names)
+    html       = fetch_page(TARGET_URL, show_api=args.show_api)
 
     if args.diagnose:
         cmd_diagnose(html, id_map)
