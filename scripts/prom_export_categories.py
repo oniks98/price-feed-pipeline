@@ -4,8 +4,9 @@ prom_export_categories.py
 Синхронізує категорії з фіду PROM з локальними файлами маркетплейсів.
 Експортує ТІЛЬКИ ті категорії, під якими є реальні товари у фіді.
 Додає НОВІ категорії (яких ще немає по ID) до:
-  - data/markets/markets_coefficients.csv  — коефіцієнти для маркетплейсів
-  - data/markets/mappings.xlsx (лист 'Категорія+') — маппінг категорій
+  - data/markets/markets_coefficients.csv             — коефіцієнти для маркетплейсів
+  - data/markets/mappings.xlsx (лист 'Категорія+')    — маппінг категорій Prom
+  - data/markets/epicenter_mappings.xlsx (лист 'Маппінг') — маппінг категорій Epicenter
 
 Запуск:
     python scripts/prom_export_categories.py
@@ -13,6 +14,7 @@ prom_export_categories.py
 
 import csv
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import requests
@@ -20,17 +22,61 @@ from openpyxl import load_workbook
 
 from constants_feed_url import FEED_URL_PROM as FEED_URL
 
-MAPPINGS = Path(__file__).parents[1] / "data" / "markets" / "mappings.xlsx"
-MAPPINGS_SHEET = "Категорія+"
-MAPPINGS_ID_COL = "ІD категорії фіду"
+# ─── Config: feed ─────────────────────────────────────────────────────────────
+
+_ROOT = Path(__file__).parents[1]
+
+# ─── Config: mappings.xlsx ────────────────────────────────────────────────────
+
+MAPPINGS_XLSX     = _ROOT / "data" / "markets" / "mappings.xlsx"
+MAPPINGS_SHEET    = "Категорія+"
+MAPPINGS_ID_COL   = "ІD категорії фіду"
 MAPPINGS_NAME_COL = "Категорії фіду"
 
-MARKETS_CSV = Path(__file__).parents[1] / "data" / "markets" / "markets_coefficients.csv"
+# ─── Config: epicenter_mappings.xlsx ─────────────────────────────────────────
 
+EPICENTER_MAPPINGS_XLSX     = _ROOT / "data" / "markets" / "epicenter_mappings.xlsx"
+EPICENTER_MAPPINGS_SHEET    = "Маппінг"
+EPICENTER_MAPPINGS_ID_COL   = "prom_category_id"
+EPICENTER_MAPPINGS_NAME_COL = "Категорія Прому"
+
+# ─── Config: markets_coefficients.csv ────────────────────────────────────────
+
+MARKETS_CSV          = _ROOT / "data" / "markets" / "markets_coefficients.csv"
 # category_id зарезервований як рядок дефолтних коефіцієнтів.
 # Щоб змінити дефолти — редагуй цей рядок у CSV, не чіпай код.
 DEFAULT_COEFS_ROW_ID = "1"
 
+
+# ─── Excel target descriptor ──────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class ExcelTarget:
+    """Описує один Excel-файл + лист для інкрементального оновлення категорій."""
+    path: Path
+    sheet: str
+    id_col: str    # заголовок колонки з ID категорії
+    name_col: str  # заголовок колонки з назвою категорії
+
+
+# Єдине місце для реєстрації всіх Excel-файлів, що оновлюються.
+EXCEL_TARGETS: tuple[ExcelTarget, ...] = (
+    ExcelTarget(
+        path=MAPPINGS_XLSX,
+        sheet=MAPPINGS_SHEET,
+        id_col=MAPPINGS_ID_COL,
+        name_col=MAPPINGS_NAME_COL,
+    ),
+    ExcelTarget(
+        path=EPICENTER_MAPPINGS_XLSX,
+        sheet=EPICENTER_MAPPINGS_SHEET,
+        id_col=EPICENTER_MAPPINGS_ID_COL,
+        name_col=EPICENTER_MAPPINGS_NAME_COL,
+    ),
+)
+
+
+# ─── Feed fetching ────────────────────────────────────────────────────────────
 
 def fetch_xml(url: str) -> str:
     response = requests.get(url, timeout=120)
@@ -42,16 +88,15 @@ def fetch_xml(url: str) -> str:
     return raw.decode(encoding)
 
 
+# ─── Feed parsing ─────────────────────────────────────────────────────────────
+
 def parse_categories(xml: str) -> dict[str, dict]:
     """Повертає {id: {name, parentId}} для всіх категорій у фіді."""
     pattern = r'<category\s+id="(\d+)"(?:\s+parentId="(\d+)")?[^>]*>(.*?)</category>'
-    categories: dict[str, dict] = {}
-    for cat_id, parent_id, name in re.findall(pattern, xml):
-        categories[cat_id] = {
-            "name": name.strip(),
-            "parentId": parent_id or None,
-        }
-    return categories
+    return {
+        cat_id: {"name": name.strip(), "parentId": parent_id or None}
+        for cat_id, parent_id, name in re.findall(pattern, xml)
+    }
 
 
 def parse_used_category_ids(xml: str) -> set[str]:
@@ -59,10 +104,11 @@ def parse_used_category_ids(xml: str) -> set[str]:
     return set(re.findall(r"<categoryId>(\d+)</categoryId>", xml))
 
 
+# ─── Category helpers ─────────────────────────────────────────────────────────
+
 def build_display_name(cat_id: str, categories: dict[str, dict]) -> str:
     """
-    Будує повну назву категорії з батьківською:
-    'Батьківська > Дочірня'
+    Будує повну назву категорії з батьківською: 'Батьківська > Дочірня'.
     Якщо батька немає — просто назва.
     """
     cat = categories.get(cat_id)
@@ -73,72 +119,81 @@ def build_display_name(cat_id: str, categories: dict[str, dict]) -> str:
     parent_id = cat["parentId"]
 
     if parent_id and parent_id in categories:
-        parent_name = categories[parent_id]["name"]
-        return f"{parent_name} > {name}"
+        return f"{categories[parent_id]['name']} > {name}"
 
     return name
 
 
-def main() -> None:
-    print("⬇️  Завантаження фіду...")
-    xml = fetch_xml(FEED_URL)
-    print(f"📄 Отримано {len(xml):,} символів")
-
-    all_categories = parse_categories(xml)
-    used_ids = parse_used_category_ids(xml)
-
-    if not all_categories:
-        print("⚠️  Категорії не знайдено — перевір URL фіду")
-        return
-
-    if not used_ids:
-        print("⚠️  Товари не знайдено — перевір структуру фіду")
-        return
-
-    # Залишаємо тільки категорії, під якими є товари
-    active_categories = {
-        cat_id: cat
-        for cat_id, cat in all_categories.items()
-        if cat_id in used_ids
-    }
-
-    skipped = len(all_categories) - len(active_categories)
-    print(f"📦 Всього категорій: {len(all_categories)}, з товарами: {len(active_categories)}, пропущено порожніх: {skipped}")
-
-    update_mappings_excel(active_categories, all_categories)
-    update_markets_csv(active_categories, all_categories)
+def filter_active_categories(
+    all_categories: dict[str, dict],
+    used_ids: set[str],
+) -> dict[str, dict]:
+    """Залишає тільки категорії, під якими є реальні товари."""
+    return {cid: cat for cid, cat in all_categories.items() if cid in used_ids}
 
 
-def update_mappings_excel(active_categories: dict[str, dict], all_categories: dict[str, dict]) -> None:
-    """Дописує в mappings.xlsx лист 'Категорія+' тільки НОВІ категорії (яких ще немає по ID)."""
-    if not MAPPINGS.exists():
-        print(f"⚠️  mappings.xlsx не знайдено: {MAPPINGS}")
-        return
+# ─── Excel: shared incremental writer ────────────────────────────────────────
 
-    wb = load_workbook(MAPPINGS)
-    if MAPPINGS_SHEET not in wb.sheetnames:
-        print(f"⚠️  Лист '{MAPPINGS_SHEET}' не знайдено в {MAPPINGS}")
-        return
-
-    ws = wb[MAPPINGS_SHEET]
-
-    # Знаходимо індекси потрібних колонок по заголовку
-    header = [cell.value for cell in ws[1]]
+def _resolve_column_indices(
+    header: list,
+    id_col: str,
+    name_col: str,
+    target_label: str,
+) -> tuple[int, int] | None:
+    """
+    Повертає (id_col_idx, name_col_idx) — 1-based.
+    Логує та повертає None при помилці (не падає).
+    """
     try:
-        id_col_idx = header.index(MAPPINGS_ID_COL) + 1   # 1-based
-        name_col_idx = header.index(MAPPINGS_NAME_COL) + 1
+        id_idx   = header.index(id_col) + 1
+        name_idx = header.index(name_col) + 1
+        return id_idx, name_idx
     except ValueError as e:
-        print(f"⚠️  Колонку не знайдено: {e}")
-        return
+        print(f"⚠️  [{target_label}] Колонку не знайдено: {e}")
+        return None
 
-    # Збираємо вже існуючі ID (рядки 2+)
-    existing_ids: set[str] = set()
+
+def _collect_existing_ids(ws, id_col_idx: int) -> set[str]:
+    """Збирає вже існуючі category ID з рядків 2+ (рядок 1 — заголовок)."""
+    existing: set[str] = set()
     for row in ws.iter_rows(min_row=2, values_only=True):
         val = row[id_col_idx - 1]
         if val is not None:
-            existing_ids.add(str(val))
+            existing.add(str(val))
+    return existing
 
-    # Визначаємо нові категорії
+
+def append_new_categories_to_excel(
+    target: ExcelTarget,
+    active_categories: dict[str, dict],
+    all_categories: dict[str, dict],
+) -> None:
+    """
+    Дописує в Excel-файл (target.sheet) тільки НОВІ категорії по ID.
+    Існуючі рядки не чіпає. Ідемпотентна операція.
+    """
+    label = f"{target.path.name} / '{target.sheet}'"
+
+    if not target.path.exists():
+        print(f"⚠️  Файл не знайдено: {target.path}")
+        return
+
+    wb = load_workbook(target.path)
+
+    if target.sheet not in wb.sheetnames:
+        print(f"⚠️  [{label}] Лист не знайдено. Доступні: {wb.sheetnames}")
+        return
+
+    ws = wb[target.sheet]
+    header = [cell.value for cell in ws[1]]
+
+    col_indices = _resolve_column_indices(header, target.id_col, target.name_col, label)
+    if col_indices is None:
+        return
+
+    id_col_idx, name_col_idx = col_indices
+    existing_ids = _collect_existing_ids(ws, id_col_idx)
+
     new_categories = {
         cat_id: cat
         for cat_id, cat in active_categories.items()
@@ -146,22 +201,23 @@ def update_mappings_excel(active_categories: dict[str, dict], all_categories: di
     }
 
     if not new_categories:
-        print("✅ Нових категорій немає — mappings.xlsx не змінено")
+        print(f"✅ [{label}] Нових категорій немає — файл не змінено")
         return
 
-    # Дописуємо нові рядки вниз
-    for cat_id, cat in sorted(new_categories.items(), key=lambda x: int(x[0])):
+    for cat_id in sorted(new_categories, key=lambda x: int(x)):
         display_name = build_display_name(cat_id, all_categories)
         new_row = [None] * len(header)
-        new_row[id_col_idx - 1] = int(cat_id)
+        new_row[id_col_idx - 1]   = int(cat_id)
         new_row[name_col_idx - 1] = display_name
         ws.append(new_row)
 
-    wb.save(MAPPINGS)
-    print(f"✅ Додано {len(new_categories)} нових категорій → {MAPPINGS} (лист '{MAPPINGS_SHEET}')")
+    wb.save(target.path)
+    print(f"✅ [{label}] Додано {len(new_categories)} нових категорій → {target.path}")
     for cat_id in sorted(new_categories, key=lambda x: int(x)):
         print(f"   + [{cat_id}] {build_display_name(cat_id, all_categories)}")
 
+
+# ─── CSV: markets_coefficients ────────────────────────────────────────────────
 
 def _load_coef_fields(fieldnames: list[str]) -> list[str]:
     """Повертає список колонок коефіцієнтів (всі що починаються на 'coef_')."""
@@ -190,22 +246,23 @@ def _load_default_coefs(rows: list[dict], coef_fields: list[str]) -> dict[str, s
     return coefs
 
 
-def update_markets_csv(active_categories: dict[str, dict], all_categories: dict[str, dict]) -> None:
+def update_markets_csv(
+    active_categories: dict[str, dict],
+    all_categories: dict[str, dict],
+) -> None:
     """Дописує в markets_coefficients.csv тільки НОВІ категорії з дефолтними коефіцієнтами."""
     if not MARKETS_CSV.exists():
         print(f"⚠️  markets_coefficients.csv не знайдено: {MARKETS_CSV}")
         return
 
     with MARKETS_CSV.open("r", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f, delimiter=";")
+        reader    = csv.DictReader(f, delimiter=";")
         fieldnames = reader.fieldnames or []
-        rows = list(reader)
+        rows      = list(reader)
 
-    coef_fields = _load_coef_fields(fieldnames)
+    coef_fields   = _load_coef_fields(fieldnames)
     default_coefs = _load_default_coefs(rows, coef_fields)
 
-    # Виключаємо sentinel-рядок і системний (id=0) з множини існуючих —
-    # вони не є реальними категоріями, але вже є в файлі.
     existing_ids = {row["category_id"] for row in rows}
 
     new_categories = {
@@ -231,6 +288,41 @@ def update_markets_csv(active_categories: dict[str, dict], all_categories: dict[
     print(f"✅ Додано {len(new_categories)} нових категорій → {MARKETS_CSV}")
     for cat_id in sorted(new_categories, key=lambda x: int(x)):
         print(f"   + [{cat_id}] {build_display_name(cat_id, all_categories)}  {coef_display}")
+
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    print("⬇️  Завантаження фіду...")
+    xml = fetch_xml(FEED_URL)
+    print(f"📄 Отримано {len(xml):,} символів")
+
+    all_categories = parse_categories(xml)
+    used_ids       = parse_used_category_ids(xml)
+
+    if not all_categories:
+        print("⚠️  Категорії не знайдено — перевір URL фіду")
+        return
+
+    if not used_ids:
+        print("⚠️  Товари не знайдено — перевір структуру фіду")
+        return
+
+    active_categories = filter_active_categories(all_categories, used_ids)
+
+    skipped = len(all_categories) - len(active_categories)
+    print(
+        f"📦 Всього категорій: {len(all_categories)}, "
+        f"з товарами: {len(active_categories)}, "
+        f"пропущено порожніх: {skipped}"
+    )
+
+    # ── Excel targets (всі зареєстровані файли) ───────────────────────────────
+    for target in EXCEL_TARGETS:
+        append_new_categories_to_excel(target, active_categories, all_categories)
+
+    # ── CSV ───────────────────────────────────────────────────────────────────
+    update_markets_csv(active_categories, all_categories)
 
 
 if __name__ == "__main__":

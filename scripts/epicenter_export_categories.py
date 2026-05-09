@@ -4,20 +4,19 @@ epicenter_export_categories.py
 КРОК 1 з 5 пайплайну маппінгу Prom → Epicenter.
 
 Що робить:
-  1. Читає категорії Прому з mappings.xlsx.
-  2. Завантажує з API Epicenter тільки ті категорії, що є в маппінгу Прому.
-  3. Генерує (або оновлює) epicenter_mappings.xlsx:
-       • Лист «Маппінг»             — категорії Прому + колонки для заповнення
-       • Лист «Категорії Епіцентру» — повний довідник категорій Epicenter
+  Створює epicenter_mappings.xlsx (тільки якщо файл ще не існує):
+    • Лист «Інструкція»          — покрокова інструкція пайплайну
+    • Лист «Маппінг»             — заголовки для маппінгу (дані заповнює prom_export_categories.py)
+    • Лист «Категорії Епіцентру» — повний довідник категорій Epicenter з API
 
-Інкрементальна логіка:
-  Якщо epicenter_mappings.xlsx вже існує — дописує тільки нові категорії Прому
-  в лист «Маппінг», старі рядки не чіпає.
+Якщо файл вже існує — нічого не робить (структура вже створена).
 
-Наступний крок:
-  Заповни epicenter_category_id у «Маппінг» одним зі способів:
+Наступний крок після першого запуску:
+  Заповни лист «Маппінг» (prom_category_id, Категорія Прому):
+    python scripts/prom_export_categories.py
+  Потім заповни epicenter_category_id одним зі способів:
     • Автоматично: python scripts/epicenter_map_categories.py
-    • Вручну:      колонки C (epicenter_category_id), D (Назва), E (parentCode)
+    • Вручну:      колонки C, D, E у листі «Маппінг»
   Потім → python scripts/epicenter_export_attr_sets.py
 
 Запуск:
@@ -29,11 +28,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import requests
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
+
+# ─── Config ───────────────────────────────────────────────────────────────────
 
 API_TOKEN = "5a6489d1a5c48c9d174bd31f2a0a8fd0"
 BASE_URL  = "https://api.epicentrm.com.ua/v2/pim"
@@ -43,43 +44,104 @@ HEADERS   = {
     "Accept": "application/json",
 }
 
-ROOT          = Path(__file__).parents[1]
-OUTPUT_PATH   = ROOT / "data" / "markets" / "epicenter_mappings.xlsx"
-MAPPINGS_PATH = ROOT / "data" / "markets" / "mappings.xlsx"
-
+OUTPUT_PATH = Path(__file__).parents[1] / "data" / "markets" / "epicenter_mappings.xlsx"
 REQ_TIMEOUT = (10, 30)
 
+# Заголовки та ширини колонок листа «Маппінг»
+MAPPING_COLUMNS: list[tuple[str, int]] = [
+    ("prom_category_id",          22),
+    ("Категорія Прому",           55),
+    ("epicenter_category_id",     25),
+    ("Назва категорії Епіцентру", 45),
+    ("parentCode",                20),
+    ("Коментар / Примітка",       35),
+]
 
-# ─── Session ──────────────────────────────────────────────────────────────────
+# Заголовки та ширини колонок листа «Категорії Епіцентру»
+EPICENTER_COLUMNS: list[tuple[str, int]] = [
+    ("code",       30),
+    ("name_uk",    50),
+    ("parentCode", 30),
+    ("hasChild",   12),
+]
+
+
+# ─── Styles ───────────────────────────────────────────────────────────────────
+
+_HDR_FILL    = PatternFill("solid", start_color="1F4E79", end_color="1F4E79")
+_HDR_FONT    = Font(bold=True, color="FFFFFF", name="Arial", size=10)
+_YELLOW_FILL = PatternFill("solid", start_color="FFFF99", end_color="FFFF99")
+_THIN_BORDER = Border(
+    left=Side(style="thin"), right=Side(style="thin"),
+    top=Side(style="thin"),  bottom=Side(style="thin"),
+)
+_CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
+_LEFT   = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+
+
+def _style_header(cell, fill=_HDR_FILL) -> None:
+    cell.font      = _HDR_FONT
+    cell.fill      = fill
+    cell.alignment = _CENTER
+    cell.border    = _THIN_BORDER
+
+
+def _style_data(cell, fill=None) -> None:
+    cell.font      = Font(name="Arial", size=9)
+    cell.alignment = _LEFT
+    cell.border    = _THIN_BORDER
+    if fill:
+        cell.fill = fill
+
+
+# ─── API ──────────────────────────────────────────────────────────────────────
 
 def _make_session() -> requests.Session:
     session = requests.Session()
     retry = Retry(total=2, backoff_factor=0.5, status_forcelist=(429,), allowed_methods=["GET"])
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("https://", adapter)
-    session.mount("http://", adapter)
+    session.mount("http://",  adapter)
     session.headers.update(HEADERS)
     return session
 
 
+def fetch_epicenter_categories() -> list[dict]:
+    """Завантажує всі категорії Epicenter з API (з пагінацією)."""
+    print("⬇️  Категорії Епіцентру (всі)...")
+    session = _make_session()
+    items: list[dict] = []
+    page = 1
+
+    while True:
+        try:
+            data = session.get(
+                f"{BASE_URL}/categories", params={"page": page}, timeout=REQ_TIMEOUT
+            ).json()
+        except Exception as e:
+            print(f"❌ categories p{page}: {e}")
+            break
+
+        batch = data.get("items", [])
+        if not batch:
+            break
+
+        items.extend(batch)
+        total = data.get("pages", 1)
+        print(f"   {page}/{total}: {len(batch)} категорій")
+
+        if page >= total:
+            break
+        page += 1
+
+    print(f"✅ Категорій всього: {len(items)}")
+    return items
+
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
-def _norm_id(val: object) -> str:
-    """Нормалізує ідентифікатор: '123.0' → '123'."""
-    if val is None:
-        return ""
-    s = str(val).strip()
-    if "." in s:
-        try:
-            f = float(s)
-            if f == int(f):
-                return str(int(f))
-        except (ValueError, OverflowError):
-            pass
-    return s
-
-
 def _get_translation(translations: list[dict], lang: str = "ua") -> str:
+    """Повертає переклад за пріоритетом мов."""
     for priority_lang in (lang, "ua", "uk", "ru", "en"):
         for t in translations:
             if t.get("languageCode") == priority_lang:
@@ -89,168 +151,24 @@ def _get_translation(translations: list[dict], lang: str = "ua") -> str:
     return ""
 
 
-# ─── Styles ───────────────────────────────────────────────────────────────────
-
-HDR_FILL    = PatternFill("solid", start_color="1F4E79", end_color="1F4E79")
-HDR_FONT    = Font(bold=True, color="FFFFFF", name="Arial", size=10)
-YELLOW_FILL = PatternFill("solid", start_color="FFFF99", end_color="FFFF99")
-GREEN_FILL  = PatternFill("solid", start_color="E2EFDA", end_color="E2EFDA")
-THIN_BORDER = Border(
-    left=Side(style="thin"), right=Side(style="thin"),
-    top=Side(style="thin"),  bottom=Side(style="thin"),
-)
-CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
-LEFT   = Alignment(horizontal="left",   vertical="center", wrap_text=True)
-
-
-def _hdr(cell, fill=HDR_FILL) -> None:
-    cell.font = HDR_FONT
-    cell.fill = fill
-    cell.alignment = CENTER
-    cell.border = THIN_BORDER
-
-
-def _data(cell, fill=None) -> None:
-    cell.font = Font(name="Arial", size=9)
-    cell.alignment = LEFT
-    cell.border = THIN_BORDER
-    if fill:
-        cell.fill = fill
-
-
-# ─── Readers ──────────────────────────────────────────────────────────────────
-
-def load_prom_categories() -> dict[str, str]:
-    """Зчитує категорії Прому з mappings.xlsx → {prom_category_id: name}."""
-    try:
-        import openpyxl as _xl
-        wb = _xl.load_workbook(MAPPINGS_PATH, read_only=True, data_only=True)
-        sheet_name = next((n for n in wb.sheetnames if n.strip().startswith("Категорія")), None)
-        if not sheet_name:
-            print(f"⚠️  Лист 'Категорія+' не знайдено. Доступні: {wb.sheetnames}")
-            wb.close()
-            return {}
-        rows = list(wb[sheet_name].iter_rows(values_only=True))
-        wb.close()
-        if not rows:
-            return {}
-        headers = [str(h).strip().lower() if h else "" for h in rows[0]]
-        _id_exact = next((i for i, h in enumerate(headers) if h in ("prom_category_id", "id", "ід")), None)
-        id_col = _id_exact if _id_exact is not None else next(
-            (i for i, h in enumerate(headers) if "id" in h or "ід" in h), 0
-        )
-        name_col = next(
-            (i for i, h in enumerate(headers)
-             if i != id_col and ("категорі" in h or "назва" in h)), 1
-        )
-        result: dict[str, str] = {}
-        for row in rows[1:]:
-            if len(row) <= max(id_col, name_col):
-                continue
-            cid, cname = row[id_col], row[name_col]
-            if cid and cname:
-                result[_norm_id(cid)] = str(cname).strip()
-        print(f"✅ Категорії Прому: {len(result)} шт.")
-        return result
-    except FileNotFoundError:
-        print(f"⚠️  mappings.xlsx не знайдено: {MAPPINGS_PATH}")
-        return {}
-    except Exception as e:
-        print(f"⚠️  Помилка mappings.xlsx: {e}")
-        return {}
-
-
-# ─── API ──────────────────────────────────────────────────────────────────────
-
-def fetch_categories() -> list[dict]:
-    print("⬇️  Категорії Епіцентру (всі)...")
-    session = _make_session()
-    items: list[dict] = []
-    page = 1
-    while True:
-        try:
-            data = session.get(
-                f"{BASE_URL}/categories", params={"page": page}, timeout=REQ_TIMEOUT
-            ).json()
-        except Exception as e:
-            print(f"❌ categories p{page}: {e}")
-            break
-        batch = data.get("items", [])
-        if not batch:
-            break
-        items.extend(batch)
-        total = data.get("pages", 1)
-        print(f"   {page}/{total}: {len(batch)} категорій")
-        if page >= total:
-            break
-        page += 1
-    print(f"✅ Категорій всього: {len(items)}")
-    return items
-
-
-# ─── Incremental writer ───────────────────────────────────────────────────────
-
-def append_new_prom_categories(prom_categories: dict[str, str]) -> int:
-    """Дописує в «Маппінг» тільки нові категорії Прому. Повертає кількість доданих."""
-    import openpyxl as _xl
-    wb = _xl.load_workbook(OUTPUT_PATH)
-    if "Маппінг" not in wb.sheetnames:
-        wb.close()
-        return 0
-    ws = wb["Маппінг"]
-    rows = list(ws.iter_rows(values_only=True))
-    if not rows:
-        wb.close()
-        return 0
-    headers = [str(c).strip() if c else "" for c in rows[0]]
-    try:
-        id_col = headers.index("prom_category_id")
-    except ValueError:
-        wb.close()
-        return 0
-
-    existing_ids = {
-        _norm_id(row[id_col])
-        for row in rows[1:]
-        if len(row) > id_col and row[id_col]
-    }
-    new_items = {k: v for k, v in prom_categories.items() if _norm_id(k) not in existing_ids}
-
-    if not new_items:
-        print("   ✅ Нових категорій у «Маппінг» немає.")
-        wb.close()
-        return 0
-
-    next_row = ws.max_row + 1
-    for pid, pname in new_items.items():
-        for ci, val in enumerate([pid, pname, "", "", "", ""], 1):
-            _data(
-                ws.cell(row=next_row, column=ci, value=val),
-                fill=GREEN_FILL if ci <= 2 else YELLOW_FILL if ci == 3 else None,
-            )
-        next_row += 1
-
-    wb.save(OUTPUT_PATH)
-    wb.close()
-    print(f"   ✅ Додано {len(new_items)} нових категорій у «Маппінг».")
-    return len(new_items)
-
-
 # ─── Sheet builders ───────────────────────────────────────────────────────────
 
-def build_instructions_sheet(wb: Workbook) -> None:
+def _build_instructions_sheet(wb: Workbook) -> None:
     ws = wb.create_sheet("Інструкція", 0)
     ws.sheet_view.showGridLines = False
     ws.column_dimensions["A"].width = 5
     ws.column_dimensions["B"].width = 100
 
-    lines = [
+    lines: list[tuple[str, str]] = [
         ("title", "📋  ІНСТРУКЦІЯ З МАППІНГУ КАТЕГОРІЙ ПРОМУ → ЕПІЦЕНТР"),
         ("",      ""),
         ("step",  "КРОК 1 — Генерація файлу маппінгу"),
         ("body",  "   Запуск: python scripts/epicenter_export_categories.py"),
-        ("body",  "   Результат: з'являються листи «Маппінг» і «Категорії Епіцентру»."),
-        ("body",  "   У «Маппінг» завантажено всі категорії з вашого фіду Прому (колонки A, B)."),
+        ("body",  "   Результат: створюється файл epicenter_mappings.xlsx з трьома листами."),
+        ("body",  "   Лист «Категорії Епіцентру» — заповнюється автоматично з API."),
+        ("body",  "   Лист «Маппінг» — містить тільки заголовки (дані додає наступний крок)."),
+        ("body",  "   Запуск: python scripts/prom_export_categories.py"),
+        ("body",  "   Результат: лист «Маппінг» заповнюється колонками prom_category_id та Категорія Прому."),
         ("",      ""),
         ("step",  "КРОК 2 — Заповнення маппінгу категорій"),
         ("body",  "   Варіант А (автоматично): python scripts/epicenter_map_categories.py"),
@@ -291,53 +209,58 @@ def build_instructions_sheet(wb: Workbook) -> None:
             cell.font = Font(bold=True, size=10, color="C00000", name="Arial")
         else:
             cell.font = Font(size=10, name="Arial")
-        cell.alignment = LEFT
+        cell.alignment = _LEFT
 
 
-def build_mapping_sheet(wb: Workbook, prom_categories: dict[str, str]) -> None:
+def _build_mapping_sheet(wb: Workbook) -> None:
+    """Створює лист «Маппінг» тільки із заголовками. Дані заповнює prom_export_categories.py."""
     ws = wb.create_sheet("Маппінг")
-    headers    = ["prom_category_id", "Категорія Прому", "epicenter_category_id",
-                  "Назва категорії Епіцентру", "parentCode", "Коментар / Примітка"]
-    col_widths = [22, 55, 25, 45, 20, 35]
-    for ci, (h, w) in enumerate(zip(headers, col_widths), 1):
-        _hdr(ws.cell(row=1, column=ci, value=h))
-        ws.column_dimensions[get_column_letter(ci)].width = w
+
+    for ci, (header, width) in enumerate(MAPPING_COLUMNS, 1):
+        _style_header(ws.cell(row=1, column=ci, value=header))
+        ws.column_dimensions[get_column_letter(ci)].width = width
+
     ws.row_dimensions[1].height = 30
-    for ri, (pid, pname) in enumerate(prom_categories.items(), 2):
-        for ci, val in enumerate([pid, pname, "", "", "", ""], 1):
-            _data(
-                ws.cell(row=ri, column=ci, value=val),
-                fill=GREEN_FILL if ci <= 2 else YELLOW_FILL if ci == 3 else None,
-            )
-    ws.cell(row=1, column=8, value="🟡 C — epicenter_category_id — заповнити (крок 2)").font = (
+
+    # Підказки у колонці H та I (поза основною таблицею, обидві в row=1)
+    hint_col = len(MAPPING_COLUMNS) + 2
+    ws.cell(row=1, column=hint_col, value="🟡 C — epicenter_category_id — заповнити (крок 2)").font = (
         Font(bold=True, color="7F6000", name="Arial", size=9)
     )
-    ws.cell(row=2, column=8, value="🟢 A, B — з фіду Прому, не змінювати").font = (
+    ws.cell(row=1, column=hint_col + 1, value="🟢 A, B — заповнює prom_export_categories.py").font = (
         Font(bold=True, color="375623", name="Arial", size=9)
     )
+
     ws.freeze_panes = "A2"
 
 
-def build_categories_sheet(wb: Workbook, categories: list[dict]) -> None:
+def _build_categories_sheet(wb: Workbook, categories: list[dict]) -> None:
+    """Створює лист «Категорії Епіцентру» з даними з API."""
     ws = wb.create_sheet("Категорії Епіцентру")
-    for ci, (h, w) in enumerate(
-        zip(["code", "name_uk", "parentCode", "hasChild"], [30, 50, 30, 12]), 1
-    ):
-        _hdr(ws.cell(row=1, column=ci, value=h))
-        ws.column_dimensions[get_column_letter(ci)].width = w
+
+    for ci, (header, width) in enumerate(EPICENTER_COLUMNS, 1):
+        _style_header(ws.cell(row=1, column=ci, value=header))
+        ws.column_dimensions[get_column_letter(ci)].width = width
+
     for ri, cat in enumerate(categories, 2):
-        for ci, val in enumerate(
-            [
-                cat.get("code", ""),
-                _get_translation(cat.get("translations", [])),
-                cat.get("parentCode", ""),
-                cat.get("hasChild", ""),
-            ],
-            1,
-        ):
-            _data(ws.cell(row=ri, column=ci, value=val))
+        values = [
+            cat.get("code", ""),
+            _get_translation(cat.get("translations", [])),
+            cat.get("parentCode", ""),
+            cat.get("hasChild", ""),
+        ]
+        for ci, val in enumerate(values, 1):
+            _style_data(ws.cell(row=ri, column=ci, value=val))
+
     ws.freeze_panes = "A2"
-    ws.auto_filter.ref = f"A1:D{len(categories) + 1}"
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(EPICENTER_COLUMNS))}{len(categories) + 1}"
+
+
+def _build_empty_categories_sheet(wb: Workbook) -> None:
+    """Запасний варіант: якщо API не відповів — лист з попередженням."""
+    ws = wb.create_sheet("Категорії Епіцентру")
+    ws["A1"] = "⚠️ Не завантажено. Перевір токен API та повтори запуск."
+    ws["A1"].font = Font(bold=True, color="C00000", name="Arial")
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -345,53 +268,42 @@ def build_categories_sheet(wb: Workbook, categories: list[dict]) -> None:
 def main() -> None:
     print("🚀 epicenter_export_categories.py — КРОК 1\n")
 
-    prom_categories = load_prom_categories()
-    if not prom_categories:
-        print("❌ Категорії Прому не знайдено. Перевір mappings.xlsx.")
-        return
-
-    # ── Інкрементальний режим ─────────────────────────────────────────────────
     if OUTPUT_PATH.exists():
-        print("⚡ Файл існує — дописуємо нові категорії Прому у «Маппінг».\n")
-        added = append_new_prom_categories(prom_categories)
-        if added > 0:
-            print(
-                f"\n📌 Додано {added} нових категорій.\n"
-                f"   Заповни epicenter_category_id (крок 2) і запусти наступний скрипт:\n"
-                f"   → python scripts/epicenter_export_attr_sets.py"
-            )
-        else:
-            print(
-                "\n✅ Всі категорії вже є в «Маппінг».\n"
-                "   Наступний крок → python scripts/epicenter_export_attr_sets.py"
-            )
+        print(
+            f"ℹ️  Файл вже існує: {OUTPUT_PATH}\n"
+            f"   Структура створена. Подальші кроки:\n"
+            f"   1. Заповни «Маппінг»:  python scripts/prom_export_categories.py\n"
+            f"   2. Заповни epicenter_category_id: python scripts/epicenter_map_categories.py\n"
+            f"   3. Далі → python scripts/epicenter_export_attr_sets.py"
+        )
         return
 
-    # ── Перший запуск — створюємо файл ───────────────────────────────────────
-    print("📄 Перший запуск — створюємо epicenter_mappings.xlsx\n")
-    categories = fetch_categories()
+    categories = fetch_epicenter_categories()
 
     wb = Workbook()
     wb.remove(wb.active)
-    build_instructions_sheet(wb)
-    build_mapping_sheet(wb, prom_categories)
+
+    _build_instructions_sheet(wb)
+    _build_mapping_sheet(wb)
 
     if categories:
-        build_categories_sheet(wb, categories)
+        _build_categories_sheet(wb, categories)
     else:
-        ws = wb.create_sheet("Категорії Епіцентру")
-        ws["A1"] = "⚠️ Не завантажено. Перевір токен."
-        ws["A1"].font = Font(bold=True, color="C00000")
+        _build_empty_categories_sheet(wb)
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     wb.save(OUTPUT_PATH)
+
     print(f"\n✅ Збережено: {OUTPUT_PATH}")
     print(f"   Листи: {wb.sheetnames}")
     print(
-        "\n📌 КРОК 2: Заповни epicenter_category_id у «Маппінг»:\n"
-        "   • Автоматично: python scripts/epicenter_map_categories.py\n"
-        "   • Вручну:      колонки C, D, E у листі «Маппінг»\n"
-        "   Потім → python scripts/epicenter_export_attr_sets.py"
+        "\n📌 Наступні кроки:\n"
+        "   1. Заповни «Маппінг» (prom_category_id, Категорія Прому):\n"
+        "      python scripts/prom_export_categories.py\n"
+        "   2. Заповни epicenter_category_id (крок 2):\n"
+        "      • Автоматично: python scripts/epicenter_map_categories.py\n"
+        "      • Вручну:      колонки C, D, E у листі «Маппінг»\n"
+        "   3. Далі → python scripts/epicenter_export_attr_sets.py"
     )
 
 
