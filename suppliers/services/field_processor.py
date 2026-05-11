@@ -32,27 +32,68 @@ class FieldProcessor:
         if category_config_path:
             self._load_category_config(category_config_path)
     
-    def _load_category_config(self, path: str | Path):
-        """Завантажує конфігурацію одиниць виміру для категорій"""
+    def _load_category_config(self, path: str | Path) -> None:
+        """
+        Завантажує конфігурацію одиниць виміру для категорій.
+
+        ПРИЧИНА використання csv.reader замість csv.DictReader:
+        viatec_category.csv містить дублікати заголовків:
+          col 13: Одиниця_виміру_Характеристики → "г"/"кг"  ← нам потрібна ця
+          col 16: Одиниця_виміру_Характеристики → ""         ← DictReader брав цю
+        DictReader при дублікатах зберігає ОСТАННЄ значення → завжди "".
+        Тому читаємо raw-рядки і звертаємося до колонок за індексом.
+
+        Структура колонок viatec_category.csv (0-based):
+          0:  №
+          1:  Линк категории поставщика
+          2:  channel
+          8:  Ідентифікатор_підрозділу
+          13: Одиниця_виміру_Характеристики  ← одиниця ваги ("г"/"кг")
+        """
+        IDX_CHANNEL     = 2
+        IDX_CAT_ID      = 8
+        IDX_WEIGHT_UNIT = 13
+
+        path = Path(path)
         try:
-            with open(path, encoding='utf-8-sig') as f:
-                reader = csv.DictReader(f, delimiter=';')
+            with open(path, encoding="utf-8-sig") as f:
+                reader = csv.reader(f, delimiter=";")
+                headers = next(reader, None)
+                if headers is None:
+                    return
+
                 for row in reader:
-                    category_id = row.get('Ідентифікатор_підрозділу', '').strip()
-                    weight_unit = row.get('Одиниця_виміру_Характеристики', '').strip()
-                    
+                    if not row or all(c.strip() == "" for c in row):
+                        continue
+
+                    # Беремо тільки site-рядки, щоб не дублювати prom-рядки
+                    channel = row[IDX_CHANNEL].strip() if len(row) > IDX_CHANNEL else ""
+                    if channel != "site":
+                        continue
+
+                    category_id = row[IDX_CAT_ID].strip() if len(row) > IDX_CAT_ID else ""
+                    weight_unit = row[IDX_WEIGHT_UNIT].strip() if len(row) > IDX_WEIGHT_UNIT else ""
+
                     if category_id and weight_unit:
                         self.category_weight_units[category_id] = weight_unit
-            
-            # Детальне логування
-            g_categories = [k for k, v in self.category_weight_units.items() if v == 'г']
-            kg_categories = [k for k, v in self.category_weight_units.items() if v == 'кг']
+
+            g_cats  = [k for k, v in self.category_weight_units.items() if v == "г"]
+            kg_cats = [k for k, v in self.category_weight_units.items() if v == "кг"]
+
             print(f"✅ Завантажено {len(self.category_weight_units)} категорій з {path.name}")
-            print(f"   Категорії з 'г': {g_categories[:10]}..." if len(g_categories) > 10 else f"   Категорії з 'г': {g_categories}")
-            print(f"   Категорії з 'кг': {kg_categories[:10]}..." if len(kg_categories) > 10 else f"   Категорії з 'кг': {kg_categories}")
-        
+            print(
+                f"   Категорії з 'г': {g_cats[:10]}..."
+                if len(g_cats) > 10 else f"   Категорії з 'г': {g_cats}"
+            )
+            print(
+                f"   Категорії з 'кг': {kg_cats[:10]}..."
+                if len(kg_cats) > 10 else f"   Категорії з 'кг': {kg_cats}"
+            )
+
+        except FileNotFoundError:
+            print(f"⚠️ FieldProcessor: CSV файл не знайдено: {path}")
         except Exception as e:
-            print(f"⚠️ Помилка завантаження category_config: {e}")
+            print(f"❌ FieldProcessor: Помилка завантаження category_config: {e}")
 
     def process_weight(self, value: str, category_id: str, spider) -> str:
         """

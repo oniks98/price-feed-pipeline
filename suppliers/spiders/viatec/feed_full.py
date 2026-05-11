@@ -34,6 +34,7 @@ from pathlib import Path
 import scrapy
 from dotenv import load_dotenv
 
+from suppliers.items import ViatecProductItem
 from suppliers.services.dealer_price_service import (
     DEFAULT_USD_RATE,
     DealerPriceService as ViatecPriceService,
@@ -188,6 +189,10 @@ class ViatecFeedFullSpider(ViatecBaseSpider, BaseDealerSpider):
             if product is None:
                 continue
 
+            if not product.available:
+                self.logger.debug(f"⏭️  Пропускаємо (не в наявності): {ua_url}")
+                continue
+
             ru_url = self._convert_to_ru_url(ua_url)
             yield scrapy.Request(
                 url=ru_url,
@@ -273,38 +278,38 @@ class ViatecFeedFullSpider(ViatecBaseSpider, BaseDealerSpider):
             description_ua = response.meta.get("description_ua", "")
             original_url = response.meta.get("original_url", response.url)
 
-            item = {
-                "Код_товару": "",
-                "Назва_позиції": name_ru,
-                "Назва_позиції_укр": name_ua,
-                "Пошукові_запити": "",
-                "Пошукові_запити_укр": "",
-                "Опис": description_ru,
-                "Опис_укр": description_ua,
-                "Тип_товару": "r",
-                "Ціна": price,
-                "Валюта": self.currency,
-                "Одиниця_виміру": "шт.",
-                "Посилання_зображення": image_url,
-                "Наявність": availability,
-                "Кількість": quantity,
-                "Назва_групи": "",
-                "Назва_групи_укр": "",
-                "Номер_групи": "",
-                "Ідентифікатор_товару": supplier_sku,
-                "Ідентифікатор_підрозділу": "",
-                "Посилання_підрозділу": "",
-                "Виробник": self.feed_service.get_vendor(supplier_sku),
-                "Країна_виробник": "",
-                "price_rrp_uah": price_rrp_uah,
-                "price_type": self.price_type,
-                "supplier_id": self.supplier_id,
-                "usd_rate": str(self.usd_rate),
-                "output_file": self.output_filename,
-                "Продукт_на_сайті": original_url,
-                "category_url": "",
-                "specifications_list": specs_list,
-            }
+            item = ViatecProductItem(
+                Код_товару="",
+                Назва_позиції=name_ru,
+                Назва_позиції_укр=name_ua,
+                Пошукові_запити="",
+                Пошукові_запити_укр="",
+                Опис=description_ru,
+                Опис_укр=description_ua,
+                Тип_товару="r",
+                Ціна=price,
+                Валюта=self.currency,
+                Одиниця_виміру="шт.",
+                Посилання_зображення=image_url,
+                Наявність=availability,
+                Кількість=quantity,
+                Назва_групи="",
+                Назва_групи_укр="",
+                Номер_групи="",
+                Ідентифікатор_товару=supplier_sku,
+                Ідентифікатор_підрозділу="",
+                Посилання_підрозділу="",
+                Виробник=self.feed_service.get_vendor(supplier_sku),
+                Країна_виробник="",
+                price_rrp_uah=price_rrp_uah,
+                price_type=self.price_type,
+                supplier_id=self.supplier_id,
+                usd_rate=str(self.usd_rate),
+                output_file=self.output_filename,
+                Продукт_на_сайті=original_url,
+                category_url="",
+                specifications_list=specs_list,
+            )
             yield item
 
         except Exception as exc:

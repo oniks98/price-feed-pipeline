@@ -24,6 +24,7 @@ class ViatecProductItem(scrapy.Item):
     Кількість = scrapy.Field()
     Номер_групи = scrapy.Field()
     Назва_групи = scrapy.Field()
+    Назва_групи_укр = scrapy.Field()
     Посилання_підрозділу = scrapy.Field()
     Можливість_поставки = scrapy.Field()
     Термін_поставки = scrapy.Field()
@@ -57,9 +58,14 @@ class ViatecProductItem(scrapy.Item):
     
     # Технические поля (не экспортируются)
     category_url = scrapy.Field()
-    price_type = scrapy.Field()  # retail або dealer
-    
-    # Динамические характеристики (будут добавлены в паук)
+    price_type = scrapy.Field()      # retail або dealer
+    supplier_id = scrapy.Field()     # viatec
+    output_file = scrapy.Field()     # имя выходного файла
+    specifications_list = scrapy.Field()  # список характеристик
+    price_rrp_uah = scrapy.Field()   # РРЦ в гривнях зі сторінки
+    usd_rate = scrapy.Field()        # курс USD на момент парсингу
+
+    # Динамические характеристики (будут добавлены в pipeline)
     # Назва_Характеристики_1, Одиниця_виміру_Характеристики_1, Значення_Характеристики_1, ...
 
 
