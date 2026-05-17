@@ -291,21 +291,54 @@ def main() -> None:
         )
     col_promo = map_headers[COL_PROMO]
 
+    # Fast lookup: epicenter code → full row (used for parentCode back-fill)
+    epi_by_code: dict[str, dict] = {
+        str(r.get(EPI_COL_CODE, "")).strip(): r
+        for r in epi_rows
+        if r.get(EPI_COL_CODE)
+    }
+
     # ── 5. Iterate Mapping rows and fill matches ──────────────────────────────
     updated         = 0
     skipped         = 0
     already_matched = 0
+    parent_fixed    = 0
 
     for row_idx in range(2, ws_map.max_row + 1):
         promo_val = str(ws_map.cell(row_idx, col_promo).value or "").strip()
         if not promo_val:
             continue
 
-        # Skip rows already fully resolved
-        if ws_map.cell(row_idx, col_epi_id).value and ws_map.cell(row_idx, col_epi_name).value:
+        existing_epi_id   = str(ws_map.cell(row_idx, col_epi_id).value or "").strip()
+        existing_epi_name = str(ws_map.cell(row_idx, col_epi_name).value or "").strip()
+        existing_parent   = str(ws_map.cell(row_idx, col_parent).value or "").strip()
+
+        # Case 1: all three columns filled — nothing to do
+        if existing_epi_id and existing_epi_name and existing_parent:
             already_matched += 1
             continue
 
+        # Case 2: epi_id + name filled, but parentCode missing → back-fill from lookup
+        if existing_epi_id and existing_epi_name and not existing_parent:
+            epi_row = epi_by_code.get(existing_epi_id)
+            if epi_row:
+                ws_map.cell(row_idx, col_parent).value = epi_row.get(EPI_COL_PARENT, "")
+                log.info(
+                    "Row %d: back-filled parentCode '%s' for epi_id '%s'.",
+                    row_idx,
+                    epi_row.get(EPI_COL_PARENT, ""),
+                    existing_epi_id,
+                )
+                parent_fixed += 1
+            else:
+                log.warning(
+                    "Row %d: epi_id '%s' not in open categories — parentCode left empty.",
+                    row_idx,
+                    existing_epi_id,
+                )
+            continue
+
+        # Case 3: not matched yet → run fuzzy match
         log.info("Row %d: '%s'", row_idx, promo_val)
         match = best_match(promo_val, epi_rows)
 
@@ -321,8 +354,9 @@ def main() -> None:
     # ── 6. Save ───────────────────────────────────────────────────────────────
     wb.save(MAPPINGS_PATH)
     log.info(
-        "Done. Updated: %d | No match: %d | Already matched (skipped): %d",
+        "Done. Updated: %d | parentCode fixed: %d | No match: %d | Already complete (skipped): %d",
         updated,
+        parent_fixed,
         skipped,
         already_matched,
     )

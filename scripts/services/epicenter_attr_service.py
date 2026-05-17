@@ -6,21 +6,28 @@ services/epicenter_attr_service.py
 
 Аркуші читаються один раз (lru_cache) і роздаються всім споживачам.
 Доступний інтерфейс:
-    get_option_map()  → OptionMap
-    get_defaults()    → DefaultsMap
-    get_numeric_map() → NumericMap
+    get_option_map()    → OptionMap
+    get_defaults()      → DefaultsMap
+    get_numeric_map()   → NumericMap
+    get_attr_defaults() → AttrDefaultsMap
 
 OptionMap  = dict[str, dict[str, AttrOption]]
     prom_param_name → prom_option_value → AttrOption
     Приклад: {"Кут огляду": {"120": AttrOption(attr_code="6067", ...)}}
 
 DefaultsMap = dict[str, dict[str, AttrOption]]
-    set_code → attr_code → AttrOption (дефолтна опція)
+    set_code → attr_code → AttrOption (дефолтна опція для конкретного сету)
     Приклад: {"5926": {"measure": AttrOption(..., option_code="measure_pcs", option_name="шт.")}}
 
 NumericMap = dict[str, AttrMeta]
     prom_param_name → AttrMeta  (для float / int / text / string атрибутів)
     Приклад: {"Ширина": AttrMeta(attr_code="width", attr_name="Ширина", attr_type="float")}
+
+AttrDefaultsMap = dict[str, AttrOption]
+    attr_code → AttrOption (дефолтна опція незалежно від set_code; перший запис у файлі)
+    Приклад: {"measure": AttrOption(attr_code="measure", ..., option_code="measure_pcs")}
+    Призначення: глобальні дефолти для атрибутів, де set_codes порожній,
+    або як fallback коли атрибут відсутній у DefaultsMap для конкретного сету.
 """
 
 from __future__ import annotations
@@ -52,13 +59,14 @@ _ASET_COL_PROM_PARAM: Final[int] = 9     # prom_param_name
 # Column indices (0-based) в «Опції атрибутів»
 _OPT_COL_ATTR_CODE: Final[int] = 0       # attr_code
 _OPT_COL_ATTR_NAME: Final[int] = 1       # attr_name_uk
+_OPT_COL_ATTR_TYPE: Final[int] = 2       # attr_type (float | int | text | string | select | ...)
 _OPT_COL_OPTION_CODE: Final[int] = 3     # option_code
 _OPT_COL_OPTION_NAME: Final[int] = 4     # option_name_uk
 _OPT_COL_PROM_VALUE: Final[int] = 5      # prom_option_name  (значення з Прому)
 _OPT_COL_NEEDS_DEFAULT: Final[int] = 6   # needs_default (bool)
 _OPT_COL_DEFAULT_CODE: Final[int] = 7    # default_option_code
 _OPT_COL_SET_CODES:   Final[int] = 8     # set_codes   (comma-separated epicenter category ids)
-_OPT_COL_PROM_PARAMS: Final[int] = 9     # prom_params (comma-separated prom param names, не використовується тут)
+_OPT_COL_PROM_PARAMS: Final[int] = 9     # prom_params (comma-separated prom param names) — primary джерело для option_map
 
 # Типи атрибутів без опцій (значення товару підставляється напряму як CDATA)
 _NON_OPTION_TYPES: Final[frozenset[str]] = frozenset({"float", "int", "text", "string"})
@@ -85,9 +93,11 @@ class AttrMeta:
     attr_type: str   # float | int | text | string
 
 
-OptionMap   = dict[str, dict[str, AttrOption]]  # prom_param → prom_value → AttrOption
-DefaultsMap = dict[str, dict[str, AttrOption]]  # set_code   → attr_code  → AttrOption
-NumericMap  = dict[str, AttrMeta]               # prom_param → AttrMeta
+OptionMap       = dict[str, dict[str, AttrOption]]  # prom_param → prom_value → AttrOption
+DefaultsMap     = dict[str, dict[str, AttrOption]]  # set_code   → attr_code  → AttrOption
+NumericMap      = dict[str, AttrMeta]               # prom_param → AttrMeta
+AttrDefaultsMap = dict[str, AttrOption]             # attr_code  → AttrOption (global default)
+FloatDefaultsMap = dict[str, str]                   # attr_code  → default value string (for float/int/text/string)
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +111,7 @@ def _clean(value: object) -> str:
 
 def _parse_set_codes(raw: object) -> list[str]:
     """
-    Парсить prom_params (рядок з comma-separated set_codes) у список рядків.
+    Парсить set_codes (рядок з comma-separated категорій) у список рядків.
     Повертає порожній список на будь-який невалідний вхід.
     """
     if not raw:
@@ -121,19 +131,57 @@ def _load_workbook() -> openpyxl.Workbook:
 # Sub-loader: «Сети атрибутів»
 # ---------------------------------------------------------------------------
 
+def _parse_prom_param_aliases(raw: object) -> list[str]:
+    """
+    Парсить prom_param_name як comma-separated список алиасів.
+
+    Перший елемент — найчастіший варіант (основний).
+    Повертає порожній список якщо значення відсутнє.
+
+    Приклад: "Розміри, Розмір, Размер, Розмір упаковки"
+             → ["Розміри", "Розмір", "Размер", "Розмір упаковки"]
+    """
+    if not raw:
+        return []
+    return [s.strip() for s in str(raw).split(",") if s.strip()]
+
+
+def _parse_prom_option_aliases(raw: object) -> list[str]:
+    """
+    Парсить prom_option_name як comma-separated список алиасів значення опції.
+
+    Аналог _parse_prom_param_aliases — для колонки prom_option_name
+    аркуша «Опції атрибутів».
+    Всі алиаси реєструються як окремі ключі:
+        option_map[param_alias][option_alias] → AttrOption
+
+    Приклад: "Білий, Белый, White"
+             → ["Білий", "Белый", "White"]
+    Приклад: "120"
+             → ["120"]   (одне значення — поведінка без змін)
+    """
+    if not raw:
+        return []
+    return [s.strip() for s in str(raw).split(",") if s.strip()]
+
+
 def _build_attr_indexes(
     wb: openpyxl.Workbook,
-) -> tuple[dict[str, str], NumericMap]:
+) -> tuple[dict[str, list[str]], NumericMap]:
     """
     Читає «Сети атрибутів» і повертає два індекси:
 
-    attr_to_prom: {attr_code → prom_param_name}
-        Використовується для побудови option_map (select/multiselect).
-        Один attr_code у кількох сетах → prom_param_name однаковий,
-        останній запис без втрат.
+    attr_to_prom: {attr_code → list[prom_param_name]}
+        Список алиасів prom_param_name (comma-separated у xlsx).
+        Перший елемент — найчастіший варіант.
+        ПРИЗНАЧЕННЯ:
+          - primary джерело для numeric_map (float/int/text/string);
+          - fallback для option_map якщо col 9 «Опції атрибутів» порожній.
+        Primary джерело для option_map — col 9 «Опції атрибутів».
 
     numeric_map: {prom_param_name → AttrMeta}
         Тільки для float / int / text / string атрибутів.
+        Всі алиаси реєструються як окремі ключі → один AttrMeta.
         Використовується для рендерингу CDATA-параметрів у XML-фіді.
     """
     try:
@@ -141,7 +189,7 @@ def _build_attr_indexes(
     except KeyError:
         raise KeyError(f"Аркуш «{_SHEET_ATTRS}» не знайдено у {_XLSX_PATH}")
 
-    attr_to_prom: dict[str, str] = {}
+    attr_to_prom: dict[str, list[str]] = {}
     numeric_map: NumericMap = {}
 
     for row_idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
@@ -151,23 +199,27 @@ def _build_attr_indexes(
         attr_code  = _clean(row[_ASET_COL_ATTR_CODE])
         attr_name  = _clean(row[_ASET_COL_ATTR_NAME])
         attr_type  = _clean(row[_ASET_COL_ATTR_TYPE]).lower()
-        prom_param = _clean(row[_ASET_COL_PROM_PARAM])
+        prom_param_aliases = _parse_prom_param_aliases(row[_ASET_COL_PROM_PARAM])
 
-        if not attr_code or not prom_param:
+        if not attr_code or not prom_param_aliases:
             continue
 
-        attr_to_prom[attr_code] = prom_param
+        attr_to_prom[attr_code] = prom_param_aliases
 
         if attr_type in _NON_OPTION_TYPES:
-            numeric_map[prom_param] = AttrMeta(
+            meta = AttrMeta(
                 attr_code=attr_code,
                 attr_name=attr_name,
                 attr_type=attr_type,
             )
+            for alias in prom_param_aliases:
+                numeric_map[alias] = meta
 
     logger.debug(
-        "Сети атрибутів: attr→prom_param %d записів | numeric_map %d записів",
-        len(attr_to_prom), len(numeric_map),
+        "Сети атрибутів: attr→prom_param %d записів | numeric_map %d ключів (%d атрибутів з аліасами)",
+        len(attr_to_prom),
+        len(numeric_map),
+        sum(1 for aliases in attr_to_prom.values() if len(aliases) > 1),
     )
     return attr_to_prom, numeric_map
 
@@ -177,11 +229,18 @@ def _build_attr_indexes(
 # ---------------------------------------------------------------------------
 
 @lru_cache(maxsize=1)
-def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap]:
+def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap, AttrDefaultsMap]:
     """
     Єдине читання обох аркушів.
 
-    Повертає (option_map, defaults, numeric_map).
+    Повертає (option_map, defaults, numeric_map, attr_defaults).
+
+    attr_defaults — глобальні дефолти: attr_code → AttrOption.
+        Будується з усіх рядків де default_option_code заповнений;
+        перший зустрічний запис для кожного attr_code виграє.
+        Призначення: атрибути без set_codes (наприклад, «measure» що
+        діє на всі категорії) або fallback коли конкретний set_code
+        відсутній у DefaultsMap.
     """
     wb = _load_workbook()
 
@@ -196,12 +255,15 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap]:
 
     # --- крок 3: один прохід — будуємо key_index, option_map і збираємо pending defaults ---
     # key_index потрібен для резолву default_option_code; будується паралельно з option_map.
-    # Рядки з needs_default відкладаємо до повної побудови key_index (default_code
+    # Рядки з default_option_code відкладаємо до повної побудови key_index (default_code
     # може посилатись на опцію, що йде пізніше по файлу).
-    key_index:       dict[tuple[str, str], AttrOption] = {}
-    option_map:      OptionMap   = {}
-    defaults:        DefaultsMap = {}
-    pending_defaults: list[tuple[int, str, str, object]] = []  # (row_idx, attr_code, default_code, set_codes_raw)
+    key_index:        dict[tuple[str, str], AttrOption] = {}
+    option_map:       OptionMap        = {}
+    defaults:         DefaultsMap      = {}
+    attr_defaults:    AttrDefaultsMap  = {}
+    float_defaults:   FloatDefaultsMap = {}
+    # (row_idx, attr_code, default_code, set_codes_raw)
+    pending_defaults: list[tuple[int, str, str, object]] = []
     opt_mapped = 0
     def_mapped = 0
 
@@ -209,9 +271,22 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap]:
         if row_idx == 1:
             continue
 
-        attr_code   = _clean(row[_OPT_COL_ATTR_CODE])
-        option_code = _clean(row[_OPT_COL_OPTION_CODE])
-        prom_value  = _clean(row[_OPT_COL_PROM_VALUE])
+        attr_code    = _clean(row[_OPT_COL_ATTR_CODE])
+        attr_type_raw = _clean(row[_OPT_COL_ATTR_TYPE]).lower()
+        option_code  = _clean(row[_OPT_COL_OPTION_CODE])
+        prom_value   = _clean(row[_OPT_COL_PROM_VALUE])
+
+        # Float/numeric defaults: рядки без option_code, де option_name_uk = дефолтне значення.
+        # Перший зустрічний запис для кожного attr_code — глобальний дефолт.
+        if attr_code and not option_code and attr_type_raw in _NON_OPTION_TYPES:
+            default_value = _clean(row[_OPT_COL_OPTION_NAME])
+            if default_value and attr_code not in float_defaults:
+                float_defaults[attr_code] = default_value
+                logger.debug(
+                    "Рядок %d: float default | attr_code=%r value=%r",
+                    row_idx, attr_code, default_value,
+                )
+            continue  # ці рядки не є опціями — решту полів не обробляємо
 
         if not attr_code:
             continue
@@ -225,16 +300,40 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap]:
                 option_name=_clean(row[_OPT_COL_OPTION_NAME]),
             )
 
-        # option_map: рядки де prom_option_name заповнений
+        # option_map: рядки де prom_option_name заповнений.
+        # prom_param_name  — може бути comma-separated → _parse_prom_param_aliases
+        # prom_option_name — може бути comma-separated → _parse_prom_option_aliases
+        # Кожна пара (param_alias, option_alias) реєструється як окремий ключ
+        # і вказує на одну і ту саму AttrOption.
         if prom_value and option_code:
-            prom_param = attr_to_prom.get(attr_code)
-            if not prom_param:
+            # PRIMARY: col 9 «Опції атрибутів» — self-contained, не залежить від синхронізації з «Сети атрибутів».
+            # FALLBACK: attr_to_prom з «Сети атрибутів» — якщо col 9 порожній.
+            prom_aliases = _parse_prom_param_aliases(row[_OPT_COL_PROM_PARAMS])
+            if not prom_aliases:
+                prom_aliases = attr_to_prom.get(attr_code)
+                if prom_aliases:
+                    logger.debug(
+                        "Рядок %d: attr_code=%r — prom_param_name взято з «Сети атрибутів» "
+                        "(col %d «Опції атрибутів» порожній): %r",
+                        row_idx, attr_code, _OPT_COL_PROM_PARAMS, prom_aliases,
+                    )
+            prom_option_aliases = _parse_prom_option_aliases(row[_OPT_COL_PROM_VALUE])
+            if not prom_aliases:
                 logger.debug(
-                    "Рядок %d: attr_code=%r не має prom_param_name → пропущено",
+                    "Рядок %d: attr_code=%r не має prom_param_name "
+                    "ні в «Сети атрибутів», ні в col %d «Опції атрибутів» → пропущено",
+                    row_idx, attr_code, _OPT_COL_PROM_PARAMS,
+                )
+            elif not prom_option_aliases:
+                logger.debug(
+                    "Рядок %d: attr_code=%r prom_option_name порожній → пропущено",
                     row_idx, attr_code,
                 )
             else:
-                option_map.setdefault(prom_param, {})[prom_value] = key_index[(attr_code, option_code)]
+                option = key_index[(attr_code, option_code)]
+                for param_alias in prom_aliases:
+                    for option_alias in prom_option_aliases:
+                        option_map.setdefault(param_alias, {})[option_alias] = option
                 opt_mapped += 1
 
         # defaults: відкладаємо до завершення побудови key_index.
@@ -257,12 +356,23 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap]:
                 row_idx, default_code, attr_code,
             )
             continue
+
+        # AttrDefaultsMap: перший зустрічний запис для кожного attr_code.
+        # Це «глобальний» дефолт — незалежно від категорії.
+        if attr_code not in attr_defaults:
+            attr_defaults[attr_code] = default_option
+
         set_codes = _parse_set_codes(set_codes_raw)
         if not set_codes:
-            logger.warning(
-                "Рядок %d: needs_default=True, але set_codes порожній для attr_code=%r",
-                row_idx, attr_code,
+            # Рядок без set_codes → тільки у attr_defaults (глобальний fallback).
+            # У defaults по set_code не додаємо.
+            logger.debug(
+                "Рядок %d: attr_code=%r default_option_code=%r — set_codes порожній, "
+                "додано тільки до attr_defaults як глобальний дефолт",
+                row_idx, attr_code, default_code,
             )
+            continue
+
         for set_code in set_codes:
             defaults.setdefault(set_code, {})[attr_code] = default_option
             def_mapped += 1
@@ -270,10 +380,11 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap]:
     wb.close()
 
     logger.info(
-        "📐 option_map: %d prom_params / %d опцій | defaults: %d set_codes | numeric_map: %d",
-        len(option_map), opt_mapped, len(defaults), len(numeric_map),
+        "📐 option_map: %d prom_params / %d опцій | defaults: %d set_codes "
+        "| attr_defaults: %d глобальних | numeric_map: %d",
+        len(option_map), opt_mapped, len(defaults), len(attr_defaults), len(numeric_map),
     )
-    return option_map, defaults, numeric_map
+    return option_map, defaults, numeric_map, attr_defaults, float_defaults
 
 
 # ---------------------------------------------------------------------------
@@ -287,20 +398,20 @@ def get_option_map() -> OptionMap:
     Використання:
         option = get_option_map().get(prom_param, {}).get(prom_value)
     """
-    option_map, _, _ = _load_indexes()
+    option_map, _, _, _, _ = _load_indexes()
     return option_map
 
 
 def get_defaults() -> DefaultsMap:
     """
-    Дефолтні опції: set_code → attr_code → AttrOption.
+    Дефолтні опції прив'язані до set_code: set_code → attr_code → AttrOption.
 
     Використання:
         for attr_code, default in get_defaults().get(set_code, {}).items():
             if attr_code not in already_mapped_codes:
                 params.append(default)
     """
-    _, defaults, _ = _load_indexes()
+    _, defaults, _, _, _ = _load_indexes()
     return defaults
 
 
@@ -315,5 +426,45 @@ def get_numeric_map() -> NumericMap:
         if meta:
             xml_param = f'<param paramcode="{meta.attr_code}" ...><![CDATA[{value}]]></param>'
     """
-    _, _, numeric_map = _load_indexes()
+    _, _, numeric_map, _, _ = _load_indexes()
     return numeric_map
+
+
+def get_attr_defaults() -> AttrDefaultsMap:
+    """
+    Глобальні дефолтні опції: attr_code → AttrOption.
+
+    На відміну від get_defaults() не залежить від set_code категорії.
+    Будується з колонки default_option_code аркуша «Опції атрибутів»;
+    перший зустрічний запис для кожного attr_code.
+
+    Призначення:
+        - атрибути без set_codes, що діють на всі категорії (напр. «measure»)
+        - fallback коли конкретний set_code відсутній у DefaultsMap
+
+    Використання:
+        option = get_attr_defaults().get("measure")
+        if option:
+            params.append(_render_select_param(option))
+    """
+    _, _, _, attr_defaults, _ = _load_indexes()
+    return attr_defaults
+
+
+def get_float_defaults() -> FloatDefaultsMap:
+    """
+    Глобальні дефолти для float/int/text/string атрибутів: attr_code → value string.
+
+    Читається з колонки option_name_uk для рядків без option_code в аркуші «Опції атрибутів».
+    Перший зустрічний запис для кожного attr_code.
+
+    Призначення:
+        - fallback значення для габаритних атрибутів (weight, height, length, width)
+          та кратності (ratio), коли відповідний <param> відсутній у Prom XML
+
+    Використання:
+        float_defs = get_float_defaults()  # {"ratio": "1", "weight": "500", ...}
+        _attr_defs = AttrDefaults(option_name_uk=float_defs, ...)
+    """
+    _, _, _, _, float_defaults = _load_indexes()
+    return float_defaults

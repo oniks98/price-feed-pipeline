@@ -5,12 +5,12 @@ epicenter_export_attr_options.py
 
 Що робить:
   Завантажує з API опції атрибутів Epicenter і записує в лист «Опції атрибутів»
-  ТІЛЬКИ для тих пар (set_code, attr_code), у яких заповнений prom_param_name
+  ТІЛЬКИ для тих пар (set_code, attr_code), у яких isRequired = TRUE
   у листі «Сети атрибутів» — і тільки для set_codes з «Маппінгу».
 
 Передумова:
   • Лист «Маппінг» — заповнені epicenter_category_id.
-  • Лист «Сети атрибутів» — заповнені prom_param_name для потрібних атрибутів.
+  • Лист «Сети атрибутів» — наявні рядки з isRequired = TRUE.
 
 Інкрементальна логіка:
   Якщо «Опції атрибутів» вже існує — дописує тільки нові set_codes,
@@ -25,9 +25,10 @@ epicenter_export_attr_options.py
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Lock
+import time
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -47,23 +48,34 @@ HEADERS   = {
 ROOT        = Path(__file__).parents[1]
 OUTPUT_PATH = ROOT / "data" / "markets" / "epicenter_mappings.xlsx"
 
-OPTION_TYPES    = {"select", "multiselect"}
-OPTIONS_WORKERS = 8
-REQ_TIMEOUT     = (10, 30)
-MAX_PAGES       = 200
-FUTURE_TIMEOUT  = 90
+OPTION_TYPES     = {"select", "multiselect"}   # мають опції в API → завантажуємо
+NON_OPTION_TYPES = {"float", "int", "text", "string"}  # числові/текстові → рядок без опцій
+# Типи без опцій і без маппінгу — пишемо рядок-заглушку (як NON_OPTION_TYPES):
+# boolean, date, datetime, color, image, file, price, range, richtext тощо
+# Доповнюй якщо API поверне нові типи (лог покаже їх при запуску).
+EXTRA_NON_OPTION_TYPES = {"boolean", "bool", "date", "datetime", "color",
+                          "image", "file", "price", "range",
+                          "richtext", "rich_text", "textarea", "array"}
+ALL_NON_OPTION_TYPES   = NON_OPTION_TYPES | EXTRA_NON_OPTION_TYPES
+ALL_KNOWN_TYPES        = OPTION_TYPES | ALL_NON_OPTION_TYPES
 
-# Атрибути з надто великою кількістю опцій — пропускаємо (не корисні для маппінгу).
-# brand має 10 000+ опцій і множиться по всіх категоріях → Excel ліміт вичерпується.
-SKIP_ATTRS: set[str] = {"brand", "country_of_origin"}
+OPTIONS_WORKERS  = 8
+REQ_TIMEOUT      = (10, 30)
+MAX_PAGES        = 2000  # safety cap; brand ~62K опцій / 50 = ~1250 стор.
+HUGE_ATTR_ROWS   = 500   # attrs з більше опцій → пишемо без styling (~1M Cell-об'єктів)
 
 # Ключова зміна архітектури:
 # Опції пишуться по УНІКАЛЬНОМУ attr_code, НЕ по парі (set_code, attr_code).
 # set_codes і prom_params зберігаються через кому в окремих колонках.
 # Це скорочує кількість рядків з ~1.3M до ~10K.
 #
+# Типи атрибутів:
+#   select / multiselect  → завантажуємо опції з API (N рядків на attr_code)
+#   float / int / text / string → без API, один рядок-заглушка (значення = дані товару)
+#
 # needs_default у рядку = True якщо хоча б один set_code використовує цей attr
 # без заповненого prom_param_name (червона клітинка в «Сети атрибутів»).
+# default_option_code — заповнює юзер вручну для needs_default=True рядків select/multiselect.
 
 
 # ─── Session ──────────────────────────────────────────────────────────────────
@@ -130,9 +142,6 @@ def _parse_option_name(opt: dict) -> str:
 
 HDR_FILL     = PatternFill("solid", start_color="1F4E79", end_color="1F4E79")
 HDR_FONT     = Font(bold=True, color="FFFFFF", name="Arial", size=10)
-YELLOW_FILL  = PatternFill("solid", start_color="FFFF99", end_color="FFFF99")
-GRAY_FILL    = PatternFill("solid", start_color="F2F2F2", end_color="F2F2F2")
-BLUE_FILL    = PatternFill("solid", start_color="DEEAF1", end_color="DEEAF1")
 ORANGE_FILL  = PatternFill("solid", start_color="FCE4D6", end_color="FCE4D6")  # needs_default рядки
 THIN_BORDER = Border(
     left=Side(style="thin"), right=Side(style="thin"),
@@ -152,7 +161,6 @@ def _hdr(cell, fill=HDR_FILL) -> None:
 def _data(cell, fill=None) -> None:
     cell.font = Font(name="Arial", size=9)
     cell.alignment = LEFT
-    cell.border = THIN_BORDER
     if fill:
         cell.fill = fill
 
@@ -192,6 +200,7 @@ def load_mapped_set_codes() -> set[str]:
 
 def load_mapped_attr_pairs(filter_set_codes: set[str]) -> set[tuple[str, str]]:
     """
+    [НЕ ВИКОРИСТОВУЄТЬСЯ] Залишено для зворотної сумісності.
     Читає «Сети атрибутів» і повертає пари (set_code, attr_code),
     де prom_param_name заповнений І set_code є в filter_set_codes.
     """
@@ -231,13 +240,16 @@ def load_mapped_attr_pairs(filter_set_codes: set[str]) -> set[tuple[str, str]]:
 
 def load_attr_set_meta(filter_set_codes: set[str]) -> dict[tuple[str, str], dict]:
     """
-    Читає «Сети атрибутів» і повертає метадані для пар (set_code, attr_code)
-    які потребують завантаження опцій. Включає пару якщо виконується хоча б одна умова:
-      • prom_param_name заповнений  → треба опції для маппінгу Prom→Epicenter
-      • isRequired = True           → треба опції щоб вибрати дефолт (червона клітинка)
+    Читає «Сети атрибутів» і повертає метадані для пар (set_code, attr_code).
+    Включає пару ТІЛЬКИ якщо isRequired = TRUE — і set_code є в filter_set_codes.
 
-    Обидва випадки — тільки для типів select / multiselect і тільки для set_codes з маппінгу.
-    Поле `needs_default` в метаданих = True якщо prom_param_name порожній (червона клітинка).
+    Типи атрибутів:
+      select / multiselect  → опції завантажуються з API
+      float / int / text / string → рядок без опцій (значення береться з товару напряму)
+
+    Поле `needs_default`:
+      True  — якщо prom_param_name заповнений (є маппінг, заповнюємо prom_param_name)
+      False — якщо prom_param_name порожній (немає маппінгу Prom→Epicenter)
     """
     if not OUTPUT_PATH.exists():
         return {}
@@ -261,7 +273,7 @@ def load_attr_set_meta(filter_set_codes: set[str]) -> dict[tuple[str, str], dict
             return {}
 
         meta: dict[tuple[str, str], dict] = {}
-        skipped_type = 0
+        skipped_no_match: dict[str, int] = {}  # type → count
 
         for row in rows[1:]:
             sc = _norm_id(row[idx["set_code"]])
@@ -270,34 +282,51 @@ def load_attr_set_meta(filter_set_codes: set[str]) -> dict[tuple[str, str], dict
                 continue
 
             atype = str(row[idx["attr_type"]] or "").strip().lower()
-            if atype not in OPTION_TYPES:
-                skipped_type += 1
+            if atype not in ALL_KNOWN_TYPES:
+                skipped_no_match[atype or "(порожній)"] = skipped_no_match.get(atype or "(порожній)", 0) + 1
                 continue
 
             prom = str(row[idx["prom_param_name"]] or "").strip() \
                 if len(row) > idx["prom_param_name"] else ""
             is_required = str(row[idx["isRequired"]] or "").strip().upper() in ("TRUE", "1", "YES")
 
-            # Включаємо пару якщо є prom_param_name АБО атрибут обов'язковий (червона клітинка)
-            if not prom and not is_required:
+            # Включаємо ТІЛЬКИ якщо атрибут обов'язковий (isRequired = TRUE)
+            if not is_required:
                 continue
 
+            # Визначаємо фактичну групу: select/multiselect або все інші (без опцій)
+            effective_type = atype if atype in OPTION_TYPES else "__no_options__"
+
             meta[(sc, ac)] = {
-                "set_name":    str(row[idx["set_name_uk"]] or "").strip(),
-                "attr_name":   str(row[idx["attr_name_uk"]] or "").strip(),
-                "attr_type":   atype,
-                "prom_param":  prom,
-                "needs_default": not bool(prom),  # True = червона клітинка, треба вибрати дефолт
+                "set_name":      str(row[idx["set_name_uk"]] or "").strip(),
+                "attr_name":     str(row[idx["attr_name_uk"]] or "").strip(),
+                "attr_type":     atype,
+                "effective_type": effective_type,
+                "prom_param":    prom,
+                "needs_default": not bool(prom),
             }
 
-        mapped_count  = sum(1 for m in meta.values() if not m["needs_default"])
-        default_count = sum(1 for m in meta.values() if m["needs_default"])
+        with_opts     = sum(1 for m in meta.values() if m["attr_type"] in OPTION_TYPES)
+        no_opts       = sum(1 for m in meta.values() if m["attr_type"] not in OPTION_TYPES)
+        needs_default = sum(1 for m in meta.values() if m["needs_default"])      # немає prom → потрібен default_option_code
+        has_prom      = sum(1 for m in meta.values() if not m["needs_default"])  # є prom → дефолт не критичний
         print(
-            f"   select/multiselect пар для завантаження опцій: {len(meta)} шт.\n"
-            f"   • з prom_param_name (маппінг):         {mapped_count}\n"
-            f"   • без prom_param_name (дефолт, червоні): {default_count}\n"
-            f"   • пропущено (не select/multiselect):   {skipped_type}"
+            f"   Пар isRequired=TRUE для обробки: {len(meta)} шт.\n"
+            f"   • select/multiselect (завантажуємо опції з API): {with_opts}\n"
+            f"   • float/int/text/string/ін. (рядок без опцій):  {no_opts}\n"
+            f"   • без prom_param_name (needs_default=TRUE):      {needs_default}\n"
+            f"   • з prom_param_name (needs_default=FALSE):       {has_prom}"
         )
+        if skipped_no_match:
+            total_skipped = sum(skipped_no_match.values())
+            breakdown = ", ".join(
+                f"{t!r}×{n}" for t, n in sorted(skipped_no_match.items(), key=lambda x: -x[1])
+            )
+            print(
+                f"   ⚠️  Пропущено (невідомий тип атрибута): {total_skipped} рядків\n"
+                f"       Типи: {breakdown}\n"
+                f"       → Додай в EXTRA_NON_OPTION_TYPES або OPTION_TYPES у верхній частині скрипта."
+            )
         return meta
     except Exception as e:
         print(f"⚠️  Не вдалося прочитати метадані атрибутів: {e}")
@@ -340,12 +369,59 @@ def load_set_codes_with_options() -> set[str]:
         return set()
 
 
+def load_existing_option_attr_codes() -> set[str]:
+    """
+    Повертає attr_codes, які вже присутні в «Опції атрибутів».
+
+    Використовується для розмежування:
+      • існуючий attr_code → тільки дописуємо нові set_codes у стовпець
+      • новий attr_code    → малюємо нові рядки (завантажуємо опції з API)
+
+    Це вирішує проблему масового дублювання рядків для загальних атрибутів
+    (brand, weight, ratio тощо) при додаванні нових категорій.
+    """
+    if not OUTPUT_PATH.exists():
+        return set()
+    try:
+        import openpyxl as _xl
+        wb = _xl.load_workbook(OUTPUT_PATH, read_only=True, data_only=True)
+        if "Опції атрибутів" not in wb.sheetnames:
+            wb.close()
+            return set()
+        rows = list(wb["Опції атрибутів"].iter_rows(values_only=True))
+        wb.close()
+        if len(rows) < 2:
+            return set()
+        headers = [str(c).strip() if c else "" for c in rows[0]]
+        try:
+            ac_col = headers.index("attr_code")
+        except ValueError:
+            return set()
+        codes = {
+            str(row[ac_col]).strip()
+            for row in rows[1:]
+            if len(row) > ac_col and row[ac_col]
+        }
+        print(f"   Існуючих attr_codes у «Опції атрибутів»: {len(codes)} шт.")
+        return codes
+    except Exception as e:
+        print(f"⚠️  Не вдалося прочитати attr_codes з «Опції атрибутів»: {e}")
+        return set()
+
+
 # ─── API ──────────────────────────────────────────────────────────────────────
 
-def _fetch_options_one_attr(attr_code: str, set_code: str) -> list[dict]:
-    """Завантажує всі сторінки опцій для одного attr_code."""
-    session = _make_session()
+def _try_fetch_options(
+    session: requests.Session, attr_code: str, set_code: str
+) -> list[dict] | None:
+    """
+    Завантажує всі сторінки опцій для пари (attr_code, set_code).
+    Повертає None якщо set_code повернув 403/404 або мережеву помилку
+    → викликач спробує наступний set_code.
+    Повертає [] якщо відповідь валідна але опцій немає.
+    """
     options: list[dict] = []
+    total_pages = 1
     page = 1
     while page <= MAX_PAGES:
         try:
@@ -355,195 +431,358 @@ def _fetch_options_one_attr(attr_code: str, set_code: str) -> list[dict]:
                 timeout=REQ_TIMEOUT,
             )
             if resp.status_code in (403, 404):
-                break
+                return None  # цей set_code не дає доступу — спробуємо наступний
             resp.raise_for_status()
             data = resp.json()
         except Exception:
-            break
+            return None  # мережева помилка — спробуємо наступний set_code
         batch = data.get("items", [])
         if not batch:
             break
         options.extend(batch)
-        if page >= data.get("pages", 1):
+        total_pages = data.get("pages", 1)
+        if page % 50 == 0:
+            print(f"      attr={attr_code}: стор. {page}/{total_pages} ({len(options)} опцій)...")
+        if page >= total_pages:
             break
         page += 1
     if page > MAX_PAGES:
-        print(f"      ⚠️  attr={attr_code} обрізано на {MAX_PAGES} стор. ({len(options)} опцій)")
+        print(
+            f"      ⚠️  attr={attr_code} досягнуто safety cap {MAX_PAGES} стор."
+            f" ({len(options)} опцій) — збільш MAX_PAGES"
+        )
     return options
 
 
-def fetch_options_parallel(
+def _fetch_options_one_attr(attr_code: str, set_codes: list[str]) -> list[dict]:
+    """
+    Завантажує всі опції для attr_code, перебираючи set_codes по порядку.
+    Зупиняється на першому set_code, який повернув валідну відповідь (навіть []).
+
+    Це вирішує проблему: перший set_code може повертати 403/404 для певних
+    атрибутів, тоді як інший set_code дає повноцінний результат.
+    """
+    session = _make_session()
+    for set_code in set_codes:
+        result = _try_fetch_options(session, attr_code, set_code)
+        if result is not None:
+            return result
+    return []
+
+
+# ─── Attr aggregation ────────────────────────────────────────────────────────────────────
+
+class _AttrAgg:
+    """Агрегат по attr_code: збирає set_codes і prom_params через кому."""
+    __slots__ = ("first_set", "attr_name", "attr_type",
+                 "set_codes", "prom_params", "needs_default")
+
+    def __init__(self, sc: str, meta: dict) -> None:
+        self.first_set     = sc
+        self.attr_name     = meta["attr_name"]
+        self.attr_type     = meta["attr_type"]
+        self.set_codes:    list[str] = [sc]
+        self.prom_params:  list[str] = [meta["prom_param"]] if meta["prom_param"] else []
+        self.needs_default = meta["needs_default"]
+
+    def merge(self, sc: str, meta: dict) -> None:
+        if sc not in self.set_codes:
+            self.set_codes.append(sc)
+        if meta["prom_param"] and meta["prom_param"] not in self.prom_params:
+            self.prom_params.append(meta["prom_param"])
+        if meta["needs_default"]:
+            self.needs_default = True
+
+
+def _build_agg_dicts(
     pair_meta: dict[tuple[str, str], dict],
-) -> list[dict]:
-    """
-    Паралельно завантажує опції і повертає рядки для запису.
-
-    Дедублікація по attr_code:
-      Один attr_code може бути в N категоріях (сетах) — опції однакові.
-      Пишемо кожний attr_code ОДИН РАЗ, зберігаємо всі set_codes через кому.
-      Це скорочує ~1.3M рядків до ~10K.
-
-    SKIP_ATTRS — атрибути з занадто багатьом опцій (не корисні для маппінгу).
-    """
-    # Агрегуємо дані по attr_code:
-    #   first_set  — перший зустрінутий set_code (для API-запиту)
-    #   set_codes  — всі set_codes що використовують цей attr
-    #   prom_params — всі заповнені prom_param_name (unique)
-    #   needs_default — True якщо хоча б один set_code не має prom_param_name
-    class AttrAgg:
-        __slots__ = ("first_set", "attr_name", "attr_type",
-                     "set_codes", "prom_params", "needs_default")
-        def __init__(self, sc: str, meta: dict) -> None:
-            self.first_set    = sc
-            self.attr_name    = meta["attr_name"]
-            self.attr_type    = meta["attr_type"]
-            self.set_codes:   list[str] = [sc]
-            self.prom_params: list[str] = [meta["prom_param"]] if meta["prom_param"] else []
-            self.needs_default = meta["needs_default"]
-
-    ac_agg: dict[str, AttrAgg] = {}
-    skipped_skip_attrs = 0
-
+) -> tuple[dict[str, _AttrAgg], dict[str, _AttrAgg]]:
+    """Розбиває pair_meta на select/multiselect та всі інші."""
+    ac_agg:   dict[str, _AttrAgg] = {}
+    nopt_agg: dict[str, _AttrAgg] = {}
     for (sc, ac), meta in pair_meta.items():
-        if ac in SKIP_ATTRS:
-            skipped_skip_attrs += 1
-            continue
-        if ac not in ac_agg:
-            ac_agg[ac] = AttrAgg(sc, meta)
+        target = ac_agg if meta["attr_type"] in OPTION_TYPES else nopt_agg
+        if ac not in target:
+            target[ac] = _AttrAgg(sc, meta)
         else:
-            agg = ac_agg[ac]
-            if sc not in agg.set_codes:
-                agg.set_codes.append(sc)
-            if meta["prom_param"] and meta["prom_param"] not in agg.prom_params:
-                agg.prom_params.append(meta["prom_param"])
-            if meta["needs_default"]:
-                agg.needs_default = True
-
-    total = len(ac_agg)
-    if skipped_skip_attrs:
-        print(f"   ⏭️  SKIP_ATTRS: пропущено {skipped_skip_attrs} пар для: {SKIP_ATTRS}")
-    print(f"\n⬇️  Опції: {total} унікальних attr_code ({OPTIONS_WORKERS} потоків)...")
-
-    options_cache: dict[str, list[dict]] = {}
-    lock = Lock()
-    done = [0]
-
-    def _worker(ac: str) -> tuple[str, list[dict]]:
-        return ac, _fetch_options_one_attr(ac, ac_agg[ac].first_set)
-
-    with ThreadPoolExecutor(max_workers=OPTIONS_WORKERS) as pool:
-        pending = {pool.submit(_worker, ac): ac for ac in ac_agg}
-        for f, ac in pending.items():
-            try:
-                _, opts = f.result(timeout=FUTURE_TIMEOUT)
-                options_cache[ac] = opts
-            except TimeoutError:
-                options_cache[ac] = []
-                print(f"   ⏱️  TIMEOUT attr={ac} (>{FUTURE_TIMEOUT}s)")
-            except Exception as e:
-                options_cache[ac] = []
-                print(f"   ⚠️  ERROR attr={ac}: {e}")
-            with lock:
-                done[0] += 1
-                print(f"   [{done[0]}/{total}] attr={ac} → {len(options_cache[ac])} опцій")
-
-    rows: list[dict] = []
-    for ac, agg in ac_agg.items():
-        opts = options_cache.get(ac, [])
-        base = {
-            "attr_code":     ac,
-            "attr_name_uk":  agg.attr_name,
-            "attr_type":     agg.attr_type,
-            "set_codes":     ", ".join(agg.set_codes),
-            "prom_params":   ", ".join(agg.prom_params),
-            "needs_default": agg.needs_default,
-        }
-        if not opts:
-            rows.append({**base, "option_code": "", "option_name_uk": "", "prom_option_name": ""})
-        else:
-            for opt in opts:
-                rows.append({
-                    **base,
-                    "option_code":    opt.get("code", ""),
-                    "option_name_uk": _parse_option_name(opt),
-                    "prom_option_name": "",
-                })
-
-    mapped_rows  = sum(1 for r in rows if not r["needs_default"])
-    default_rows = sum(1 for r in rows if r["needs_default"])
-    print(
-        f"✅ Зібрано {len(rows)} рядків (дедубліковано по attr_code):\n"
-        f"   • маппінг (prom_param_name заповнений): {mapped_rows}\n"
-        f"   • дефолт  (червоні клітинки):           {default_rows}"
-    )
-    return rows
+            target[ac].merge(sc, meta)
+    return ac_agg, nopt_agg
 
 
-# ─── Writers ──────────────────────────────────────────────────────────────────
+# ─── Streaming writer helpers ───────────────────────────────────────────────────────
 
-# Нова схема: колонка set_code видалена, замінена на set_codes (через кому) і prom_params.
 HEADERS_OPTIONS    = ["attr_code", "attr_name_uk", "attr_type",
                       "option_code", "option_name_uk", "prom_option_name",
-                      "needs_default", "set_codes", "prom_params"]
-COL_WIDTHS_OPTIONS = [30, 42, 16, 30, 45, 45, 14, 60, 60]
+                      "needs_default", "default_option_code",
+                      "set_codes", "prom_param_name"]
+COL_WIDTHS_OPTIONS = [30, 42, 16, 30, 45, 45, 14, 30, 60, 60]
 
 
-def _write_option_rows(ws, option_rows: list[dict], start_row: int) -> None:
-    for ri, row in enumerate(option_rows, start_row):
-        needs_default = row.get("needs_default", False)
-        vals = [
-            row["attr_code"],
-            row["attr_name_uk"],
-            row["attr_type"],
-            row["option_code"],
-            row["option_name_uk"],
-            row.get("prom_option_name", ""),
-            needs_default,
-            row.get("set_codes", ""),
-            row.get("prom_params", ""),
-        ]
-        for ci, val in enumerate(vals, 1):
-            if needs_default:
-                fill = ORANGE_FILL
-            else:
-                fill = (BLUE_FILL    if ci in (4, 5)    # option_code, option_name_uk
-                        else YELLOW_FILL if ci == 6      # prom_option_name
-                        else GRAY_FILL   if ci >= 8      # set_codes, prom_params
-                        else None)
-            _data(ws.cell(row=ri, column=ci, value=val), fill=fill)
+def _row_vals(ac: str, agg: _AttrAgg, opt: dict | None) -> list:
+    """Будує список значень для одного рядка (порядок = HEADERS_OPTIONS)."""
+    return [
+        ac,
+        agg.attr_name,
+        agg.attr_type,
+        opt.get("code", "") if opt else "",
+        _parse_option_name(opt) if opt else "",
+        "",               # prom_option_name — заповнює юзер
+        agg.needs_default,
+        "",               # default_option_code — заповнює юзер
+        ", ".join(agg.set_codes),
+        ", ".join(agg.prom_params),
+    ]
 
 
-def build_options_sheet(wb: Workbook, option_rows: list[dict]) -> None:
-    ws = wb.create_sheet("Опції атрибутів")
-    for ci, (h, w) in enumerate(zip(HEADERS_OPTIONS, COL_WIDTHS_OPTIONS), 1):
-        _hdr(ws.cell(row=1, column=ci, value=h))
-        ws.column_dimensions[get_column_letter(ci)].width = w
-    ws.cell(
-        row=1, column=8,
-        value="🟠 помаранч. = needs_default (вибери дефолт) | 🟡 F = prom_option_name (заповни відповідник) | ✂️ SKIP_ATTRS: brand, country_of_origin",
-    ).font = Font(bold=True, color="7F6000", name="Arial", size=9)
-    _write_option_rows(ws, option_rows, start_row=2)
-    ws.freeze_panes = "A2"
-    ws.auto_filter.ref = f"A1:{get_column_letter(len(HEADERS_OPTIONS))}{len(option_rows) + 1}"
+def _write_row_to_ws(ws, ri: int, vals: list) -> None:
+    """Пише один рядок у worksheet."""
+    needs_default: bool = vals[6]
+    for ci, val in enumerate(vals, 1):
+        cell = ws.cell(row=ri, column=ci, value=val)
+        if needs_default:
+            cell.fill = ORANGE_FILL
+        cell.font      = Font(name="Arial", size=9)
+        cell.alignment = LEFT
 
 
-def append_option_rows(option_rows: list[dict]) -> None:
-    """Дописує рядки в існуючий лист «Опції атрибутів»."""
+def _setup_options_sheet(wb) -> tuple:
+    """Повертає (ws, first_data_row). Створює лист якщо не існує."""
+    if "Опції атрибутів" not in wb.sheetnames:
+        ws = wb.create_sheet("Опції атрибутів")
+        for ci, (h, w) in enumerate(zip(HEADERS_OPTIONS, COL_WIDTHS_OPTIONS), 1):
+            _hdr(ws.cell(row=1, column=ci, value=h))
+            ws.column_dimensions[get_column_letter(ci)].width = w
+        ws.freeze_panes = "A2"
+        return ws, 2
+    ws = wb["Опції атрибутів"]
+    return ws, ws.max_row + 1
+
+
+def _update_existing_attr_set_codes(
+    ws,
+    update_agg: dict[str, "_AttrAgg"],
+) -> int:
+    """
+    Для attr_codes, які вже є в листі: дописує нові set_codes і prom_params
+    до кожного рядка цього attr_code. Нові рядки НЕ створюються.
+
+    Логіка злиття:
+      • set_codes:      додаємо нові, порядок оригінальних зберігаємо
+      • prom_param_name: аналогічно
+      • needs_default:  True → False ніколи не міняємо; False → True якщо новий
+                        set_code потребує дефолту
+
+    Повертає кількість унікальних attr_code, в яких оновлено хоча б один рядок.
+    """
+    if not update_agg:
+        return 0
+
+    # Знаходимо індекси колонок з заголовку (1-based)
+    headers = [
+        str(ws.cell(row=1, column=c).value or "").strip()
+        for c in range(1, ws.max_column + 1)
+    ]
+    try:
+        ac_col  = headers.index("attr_code")      + 1
+        sc_col  = headers.index("set_codes")      + 1
+        pp_col  = headers.index("prom_param_name") + 1
+        nd_col  = headers.index("needs_default")  + 1
+    except ValueError as exc:
+        print(f"⚠️  Не вдалося знайти колонку в «Опції атрибутів»: {exc}")
+        return 0
+
+    # Попередньо обчислюємо нові значення для кожного attr_code
+    new_sc_by_ac:  dict[str, list[str]] = {ac: agg.set_codes   for ac, agg in update_agg.items()}
+    new_pp_by_ac:  dict[str, list[str]] = {ac: agg.prom_params for ac, agg in update_agg.items()}
+    nd_upgrade:    set[str]             = {ac for ac, agg in update_agg.items() if agg.needs_default}
+
+    touched: set[str] = set()
+
+    for row_idx in range(2, ws.max_row + 1):
+        ac = str(ws.cell(row=row_idx, column=ac_col).value or "").strip()
+        if ac not in update_agg:
+            continue
+
+        # set_codes: зберігаємо порядок, без дублів
+        existing_sc = str(ws.cell(row=row_idx, column=sc_col).value or "")
+        existing_sc_list = [s.strip() for s in existing_sc.split(",") if s.strip()]
+        existing_sc_set  = set(existing_sc_list)
+        appended_sc = [sc for sc in new_sc_by_ac[ac] if sc not in existing_sc_set]
+        if appended_sc:
+            ws.cell(row=row_idx, column=sc_col).value = ", ".join(existing_sc_list + appended_sc)
+
+        # prom_param_name: аналогічно
+        existing_pp = str(ws.cell(row=row_idx, column=pp_col).value or "")
+        existing_pp_list = [p.strip() for p in existing_pp.split(",") if p.strip()]
+        existing_pp_set  = set(existing_pp_list)
+        appended_pp = [p for p in new_pp_by_ac[ac] if p not in existing_pp_set]
+        if appended_pp:
+            ws.cell(row=row_idx, column=pp_col).value = ", ".join(existing_pp_list + appended_pp)
+
+        # needs_default: тільки False → True (ніколи не знімаємо)
+        if ac in nd_upgrade:
+            cell_nd = ws.cell(row=row_idx, column=nd_col)
+            if not cell_nd.value:
+                cell_nd.value = True
+                cell_nd.fill  = ORANGE_FILL
+
+        touched.add(ac)
+
+    count = len(touched)
+    if count:
+        print(
+            f"   ✅ Оновлено set_codes у {count} існуючих attr_code "
+            f"(нові рядки не створювались): {sorted(touched)}"
+        )
+    return count
+
+
+# ─── Parallel fetch + streaming write ──────────────────────────────────────────────
+
+def fetch_and_write_options_parallel(
+    ac_agg: dict[str, "_AttrAgg"],
+    nopt_agg: dict[str, "_AttrAgg"],
+    ws,
+    start_row: int,
+) -> int:
+    """
+    Завантажує опції паралельно і одразу пише в ws, без накопичення в RAM.
+
+    Приймає вже розбиті словники:
+      • ac_agg   — select/multiselect attr_codes (нові, ще не в листі)
+      • nopt_agg — числові/текстові attr_codes   (нові, ще не в листі)
+
+    Архітектура:
+      • as_completed → реальний паралелізм, не sequential blocking
+      • write immediately after each future → RAM = тільки один attr за раз
+
+    Повертає номер наступного вільного рядка.
+    """
+    total = len(ac_agg)
+
+    print(
+        f"\n⬇️  Опції: {total} унікальних select/multiselect attr_code ({OPTIONS_WORKERS} потоків)..."
+        f"\n   Числові/текстові (без API): {len(nopt_agg)} attr_code"
+    )
+
+    current_row = start_row
+
+    # ── Рядки-заглушки: нет API, пишемо одразу ─────────────────────────────
+    for ac, agg in nopt_agg.items():
+        _write_row_to_ws(ws, current_row, _row_vals(ac, agg, None))
+        current_row += 1
+    if nopt_agg:
+        print(f"   ✅ Числові/текстові рядки ({len(nopt_agg)}): {list(nopt_agg)}")
+
+    # ── Паралельне завантаження + immediate write ───────────────────────
+    lock = Lock()
+    done = [0]
+    written = [0]
+
+    def _worker(ac: str) -> tuple[str, list[dict], float]:
+        t0 = time.monotonic()
+        opts = _fetch_options_one_attr(ac, ac_agg[ac].set_codes)
+        return ac, opts, time.monotonic() - t0
+
+    fetch_start = time.monotonic()
+
+    with ThreadPoolExecutor(max_workers=OPTIONS_WORKERS) as pool:
+        future_map = {pool.submit(_worker, ac): ac for ac in ac_agg}
+
+        # as_completed: обробляємо future одразу як воно готове.
+        # brand (1250 стор.) не блокує інші 7 воркерів.
+        for future in as_completed(future_map):
+            ac = future_map[future]
+            try:
+                _, opts, elapsed = future.result()
+                elapsed_s = f"{elapsed:.1f}s"
+            except Exception as e:
+                opts = []
+                elapsed_s = "err"
+                print(f"   ⚠️  ERROR attr={ac}: {e}")
+
+            agg = ac_agg[ac]
+            rows_for_attr = opts or [None]  # хоча б один рядок з порожнім option_code
+
+            # openpyxl не thread-safe — пишемо під lock
+            with lock:
+                for opt in rows_for_attr:
+                    _write_row_to_ws(ws, current_row, _row_vals(ac, agg, opt))
+                    current_row += 1
+                done[0] += 1
+                written[0] += len(rows_for_attr)
+                print(f"   [{done[0]}/{total}] attr={ac} → {len(opts)} опцій  ({elapsed_s})")
+
+    fetch_elapsed = time.monotonic() - fetch_start
+    print(
+        f"   ⏱️  Завантаження та запис завершено за {fetch_elapsed:.1f}s\n"
+        f"   Рядків записано: {written[0] + len(nopt_agg)}"
+    )
+    return current_row
+
+
+def append_option_rows(
+    pair_meta: dict[tuple[str, str], dict],
+    existing_attr_codes: set[str],
+) -> bool:
+    """
+    Відкриває xlsx, оновлює існуючі рядки і/або дописує нові, зберігає.
+
+    Логіка розмежування:
+      • attr_code вже є в листі → _update_existing_attr_set_codes:
+            тільки дописуємо нові set_codes до існуючих рядків
+      • attr_code новий         → fetch_and_write_options_parallel:
+            завантажуємо опції з API і малюємо нові рядки
+
+    Це усуває масове дублювання для загальних атрибутів
+    (brand, weight, ratio тощо) при додаванні нових категорій.
+
+    Повертає True якщо хоча б щось змінено.
+    """
     import openpyxl as _xl
     wb = _xl.load_workbook(OUTPUT_PATH)
-    if "Опції атрибутів" not in wb.sheetnames:
-        build_options_sheet(wb, option_rows)
-    else:
-        ws = wb["Опції атрибутів"]
-        _write_option_rows(ws, option_rows, start_row=ws.max_row + 1)
+    ws, start_row = _setup_options_sheet(wb)
+
+    # Будуємо агрегати один раз для всіх нових пар
+    ac_agg, nopt_agg = _build_agg_dicts(pair_meta)
+    all_agg: dict[str, _AttrAgg] = {**ac_agg, **nopt_agg}
+
+    # Розбиваємо: існуючі attr_codes (in-place update) vs нові (нові рядки)
+    update_agg   = {ac: agg for ac, agg in all_agg.items()  if ac in existing_attr_codes}
+    new_ac_agg   = {ac: agg for ac, agg in ac_agg.items()   if ac not in existing_attr_codes}
+    new_nopt_agg = {ac: agg for ac, agg in nopt_agg.items() if ac not in existing_attr_codes}
+
+    print(
+        f"\n📋 Розподіл attr_codes для нових set_codes:\n"
+        f"   • Вже в листі — тільки set_codes дозаписуємо : {len(update_agg)}"
+        + (f" {sorted(update_agg)}" if update_agg else "") + "\n"
+        f"   • Нові select/multiselect (API + нові рядки)  : {len(new_ac_agg)}\n"
+        f"   • Нові числові/текстові   (рядок-заглушка)   : {len(new_nopt_agg)}"
+    )
+
+    # In-place: дописуємо set_codes до існуючих рядків
+    updated_count = _update_existing_attr_set_codes(ws, update_agg)
+
+    # Нові рядки тільки для справді нових attr_codes
+    final_row = fetch_and_write_options_parallel(new_ac_agg, new_nopt_agg, ws, start_row)
+    rows_written = final_row - start_row
+
+    if rows_written == 0 and updated_count == 0:
+        wb.close()
+        return False
+
+    print(f"   💾 Збереження xlsx ({rows_written} нових рядків, {updated_count} attr_codes оновлено)...")
+    save_start = time.monotonic()
     wb.save(OUTPUT_PATH)
     wb.close()
-    print(f"   ✅ Записано {len(option_rows)} рядків у «Опції атрибутів».")
+    print(f"   ✅ Збережено за {time.monotonic() - save_start:.1f}s")
+    return True
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    main_start = time.monotonic()
     print("🚀 epicenter_export_attr_options.py — КРОК 5\n")
 
     if not OUTPUT_PATH.exists():
@@ -577,26 +816,26 @@ def main() -> None:
 
     if not pair_meta:
         print(
-            "\n⏭️  Немає атрибутів типу select/multiselect для завантаження опцій.\n"
+            "\n⏭️  Немає атрибутів з isRequired=TRUE для нових категорій.\n"
             "   Можливі причини:\n"
-            "   • Жоден атрибут не є select/multiselect для цих категорій\n"
-            "   • Не заповнено prom_param_name І немає isRequired=True у «Сети атрибутів»\n"
-            "   Якщо є незаповнені prom_param_name — виконай КРОК 4:\n"
-            "   • Автоматично: python scripts/epicenter_map_attributes.py\n"
-            "   • Вручну:      колонка J у «Сети атрибутів»"
+            "   • Жоден обов'язковий атрибут не знайдено для цих set_codes\n"
+            "   • Не заповнено isRequired у «Сети атрибутів»\n"
+            "   Перевір лист «Сети атрибутів», колонку isRequired."
         )
         return
 
-    option_rows = fetch_options_parallel(pair_meta)
+    # Завантажуємо attr_codes, які вже є в листі — для них тільки
+    # дописуємо нові set_codes (без повторного рендеру тисяч рядків опцій)
+    existing_attr_codes = load_existing_option_attr_codes()
 
-    if not option_rows:
-        print("⚠️  Опцій не отримано.")
+    written = append_option_rows(pair_meta, existing_attr_codes)
+    if not written:
+        print("⚠️  Опцій не записано.")
         return
 
-    append_option_rows(option_rows)
-
+    total_elapsed = time.monotonic() - main_start
     print(
-        f"\n✅ Оновлено: {OUTPUT_PATH}\n"
+        f"\n✅ Оновлено: {OUTPUT_PATH}  (загальний час: {total_elapsed:.1f}s)\n"
         "   КРОК 6: Заповни prom_option_name (колонка H) у «Опції атрибутів» вручну або скриптом."
     )
 

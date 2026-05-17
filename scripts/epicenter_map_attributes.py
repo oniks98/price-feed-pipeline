@@ -1,144 +1,58 @@
 """
 epicenter_map_attributes.py
 ---------------------------
-Зіставляє атрибути Epicenter з параметрами Prom (фаззі-матчинг ≥ 80%).
+Заповнює prom_param_name для атрибутів Epicenter на основі ручного маппінгу.
 Читає epicenter_mappings.xlsx, записує prom_param_name, підсвічує червоним обов'язкові поля.
 
 Запуск:
     python scripts/epicenter_map_attributes.py
 
 Алгоритм:
-1. Завантажує XML-фід Prom та індексує назви параметрів за categoryId.
-2. Читає аркуш "Маппінг": для кожного рядка з prom_category_id + epicenter_category_id.
-3. Знаходить відповідні рядки в аркуші "Сети атрибутів" за умовою set_code == epicenter_category_id.
-4. Фаззі-зіставляє кожен attr_name_uk з унікальними назвами параметрів Prom (поріг ≥ 100%).
-5. Записує найкращий збіг назви параметра Prom у колонку prom_param_name.
-6. Підсвічує червоним: isRequired=TRUE + prom_param_name порожній + категорія зіставлена.
-7. Зберігає книгу.
+1. Читає аркуш "Маппінг": для кожного рядка з prom_category_id + epicenter_category_id.
+2. Знаходить відповідні рядки в аркуші "Сети атрибутів" за умовою set_code == epicenter_category_id.
+3. Для кожного isRequired-атрибута заповнює prom_param_name за пріоритетом:
+
+   Порядок заповнення prom_param_name
+   -------------------------------------------------------
+   Ступінь 0 (пропуск):  комірка вже заповнена — не перезаписуємо.
+   Ступінь 1 (hard):     назва є в аркуші attr_true_mappings → беремо звідти.
+   Ступінь 2 (пусто):    не знайшло — комірка порожньою, підсвічується
+                          червоним якщо isRequired=TRUE.
+
+4. Зберігає книгу.
 """
 
-import re
 from collections import defaultdict
 from pathlib import Path
-from xml.etree import ElementTree as ET
 
-import requests
 import openpyxl
 from openpyxl.styles import PatternFill
-from rapidfuzz import fuzz
 
 # ──────────────────────────────────────────────
 # Config
 # ──────────────────────────────────────────────
-FEED_URL = (
-    "https://oniks.org.ua/rozetka_feed.xml?rozetka_hash_tag=33ec12f81c283cc0524764696220b10c&product_ids=&label_ids=&languages=uk%2Cru&group_ids=2221523%2C2222437%2C2222561%2C2234751%2C4320349%2C4321341%2C4325742%2C4325743%2C4328775%2C4331550%2C4339717%2C4551903%2C8950007%2C8950011%2C10015559%2C16703618%2C17012111%2C17012456%2C22818554%2C23295147%2C45720479%2C72575633%2C83889367%2C90718784%2C90906797%2C90997501%2C90997677%2C90997694%2C91056839%2C127351905%2C127351912%2C127351948%2C127351950%2C127351973%2C127628160%2C127628166%2C127628170%2C127628173%2C127628176%2C139094517%2C139094704%2C139094708%2C144038788%2C144038790%2C144038804%2C151114178%2C152084397%2C152084437%2C152084460%2C152084594%2C152084669%2C152084678%2C152084703%2C152086699%2C152088176%2C152088624%2C152090354%2C152090439%2C152090654%2C152090742%2C152090999%2C152091016%2C152091894%2C152092523%2C152092600%2C152092613%2C152092625%2C152104228%2C152104243%2C152133169%2C152133408%2C152133464%2C152133483%2C152135823%2C152195979%2C152196244%2C152197115%2C152197317%2C152197474%2C152206635%2C152207998%2C152208073%2C152208101%2C152208132%2C152208469%2C152208563%2C152208591%2C152208632%2C152481182%2C152481185%2C152481192%2C152481294%2C152483771&nested_group_ids=4321341%2C4325742%2C4325743%2C4328775%2C4331550%2C4339717%2C4551903%2C8950007%2C8950011%2C16703618%2C17012111%2C17012456%2C22818554%2C23295147%2C45720479%2C72575633%2C83889367%2C90718784%2C90906797%2C90997501%2C90997677%2C90997694%2C91056839%2C127351912%2C127351948%2C127351950%2C127351973%2C127628160%2C127628166%2C127628170%2C127628173%2C127628176%2C139094704%2C139094708%2C144038788%2C144038790%2C144038804%2C151114178%2C152084397%2C152084437%2C152084460%2C152084594%2C152084669%2C152084678%2C152084703%2C152086699%2C152088176%2C152088624%2C152090354%2C152090439%2C152090654%2C152090742%2C152090999%2C152091016%2C152091894%2C152092523%2C152092600%2C152092613%2C152092625%2C152104243%2C152133169%2C152133408%2C152133464%2C152133483%2C152135823%2C152195979%2C152196244%2C152197115%2C152197317%2C152197474%2C152206635%2C152207998%2C152208073%2C152208101%2C152208132%2C152208469%2C152208563%2C152208591%2C152208632%2C152481182%2C152481185%2C152481192%2C152481294%2C152483771"
-)
-
 XLSX_PATH = Path(__file__).parents[1] / "data" / "markets" / "epicenter_mappings.xlsx"
 
 SHEET_MAPPING       = "Маппінг"
 SHEET_ATTRS         = "Сети атрибутів"
-SHEET_HARD_MAPPINGS = "attr_mappings"
-SHEET_DEFAULTS      = "attr_defaults"
+SHEET_HARD_MAPPINGS = "attr_true_mappings"
 
 # Columns – Маппінг
 MAP_COL_PROM_CAT = "prom_category_id"
 MAP_COL_EPI_CAT  = "epicenter_category_id"
 
 # Columns – Сети атрибутів
-ATTR_COL_SET_CODE   = "set_code"
-ATTR_COL_ATTR_NAME  = "attr_name_uk"
-ATTR_COL_PROM_PARAM = "prom_param_name"
+ATTR_COL_SET_CODE    = "set_code"
+ATTR_COL_ATTR_NAME   = "attr_name_uk"
+ATTR_COL_PROM_PARAM  = "prom_param_name"
 ATTR_COL_IS_REQUIRED = "isRequired"
-
-MATCH_THRESHOLD = 100  # percent
 
 RED_FILL = PatternFill("solid", start_color="FF9999", end_color="FF9999")
 NO_FILL  = PatternFill(fill_type=None)
 
 
 # ──────────────────────────────────────────────
-# Step 1 – Download & parse XML feed
-# ──────────────────────────────────────────────
-
-def download_feed(url: str) -> ET.Element:
-    print("Downloading feed…")
-    resp = requests.get(url, timeout=120)
-    resp.raise_for_status()
-    print(f"  Downloaded {len(resp.content) / 1024:.0f} KB")
-    return ET.fromstring(resp.content)
-
-
-def build_category_params(root: ET.Element) -> dict[str, set[str]]:
-    """
-    Returns { category_id_str: {param_name, ...} }
-    Handles both:
-      <offer><categoryId>513</categoryId><param name="Вес">…</param></offer>
-      and namespaced variants.
-    """
-    params_by_cat: dict[str, set[str]] = defaultdict(set)
-
-    offers = root.findall(".//{*}offer") or root.findall(".//offer")
-    if not offers:
-        offers = root.findall(".//{*}item") or root.findall(".//item")
-
-    for offer in offers:
-        cat_el = offer.find("{*}categoryId")
-        if cat_el is None:
-            cat_el = offer.find("categoryId")
-        if cat_el is None or not (cat_el.text or "").strip():
-            cat_el = offer.find("{http://base.google.com/ns/1.0}google_product_category")
-        if cat_el is None:
-            continue
-        cat_id = cat_el.text.strip()
-
-        for param in offer.findall("{*}param") or offer.findall("param") or []:
-            name = param.get("name", "").strip()
-            if name:
-                params_by_cat[cat_id].add(name)
-
-    print(f"  Indexed {len(params_by_cat)} categories from feed.")
-    return dict(params_by_cat)
-
-
-# ──────────────────────────────────────────────
-# Step 2 – Fuzzy matching helpers
-# ──────────────────────────────────────────────
-
-def normalize(text: str) -> str:
-    text = text.lower()
-    text = re.sub(r"[^\w\s]", " ", text, flags=re.UNICODE)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def best_prom_match(epi_attr: str, prom_params: set[str]) -> str | None:
-    """
-    Find the prom param name that best matches epi_attr.
-    Returns the original prom param string or None if score < MATCH_THRESHOLD.
-    """
-    best_score = 0.0
-    best_name: str | None = None
-
-    n_epi = normalize(epi_attr)
-
-    for prom in prom_params:
-        n_prom = normalize(prom)
-        score = max(
-            fuzz.ratio(n_epi, n_prom),
-            fuzz.partial_ratio(n_epi, n_prom),
-            fuzz.token_sort_ratio(n_epi, n_prom),
-        )
-        if score > best_score:
-            best_score = score
-            best_name = prom
-
-    if best_score >= MATCH_THRESHOLD:
-        return best_name
-    return None
-
-
-# ──────────────────────────────────────────────
-# Step 3 – Read xlsx helpers
+# Helpers
 # ──────────────────────────────────────────────
 
 def get_header_map(ws) -> dict[str, int]:
@@ -152,20 +66,25 @@ def get_header_map(ws) -> dict[str, int]:
 
 def load_hard_mappings(wb: openpyxl.Workbook) -> dict[str, str]:
     """
-    Лист attr_mappings.
-    Обов'язкові колонки: attr_name_uk | prom_param_name  (attr_code ігнорується)
+    Лист attr_true_mappings.
+    Обов'язкові колонки: attr_name_uk | prom_param_name
     Повертає: attr_name_uk → prom_param_name
-    Пріоритет над fuzzy-матчингом.
     """
     if SHEET_HARD_MAPPINGS not in wb.sheetnames:
         print(f"  [warn] Sheet '{SHEET_HARD_MAPPINGS}' not found — hard mappings disabled.")
         return {}
 
     ws = wb[SHEET_HARD_MAPPINGS]
-    headers = [str(c.value).strip() if c.value else "" for c in next(ws.iter_rows(min_row=1, max_row=1))]
+    headers = [
+        str(c.value).strip() if c.value else ""
+        for c in next(ws.iter_rows(min_row=1, max_row=1))
+    ]
 
     if "attr_name_uk" not in headers or "prom_param_name" not in headers:
-        print(f"  [warn] Sheet '{SHEET_HARD_MAPPINGS}' missing required columns — hard mappings disabled.")
+        print(
+            f"  [warn] Sheet '{SHEET_HARD_MAPPINGS}' missing required columns "
+            f"— hard mappings disabled."
+        )
         return {}
 
     name_col  = headers.index("attr_name_uk")
@@ -180,36 +99,6 @@ def load_hard_mappings(wb: openpyxl.Workbook) -> dict[str, str]:
     return result
 
 
-def load_default_values(wb: openpyxl.Workbook) -> dict[str, str]:
-    """
-    Лист attr_defaults.
-    Обов'язкові колонки: attr_name_uk | default_value  (attr_code ігнорується)
-    Повертає: attr_name_uk → default_value
-    Застосовується коли fuzzy не знайшов збіг і hard mapping відсутній.
-    """
-    if SHEET_DEFAULTS not in wb.sheetnames:
-        print(f"  [warn] Sheet '{SHEET_DEFAULTS}' not found — default values disabled.")
-        return {}
-
-    ws = wb[SHEET_DEFAULTS]
-    headers = [str(c.value).strip() if c.value else "" for c in next(ws.iter_rows(min_row=1, max_row=1))]
-
-    if "attr_name_uk" not in headers or "default_value" not in headers:
-        print(f"  [warn] Sheet '{SHEET_DEFAULTS}' missing required columns — default values disabled.")
-        return {}
-
-    name_col    = headers.index("attr_name_uk")
-    default_col = headers.index("default_value")
-
-    result = {
-        row[name_col].value.strip(): row[default_col].value.strip()
-        for row in ws.iter_rows(min_row=2)
-        if row[name_col].value and row[default_col].value
-    }
-    print(f"  Loaded {len(result)} default values from '{SHEET_DEFAULTS}'.")
-    return result
-
-
 # ──────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────
@@ -218,15 +107,10 @@ def main() -> None:
     if not XLSX_PATH.exists():
         raise FileNotFoundError(f"File not found: {XLSX_PATH}")
 
-    # ── 1. Download feed ──────────────────────
-    root = download_feed(FEED_URL)
-    cat_params = build_category_params(root)
-
-    # ── 2. Open workbook ──────────────────────
+    # ── 1. Open workbook ──────────────────────
     wb = openpyxl.load_workbook(XLSX_PATH)
 
-    hard_mappings   = load_hard_mappings(wb)
-    default_values  = load_default_values(wb)
+    hard_mappings = load_hard_mappings(wb)
 
     for sheet in (SHEET_MAPPING, SHEET_ATTRS):
         if sheet not in wb.sheetnames:
@@ -239,12 +123,12 @@ def main() -> None:
     attr_hdrs = get_header_map(ws_attr)
 
     for col, sheet_name, hdrs in [
-        (MAP_COL_PROM_CAT,    SHEET_MAPPING, map_hdrs),
-        (MAP_COL_EPI_CAT,     SHEET_MAPPING, map_hdrs),
-        (ATTR_COL_SET_CODE,   SHEET_ATTRS,   attr_hdrs),
-        (ATTR_COL_ATTR_NAME,  SHEET_ATTRS,   attr_hdrs),
-        (ATTR_COL_PROM_PARAM, SHEET_ATTRS,   attr_hdrs),
-        (ATTR_COL_IS_REQUIRED, SHEET_ATTRS,  attr_hdrs),
+        (MAP_COL_PROM_CAT,     SHEET_MAPPING, map_hdrs),
+        (MAP_COL_EPI_CAT,      SHEET_MAPPING, map_hdrs),
+        (ATTR_COL_SET_CODE,    SHEET_ATTRS,   attr_hdrs),
+        (ATTR_COL_ATTR_NAME,   SHEET_ATTRS,   attr_hdrs),
+        (ATTR_COL_PROM_PARAM,  SHEET_ATTRS,   attr_hdrs),
+        (ATTR_COL_IS_REQUIRED, SHEET_ATTRS,   attr_hdrs),
     ]:
         if col not in hdrs:
             raise ValueError(
@@ -259,22 +143,26 @@ def main() -> None:
     col_prom_param  = attr_hdrs[ATTR_COL_PROM_PARAM]
     col_is_required = attr_hdrs[ATTR_COL_IS_REQUIRED]
 
-    # ── 3. Build index: set_code → [(row_idx, attr_name_uk, is_required)] ──
+    # ── 2. Build index: set_code → [(row_idx, attr_name_uk, is_required)] ──
     attr_index: dict[str, list[tuple[int, str, bool]]] = defaultdict(list)
     for row_idx in range(2, ws_attr.max_row + 1):
-        set_code  = str(ws_attr.cell(row_idx, col_set_code).value or "").strip()
-        attr_name = str(ws_attr.cell(row_idx, col_attr_name).value or "").strip()
-        is_required = str(ws_attr.cell(row_idx, col_is_required).value or "").strip().upper() == "TRUE"
+        set_code    = str(ws_attr.cell(row_idx, col_set_code).value or "").strip()
+        attr_name   = str(ws_attr.cell(row_idx, col_attr_name).value or "").strip()
+        is_required = (
+            str(ws_attr.cell(row_idx, col_is_required).value or "").strip().upper() == "TRUE"
+        )
         if set_code and attr_name:
             attr_index[set_code].append((row_idx, attr_name, is_required))
 
-    print(f"Loaded {sum(len(v) for v in attr_index.values())} attribute rows "
-          f"across {len(attr_index)} set_codes.\n")
+    print(
+        f"Loaded {sum(len(v) for v in attr_index.values())} attribute rows "
+        f"across {len(attr_index)} set_codes.\n"
+    )
 
-    # ── 4. Fuzzy-match and write prom_param_name ──
-    total_written  = 0
-    total_skipped  = 0
-    processed_epi_cats: set[str] = set()  # категорії що обробили
+    # ── 3. Fill prom_param_name: hard mapping only ────────────────────────────
+    total_written       = 0
+    total_skipped       = 0
+    processed_epi_cats: set[str] = set()
 
     for map_row in range(2, ws_map.max_row + 1):
         prom_cat = str(ws_map.cell(map_row, col_prom_cat).value or "").strip()
@@ -283,21 +171,16 @@ def main() -> None:
         if not prom_cat or not epi_cat:
             continue
 
-        prom_params = cat_params.get(prom_cat, set())
-        if not prom_params:
-            print(f"  [row {map_row}] prom_cat={prom_cat} — no params in feed, skipping")
-            continue
-
         epi_attrs = attr_index.get(epi_cat, [])
         if not epi_attrs:
             print(f"  [row {map_row}] epi_cat={epi_cat} — not found in Сети атрибутів, skipping")
             continue
 
         required_attrs = [(r, n, req) for r, n, req in epi_attrs if req]
+
         print(
             f"[row {map_row}] prom_cat={prom_cat} → epi_cat={epi_cat} "
-            f"| {len(prom_params)} prom params, {len(epi_attrs)} epi attrs "
-            f"({len(required_attrs)} required)"
+            f"| {len(epi_attrs)} epi attrs ({len(required_attrs)} required)"
         )
 
         if not required_attrs:
@@ -306,35 +189,24 @@ def main() -> None:
         processed_epi_cats.add(epi_cat)
 
         for attr_row, attr_name, _ in required_attrs:
-
             cell = ws_attr.cell(attr_row, col_prom_param)
-            current_val = str(cell.value or "").strip()
-            if current_val:
-                # Вже заповнено (вручну або попереднім запуском) — не перезаписуємо
+
+            # Ступінь 0: вже заповнено — не перезаписуємо
+            if str(cell.value or "").strip():
                 total_skipped += 1
                 continue
 
-            if attr_name in hard_mappings:
-                match: str | None = hard_mappings[attr_name]
-                source = "hard"
-            else:
-                match = best_prom_match(attr_name, prom_params)
-                source = "fuzzy" if match else None
-
-            if match is None:
-                match = default_values.get(attr_name)
-                if match:
-                    source = "default"
-
+            # Ступінь 1: hard mapping
+            match = hard_mappings.get(attr_name)
             if match:
                 cell.value = match
-                print(f"    ✓ [{source}] '{attr_name}' → '{match}'")
+                print(f"    ✓ [hard] '{attr_name}' → '{match}'")
                 total_written += 1
             else:
-                # Не знайдено — клітинку не чіпаємо
+                # Ступінь 2: не знайшло — залишаємо порожнім
                 total_skipped += 1
 
-    # ── 5. Червона підсвітка: isRequired + порожньо + зіставлена категорія ──
+    # ── 4. Red highlight: isRequired + empty + matched category ──────────────
     red_count = 0
     for set_code, attrs in attr_index.items():
         if set_code not in processed_epi_cats:
@@ -351,7 +223,7 @@ def main() -> None:
                 prom_cell.fill = NO_FILL  # знімаємо червоний якщо вже заповнили
 
     wb.save(XLSX_PATH)
-    print(f"\nDone. Written: {total_written} | No match: {total_skipped} | Red: {red_count}")
+    print(f"\nDone. Written: {total_written} | No match / skipped: {total_skipped} | Red: {red_count}")
     print(f"Saved → {XLSX_PATH}")
 
 

@@ -1,202 +1,173 @@
-Треба зробити рефактор
-C:\FullStack\PriceFeedPipeline\scripts\epicenter_export_categories.py
+делай исправление прямо в C:\FullStack\PriceFeedPipeline\scripts\generate_epicenter_feed.py
 
-Зараз скрипт не бачить , якщо в C:\FullStack\PriceFeedPipeline\data\markets\mappings.xlsx додались нові категорії.
+Правильное именование и разделение по типам
+Логика дефолта зависит от attr_type:
+attr_typeДефолт берётся изoption_code в фидеfloat, text, arrayoption_name_ukне передаётсяselect, multiselectdefault_option_codeобязателен
 
-Допиши нову логіку правильно прямо в скрипті
+Переименование и расширение
+pythonfrom dataclasses import dataclass, field
+from typing import Final, Literal
 
-mappings.xlsx ← дописали 3 категорії
-│
-▼
-Запуск 1: epicenter_export_categories.py
-→ «Маппінг» +3 рядки
-→ ЛОГ: "Заповни epicenter_category_id → запусти ще раз"
-→ СТОП
-│
-├─ epicenter_map_categories.py (авто)
-└─ або вручну C, D, E
-│
-▼
-Запуск 2: epicenter_export_categories.py
-→ «Сети атрибутів» +N рядків для нових set_codes
-→ ЛОГ: "Заповни prom_param_name (колонка J) → запусти ще раз"
-→ СТОП
-│
-├─ epicenter_map_attributes.py (авто)
-└─ або вручну заповнити J
-│
-▼
-Запуск 3: epicenter_export_categories.py
-→ «Опції атрибутів» +M рядків тільки для нових
-→ Старі дані не чіпає ✅
+AttrType = Literal["float", "text", "array", "select", "multiselect"]
 
-Корінна проблема — відсутня нормалізація ідентифікаторів. Excel зберігає числа як float (123.0), str(123.0) = "123.0", а нова категорія набрана вручну дає "123" → "123.0" != "123" → скрипт або бачить нові як вже існуючі, або навпаки. Окрім цього: некоректне закриття Workbook в append_new_prom_categories (ранній close() + відсутній close() в happy-path), і потенційно хибний id_col detection.
+@dataclass(frozen=True)
+class AttrConfig:
+attr_code: str
+attr_type: AttrType
+attr_name_uk: str # None → Prom-источника нет, сразу идём в дефолт
+prom_param_name: str | None
+prom_aliases: tuple[str, ...] = ()
 
-Нова функція — які set_codes вже є в «Сети атрибутів»
-def load_set_codes_in_attr_sets() -> set[str]:
+Резолвинг дефолта — по attr_type
+python@dataclass(frozen=True)
+class AttrDefaults: # для float / text / array
+option_name_uk: dict[str, str] = field(default_factory=dict) # attr_code → значение # для select / multiselect
+option_code: dict[str, str] = field(default_factory=dict) # attr_code → code
+
+def resolve_attr_value(
+cfg: AttrConfig,
+prom_params: dict[str, str],
+defaults: AttrDefaults,
+) -> dict[str, str] | None:
 """
-Повертає set_codes, які вже є в листі «Сети атрибутів».
-"""
-if not OUTPUT_PATH.exists():
-return set()
-try:
-import openpyxl as \_xl
-wb = \_xl.load_workbook(OUTPUT_PATH, read_only=True, data_only=True)
-if "Сети атрибутів" not in wb.sheetnames:
-wb.close()
-return set()
-rows = list(wb["Сети атрибутів"].iter_rows(values_only=True))
-wb.close()
-if len(rows) < 2:
-return set()
-headers = [str(c).strip() if c else "" for c in rows[0]]
-try:
-sc_col = headers.index("set_code")
-except ValueError:
-return set()
-codes = {
-str(row[sc_col]).strip()
-for row in rows[1:]
-if len(row) > sc_col and row[sc_col]
-}
-print(f" set_codes в «Сети атрибутів»: {len(codes)} шт.")
-return codes
-except Exception as e:
-print(f"⚠️ Не вдалося прочитати «Сети атрибутів»: {e}")
-return set()
+Возвращает готовый payload для <param> или None (→ drop).
 
-Нова функція — дописати нові сети атрибутів
-def append_new_attr_sets(attr_sets: list[dict], new_set_codes: set[str]) -> int:
-"""
-Дописує в «Сети атрибутів» рядки тільки для нових set_codes.
-Існуючі рядки не чіпає. Повертає кількість доданих рядків.
-"""
-import openpyxl as \_xl
-wb = \_xl.load_workbook(OUTPUT_PATH)
+    float/text/array : value = option_name_uk,  option_code не передаём
+    select/multiselect: value = option_name_uk, option_code обязателен
+    """
+    raw_value: str | None = None
 
-    if "Сети атрибутів" not in wb.sheetnames:
-        # Листа ще немає — будуємо з нуля для нових
-        filtered = [s for s in attr_sets if str(s.get("code", "")) in new_set_codes]
-        build_attr_sets_sheet(wb, filtered)
-        wb.save(OUTPUT_PATH)
-        return sum(len(s.get("attributes", [])) or 1 for s in filtered)
+    # 1. Ищем в Prom
+    if cfg.prom_param_name is not None:
+        for key in (cfg.prom_param_name, *cfg.prom_aliases):
+            if found := prom_params.get(key):
+                raw_value = found
+                break
 
-    ws = wb["Сети атрибутів"]
-    added = 0
+    # 2. Fallback по типу
+    if raw_value is None:
+        if cfg.attr_type in ("float", "text", "array"):
+            raw_value = defaults.option_name_uk.get(cfg.attr_code)
+        else:
+            # select / multiselect — дефолт через option_code, не option_name_uk
+            option_code = defaults.option_code.get(cfg.attr_code)
+            if option_code is None:
+                logger.warning("attr drop | no default_option_code | attr_code=%s", cfg.attr_code)
+                return None
+            return {
+                "paramcode": cfg.attr_code,
+                "name": cfg.attr_name_uk,
+                "valuecode": option_code,
+                # value (label) можно добавить если есть маппинг code→name
+            }
 
-    for aset in attr_sets:
-        sc = str(aset.get("code", ""))
-        if sc not in new_set_codes:
-            continue  # тільки нові
+    if raw_value is None:
+        logger.warning("attr drop | no value and no default | attr_code=%s", cfg.attr_code)
+        return None
 
-        sn    = _get_translation(aset.get("translations", []))
-        attrs = aset.get("attributes", [])
-        rows_data = [
-            [
-                sc, sn,
-                a.get("code", ""),
-                _get_translation(a.get("translations", [])),
-                a.get("type", ""),
-                a.get("isRequired", False),
-                a.get("isFilter", False),
-                a.get("isSystem", False),
-                a.get("isModel", False),
-                "",  # prom_param_name — заповнить користувач
-            ]
-            for a in attrs
-        ] or [[sc, sn, "", "", "", "", "", "", "", ""]]
+    return {
+        "paramcode": cfg.attr_code,
+        "name": cfg.attr_name_uk,
+        "value": raw_value,
+        # option_code намеренно отсутствует для float/text/array
+    }
 
-        next_row = ws.max_row + 1
-        for row in rows_data:
-            for ci, val in enumerate(row, 1):
-                _data(ws.cell(row=next_row, column=ci, value=val),
-                      fill=GRAY_FILL if ci <= 2 else None)
-            next_row += 1
-            added += 1
+Реестр атрибутов
+python_ATTRS: Final[tuple[AttrConfig, ...]] = ( # --- float: нет prom_param_name → сразу option_name_uk ---
+AttrConfig(
+attr_code="ratio",
+attr_type="float",
+attr_name_uk="Мінімальна кратність товару",
+prom_param_name=None,
+), # --- float: источник Prom "Розміри" → fallback option_name_uk ---
+AttrConfig(attr_code="weight", attr_type="float", attr_name_uk="Вага", prom_param_name="Вага"),
+AttrConfig(attr_code="width", attr_type="float", attr_name_uk="Ширина", prom_param_name="Розміри"),
+AttrConfig(attr_code="height", attr_type="float", attr_name_uk="Висота", prom_param_name="Розміри"),
+AttrConfig(
+attr_code="length",
+attr_type="float",
+attr_name_uk="Глибина",
+prom_param_name="Розміри",
+prom_aliases=("Довжина",),
+), # --- select: дефолт через default_option_code ---
+AttrConfig(
+attr_code="measure",
+attr_type="select",
+attr_name_uk="Одиниця виміру та кількість",
+prom_param_name=None, # всегда из default_option_code
+),
+AttrConfig(
+attr_code="country_of_origin",
+attr_type="select",
+attr_name_uk="Країна-виробник",
+prom_param_name="Країна виробник",
+), # --- multiselect ---
+AttrConfig(
+attr_code="brand",
+attr_type="multiselect",
+attr_name_uk="Бренд",
+prom_param_name="Бренд",
+),
+)
 
-    wb.save(OUTPUT_PATH)
-    print(f"   ✅ Дописано {added} рядків у «Сети атрибутів» для {len(new_set_codes)} нових set_codes.")
-    return added
+Что изменилось
+БылоСталоFloatAttrConfig — только floatAttrConfig + поле attr_type — все типыОдин путь к дефолтуfloat/text/array → option_name_uk, select/multiselect → option_codeЛогика размазанаresolve_attr_value — единая точка входа для любого типа
 
-Оновлений options_only_mode в main()
-if options_only_mode:
-print("⚡ Режим: інкрементальне оновлення\n")
+Now I have a full picture of both files. The document describes a refactoring of the attribute config system. Let me understand what needs to change:
 
-    # ── Крок 1: нові категорії з mappings.xlsx ──────────────────────────
-    prom_categories = load_prom_categories()
-    added_categories = append_new_prom_categories(prom_categories)
+New dataclasses: AttrConfig (with attr_code, attr_type, attr_name_uk, prom_param_name, prom_aliases) and AttrDefaults (with option_name_uk dict and option_code dict).
+AttrType literal for typing.
+resolve_attr_value function — unified entry point for all attr types.
+\_ATTRS registry — replaces \_SYSTEM_NUMERIC in generate_epicenter_feed.py.
+The key change is: \_SYSTEM_NUMERIC dict in generate_epicenter_feed.py gets replaced by \_ATTRS registry using AttrConfig dataclass, and the resolution logic in inject_epicenter_attrs gets simplified using resolve_attr_value.
 
-    if added_categories > 0:
-        print(
-            f"\n📌 Додано {added_categories} нових категорій у «Маппінг».\n"
-            f"   Заповни epicenter_category_id одним із способів:\n"
-            f"   • Автоматично: python scripts/epicenter_map_categories.py\n"
-            f"   • Вручну:      колонки C (epicenter_category_id),\n"
-            f"                           D (Назва категорії Епіцентру),\n"
-            f"                           E (parentCode)\n"
-            f"   Потім: python scripts/epicenter_export_categories.py"
-        )
-        return  # чекаємо поки заповнять
+The document specifies these changes as improvements to the naming and separation by type. Looking at what's in generate_epicenter_feed.py:
 
-    # ── Крок 2: нові set_codes → дописати «Сети атрибутів» ─────────────
-    existing_in_attr_sets = load_set_codes_in_attr_sets()
-    new_set_codes = mapped_set_codes - existing_in_attr_sets
+\_SYSTEM_NUMERIC dict maps prom_param_name → (epicenter_paramcode, epicenter_name) — only for float/numeric types
+Step 5a processes these system numeric attrs
+Steps 5b and 5c handle measure (select) and category attrs from xlsx
 
-    if new_set_codes:
-        print(f"   Нових set_codes без атрибутів: {len(new_set_codes)} → завантажуємо з API...")
-        attr_sets_from_api = fetch_attribute_sets()
-        added_attrs = append_new_attr_sets(attr_sets_from_api, new_set_codes)
+The proposed change:
 
-        if added_attrs > 0:
-            print(
-                f"\n📌 Дописано атрибути для {len(new_set_codes)} нових категорій у «Сети атрибутів».\n"
-                f"   Заповни prom_param_name (колонка J) для нових рядків.\n"
-                f"   Потім: python scripts/epicenter_export_categories.py\n"
-                f"   → Опції завантажаться тільки для нових категорій."
-            )
-            return  # чекаємо поки заповнять prom_param_name
-    else:
-        # Для fetch_all_options потрібен актуальний список сетів
-        attr_sets_from_api = None  # буде завантажено з xlsx нижче
+Replace \_SYSTEM_NUMERIC with \_ATTRS: Final[tuple[AttrConfig, ...]]
+Add AttrConfig, AttrType, AttrDefaults dataclasses
+Add resolve_attr_value function
+Refactor inject_epicenter_attrs step 5a to use the new registry
 
-    # ── Крок 3: нові опції — тільки для set_codes без опцій ─────────────
-    existing_with_options = load_set_codes_with_options()
-    new_set_codes_for_options = mapped_set_codes - existing_with_options
+But wait — looking more carefully at the document's \_ATTRS registry, it includes attrs like ratio, weight, width, height, length, measure, country_of_origin, brand. Some of these overlap with what's currently in \_SYSTEM_NUMERIC and some are handled via option_map/defaults from xlsx.
+The document says measure stays as-is (via \_resolve_measure), and country_of_origin/brand stay via option_map. So the \_ATTRS registry in the document is more of a conceptual illustration than a 1:1 replacement.
+…Show lessLoading toolsResultNow I have Filesystem:edit_file. Let me apply the changes one by one.
+Here's my plan for the changes:
+Edit 1: Imports — add dataclass, field and Literal
+Edit 2: System attributes config section — replace the entire \_SYSTEM_NUMERIC block + comment with:
 
-    if not new_set_codes_for_options:
-        print("   ✅ Опції вже завантажені для всіх категорій.")
-        return
+AttrType Literal
+AttrConfig dataclass
+AttrDefaults dataclass
+resolve_attr_value function
+\_ATTRS registry
 
-    attr_sets = attr_sets_from_api or _load_attr_sets_from_xlsx()
-    option_rows = fetch_all_options(attr_sets, new_set_codes_for_options, mapped_attr_pairs)
+Edit 3: Add \_render_attr_payload — new helper after \_render_system_numeric
+Edit 4: Remove \_resolve_measure function
+Edit 5: Update inject_epicenter_attrs:
 
-    if not option_rows:
-        return
+Change local vars
+Replace steps 5a + 5b
 
-    import openpyxl as _xl
-    wb = _xl.load_workbook(OUTPUT_PATH)
+Let me now write each edit carefully.
+For \_ATTRS, based on current \_SYSTEM_NUMERIC:
 
-    if "Опції атрибутів" in wb.sheetnames and option_rows:
-        ws_opts = wb["Опції атрибутів"]
-        next_row = ws_opts.max_row + 1
-        for ri, row in enumerate(option_rows, next_row):
-            vals = [
-                row["set_code"], row["set_name_uk"], row["attr_code"],
-                row["attr_name_uk"], row["attr_type"],
-                row["option_code"], row["option_name_uk"], row.get("prom_option_name", ""),
-            ]
-            for ci, val in enumerate(vals, 1):
-                fill = (GRAY_FILL if ci <= 2
-                        else BLUE_FILL if ci in (6, 7)
-                        else YELLOW_FILL if ci == 8
-                        else None)
-                _data(ws_opts.cell(row=ri, column=ci, value=val), fill=fill)
-        print(f"   ✅ Дописано {len(option_rows)} рядків у «Опції атрибутів».")
-    elif option_rows:
-        build_options_sheet(wb, option_rows)
+"Ширина" → width (float)
+"Висота" → height (float)
+"Довжина" → length (float), "Глибина" is also an alias
+"Глибина" → length (float) - this is a second key in \_SYSTEM_NUMERIC that maps to the same code
+"Вага" → weight (float)
+"Кратність" → ratio (float)
+measure → select (no prom source)
 
-    wb.save(OUTPUT_PATH)
-    print(f"\n✅ Оновлено: {OUTPUT_PATH}")
-    return
-
-Тепер кожен крок чітко логується і скрипт зупиняється з підказкою — не треба нічого видаляти чи думати що робити далі.
+For length, prom_param_name="Глибина" (the primary Epicenter name) and prom_aliases=("Довжина",) (the Prom alias). Actually wait, in the current \_SYSTEM_NUMERIC:
+python"Довжина": ("length", "Глибина"), # Prom="Довжина" → Epicenter="Глибина"
+"Глибина": ("length", "Глибина"),
+Both "Довжина" and "Глибина" are Prom param names that map to the same Epicenter attr. So prom_param_name="Довжина" and prom_aliases=("Глибина",) would make sense — or either one as primary with the other as alias.
+Let me use prom_param_name="Глибина" (primary) with prom_aliases=("Довжина",) as that matches the existing pattern where "Глибина" is the Epicenter name.
+Wait, actually "Глибина" is the Epicenter name but IS it also a Prom param? Looking at the current code, YES — \_SYSTEM_NUMERIC has "Глибина" as a key meaning it IS a Prom param. …Show less
