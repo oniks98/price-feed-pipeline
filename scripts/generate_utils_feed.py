@@ -59,6 +59,15 @@ _COUNTRY_ALIAS_MAP: dict[str, str] = {
     "Україна": "Китай",
 }
 
+# Матчать обидві форми тегу: самозакриваючий <vendor/> і звичайний <vendor>TEXT</vendor>.
+# group(1) = текст всередині (або None для самозакриваючого).
+_VENDOR_FULL_RE: re.Pattern[str] = re.compile(
+    r"<vendor\s*/>|<vendor>(.*?)</vendor>", re.DOTALL
+)
+_COUNTRY_FULL_RE: re.Pattern[str] = re.compile(
+    r"<country_of_origin\s*/>|<country_of_origin>(.*?)</country_of_origin>", re.DOTALL
+)
+
 # ---------------------------------------------------------------------------
 # Type aliases
 # ---------------------------------------------------------------------------
@@ -414,40 +423,58 @@ def fill_missing_vendor(xml: str) -> str:
     """
     Підставляє <vendor> і <country_of_origin> якщо вони відсутні або порожні.
 
-    Prom стирає виробника якого немає в своїй базі → фід приходить з порожнім <vendor>.
-    Маркетплейси відхиляють такі товари при валідації.
-    Fallback: DEFAULT_VENDOR / DEFAULT_COUNTRY.
+    Обробляє три випадки для кожного тегу:
+      1. Тег відсутній повністю       → вставляємо після </price> / </vendor>.
+      2. Самозакриваючий <vendor/>    → замінюємо на <vendor>DEFAULT</vendor> in-place.
+         (Prom.ua видає саме цю форму коли виробник не знайдений у їх базі.)
+      3. Порожній <vendor></vendor>   → замінюємо on-place.
+
+    Старий підхід не матчив <vendor/> через відсутність </vendor>,
+    тому вставляв новий тег поруч із самозакриваючим → дублікат у XML.
     """
-    filled = 0
+    cnt_missing: int = 0      # тег відсутній повністю
+    cnt_empty: int = 0        # <vendor></vendor>
+    cnt_self_close: int = 0   # <vendor/>
 
     def on_offer(m: re.Match) -> str:
-        nonlocal filled
+        nonlocal cnt_missing, cnt_empty, cnt_self_close
         offer_id: str = m.group(1)
         tail_attrs: str = m.group(2)
         body: str = m.group(3)
 
-        vendor_match = re.search(r"<vendor>(.*?)</vendor>", body, re.DOTALL)
-        if not vendor_match or not vendor_match.group(1).strip():
-            if vendor_match:
-                body = body.replace(vendor_match.group(0), f"<vendor>{DEFAULT_VENDOR}</vendor>", 1)
-            else:
-                price_end = re.search(r"</price>", body)
-                pos = price_end.end() if price_end else 0
-                body = body[:pos] + f"\n<vendor>{DEFAULT_VENDOR}</vendor>" + body[pos:]
-            filled += 1
+        # --- vendor ---
+        vendor_match = _VENDOR_FULL_RE.search(body)
+        vendor_value: str = (vendor_match.group(1) or "").strip() if vendor_match else ""
 
-        country_match = re.search(r"<country_of_origin>(.*?)</country_of_origin>", body, re.DOTALL)
-        if not country_match or not country_match.group(1).strip():
-            if country_match:
-                body = body.replace(
-                    country_match.group(0),
-                    f"<country_of_origin>{DEFAULT_COUNTRY}</country_of_origin>",
-                    1,
-                )
+        if vendor_match is None:
+            # Тег відсутній → вставляємо після </price>
+            price_end = re.search(r"</price>", body)
+            pos = price_end.end() if price_end else 0
+            body = body[:pos] + f"\n<vendor>{DEFAULT_VENDOR}</vendor>" + body[pos:]
+            cnt_missing += 1
+        elif not vendor_value:
+            # <vendor/> або <vendor></vendor> → замінюємо тег in-place
+            is_self_close = vendor_match.group(0).endswith("/>")
+            body = body.replace(vendor_match.group(0), f"<vendor>{DEFAULT_VENDOR}</vendor>", 1)
+            if is_self_close:
+                cnt_self_close += 1
             else:
-                vendor_end = re.search(r"</vendor>", body)
-                pos = vendor_end.end() if vendor_end else len(body)
-                body = body[:pos] + f"\n<country_of_origin>{DEFAULT_COUNTRY}</country_of_origin>" + body[pos:]
+                cnt_empty += 1
+
+        # --- country_of_origin ---
+        country_match = _COUNTRY_FULL_RE.search(body)
+        country_value: str = (country_match.group(1) or "").strip() if country_match else ""
+
+        if country_match is None:
+            vendor_end = re.search(r"</vendor>", body)
+            pos = vendor_end.end() if vendor_end else len(body)
+            body = body[:pos] + f"\n<country_of_origin>{DEFAULT_COUNTRY}</country_of_origin>" + body[pos:]
+        elif not country_value:
+            body = body.replace(
+                country_match.group(0),
+                f"<country_of_origin>{DEFAULT_COUNTRY}</country_of_origin>",
+                1,
+            )
 
         return f'<offer id="{offer_id}"{tail_attrs}>{body}</offer>'
 
@@ -457,7 +484,20 @@ def fill_missing_vendor(xml: str) -> str:
         xml,
         flags=re.DOTALL,
     )
-    print(f"🏭  Підставлено виробника за замовчуванням ({DEFAULT_VENDOR} / {DEFAULT_COUNTRY}): {filled} товарів")
+
+    total = cnt_missing + cnt_empty + cnt_self_close
+    parts: list[str] = []
+    if cnt_self_close:
+        parts.append(f"<vendor/>: {cnt_self_close}")
+    if cnt_empty:
+        parts.append(f"порожній: {cnt_empty}")
+    if cnt_missing:
+        parts.append(f"відсутній: {cnt_missing}")
+    detail = f" ({', '.join(parts)})" if parts else ""
+    print(
+        f"🏭  Підставлено виробника за замовчуванням"
+        f" ({DEFAULT_VENDOR} / {DEFAULT_COUNTRY}): {total} товарів{detail}"
+    )
     return xml
 
 

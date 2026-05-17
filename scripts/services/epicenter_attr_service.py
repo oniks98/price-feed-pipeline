@@ -68,8 +68,11 @@ _OPT_COL_DEFAULT_CODE: Final[int] = 7    # default_option_code
 _OPT_COL_SET_CODES:   Final[int] = 8     # set_codes   (comma-separated epicenter category ids)
 _OPT_COL_PROM_PARAMS: Final[int] = 9     # prom_params (comma-separated prom param names) — primary джерело для option_map
 
-# Типи атрибутів без опцій (значення товару підставляється напряму як CDATA)
-_NON_OPTION_TYPES: Final[frozenset[str]] = frozenset({"float", "int", "text", "string"})
+# Типи атрибутів без опцій (значення товару підставляється напряму як CDATA).
+# Публічна константа — імпортується в generate_epicenter_feed.py для
+# узгодженої перевірки attr_type без дублювання.
+NON_OPTION_TYPES: Final[frozenset[str]] = frozenset({"float", "int", "text", "string", "array"})
+_NON_OPTION_TYPES = NON_OPTION_TYPES  # зворотна сумісність (внутрішнє використання)
 
 
 # ---------------------------------------------------------------------------

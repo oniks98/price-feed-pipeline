@@ -17,6 +17,7 @@
 
 import logging
 import re
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -24,7 +25,7 @@ from typing import Final, Literal
 
 _logger = logging.getLogger(__name__)
 
-from constants_feed_url import FEED_URL_PROM as FEED_URL
+from constants_feed_url import FEED_URL_PROM_UK as FEED_URL
 from generate_utils_feed import (
     add_name_ua,
     apply_prices,
@@ -36,11 +37,13 @@ from generate_utils_feed import (
     parse_currency_rates,
     transform_prom_image_urls,
 )
-from services.prom_params_to_description_service import inject_params_into_description
+from services.epicenter_params_to_description_service import inject_params_into_description
+from services.epicenter_text_sanitizer_service import sanitize_russian_chars, strip_html_classes
 from services.epicenter_attr_service import (
     AttrDefaultsMap,
     AttrMeta,
     AttrOption,
+    NON_OPTION_TYPES,
     get_attr_defaults,
     get_defaults,
     get_float_defaults,
@@ -179,7 +182,7 @@ def resolve_attr_value(
 
     # 2. Fallback залежно від attr_type
     if raw_value is None:
-        if cfg.attr_type in ("float", "text", "array"):
+        if cfg.attr_type in NON_OPTION_TYPES:
             raw_value = defaults.option_name_uk.get(cfg.attr_code)
         else:
             # select / multiselect — дефолт через option_code, не option_name_uk
@@ -378,9 +381,22 @@ def inject_epicenter_attrs(xml: str) -> str:
     skipped_cat_ids: set[int] = set()
     total_params    = 0
     missing_measure = 0
+    brand_defaults_total: int = 0             # скільки офферів отримали дефолтний brand
+    missed_brands: Counter[str] = Counter()   # prom-бренд → кількість (є в Prom, нема в Epicenter)
+
+    # Зворотній індекс: знаходимо prom_param_name що маппиться на attr_code="brand".
+    # Використовується щоб визначити яке поле Prom є брендом (зазвичай "Бренд").
+    _brand_prom_param: str | None = next(
+        (
+            prom_name
+            for prom_name, opts in option_map.items()
+            if any(o.attr_code == "brand" for o in opts.values())
+        ),
+        None,
+    )
 
     def _on_offer(m: re.Match) -> str:
-        nonlocal mapped_count, skipped_no_cat, total_params, missing_measure
+        nonlocal mapped_count, skipped_no_cat, total_params, missing_measure, brand_defaults_total
 
         offer_id   = m.group(1)
         tail_attrs = m.group(2)
@@ -490,6 +506,9 @@ def inject_epicenter_attrs(xml: str) -> str:
                         params.append(_render_select_param(option))
                         mapped_attr_codes.add(option.attr_code)
                     elif not option:
+                        # Бренд є у Prom, але відсутній в option_map Epicenter → піде дефолт
+                        if prom_name == _brand_prom_param:
+                            missed_brands[single_value] += 1
                         _logger.debug(
                             "offer %s | option_map miss | prom_param=%r value=%r "
                             "— значення відсутнє у маппінгу, дефолт буде застосовано",
@@ -508,6 +527,11 @@ def inject_epicenter_attrs(xml: str) -> str:
             if attr_code not in mapped_attr_codes:
                 params.append(_render_select_param(default))
                 mapped_attr_codes.add(attr_code)
+                if attr_code == "brand":
+                    brand_defaults_total += 1
+                    # brand відсутній у Prom-параметрах взагалі (не просто не знайдений у option_map)
+                    if _brand_prom_param and _brand_prom_param not in prom_params:
+                        missed_brands["(відсутній у Prom)"] += 1
 
         # --- 7. Вставляємо блок «Параметри» в description_ua ---
         body = inject_params_into_description(body, prom_params)
@@ -534,6 +558,20 @@ def inject_epicenter_attrs(xml: str) -> str:
         f'| без маппінгу категорії: {skipped_no_cat}'
         + (f' | measure не знайдено у xlsx: {missing_measure}' if missing_measure else '')
     )
+    if brand_defaults_total:
+        # Бренди що були у Prom але відсутні в option_map Epicenter
+        known = sum(v for k, v in missed_brands.items() if k != "(відсутній у Prom)")
+        absent = missed_brands.get("(відсутній у Prom)", 0)
+        brands_str = ", ".join(
+            f"{brand} ({cnt}x)" if cnt > 1 else brand
+            for brand, cnt in missed_brands.most_common()
+            if brand != "(відсутній у Prom)"
+        )
+        print(
+            f"🏷️  Brand → дефолт Epicenter: {brand_defaults_total} товарів"
+            + (f" | відсутній у Prom: {absent}" if absent else "")
+            + (f" | бренди з Prom без маппінгу ({known}): {brands_str}" if brands_str else "")
+        )
     if skipped_cat_ids:
         ids_str = ', '.join(str(i) for i in sorted(skipped_cat_ids))
         _logger.warning('Prom categoryId без маппінгу (%d): %s', len(skipped_cat_ids), ids_str)
@@ -549,6 +587,51 @@ _PROM_CATEGORIES_RE: Final[re.Pattern[str]] = re.compile(
     r'<categories>.*?</categories>',
     re.DOTALL,
 )
+
+# Shop-level теги що відсутні у форматі Epicenter
+_PROM_SHOP_FIELDS_TO_STRIP: Final[tuple[str, ...]] = (
+    "company",
+    "url",
+    "currencies",
+)
+
+# Назва магазину у вихідному фіді
+SHOP_NAME: Final[str] = "DomSys"
+
+
+def strip_prom_shop_fields(xml: str) -> str:
+    """
+    Видаляє shop-рівневі Prom-теги що відсутні у форматі Epicenter:
+        <company>, <url>, <currencies>.
+    """
+    removed: dict[str, int] = {}
+    for tag in _PROM_SHOP_FIELDS_TO_STRIP:
+        xml, n = re.subn(rf'<{tag}>.*?</{tag}>', '', xml, flags=re.DOTALL)
+        if n:
+            removed[tag] = n
+    if removed:
+        summary = ', '.join(f'<{t}>\xd7{c}' for t, c in removed.items())
+        print(f"\U0001f5d1\ufe0f  Видалено Prom shop-тегів: {summary}")
+    return xml
+
+
+def set_shop_name(xml: str) -> str:
+    """
+    Замінює перший <name lang="ua">…</name> (назва магазину) на SHOP_NAME.
+    Викликати ПІСЛЯ normalize_name_description_tags.
+    """
+    xml, n = re.subn(
+        r'<name lang="ua">.*?</name>',
+        f'<name lang="ua">{SHOP_NAME}</name>',
+        xml,
+        count=1,
+        flags=re.DOTALL,
+    )
+    if n:
+        print(f"\U0001f3f7\ufe0f  Назва магазину → {SHOP_NAME!r}")
+    else:
+        _logger.warning("<name lang=\"ua\"> магазину не знайдено — перевірте порядок кроків")
+    return xml
 
 
 def strip_prom_categories(xml: str) -> str:
@@ -583,14 +666,11 @@ _PROM_FIELDS_TO_STRIP: Final[tuple[str, ...]] = (
 )
 
 # Перейменування тегів: (prom_tag, epicenter_tag, lang)
-# Prom: <n>, <name_ua>, <description>, <description_ua>
-# Epicenter: <name lang="ru">, <name lang="ua">, <description lang="ru">, <description lang="ua">
+# Prom UK-only фід віддає тільки <name> і <description> (без суфікса _ua) — вже українською мовою.
+# Обидва теги ренеймимо до Epicenter-формату з lang="ua".
 _TAG_RENAMES: Final[tuple[tuple[str, str, str], ...]] = (
-    ("n",              "name",        "ru"),
-    ("name",           "name",        "ru"),
-    ("name_ua",        "name",        "ua"),
-    ("description",    "description", "ru"),
-    ("description_ua", "description", "ua"),
+    ("name",        "name",        "ua"),
+    ("description", "description", "ua"),
 )
 
 
@@ -614,7 +694,7 @@ def strip_prom_offer_fields(xml: str) -> str:
     return xml
 
 
-_DESCRIPTION_TAGS: Final[frozenset[str]] = frozenset({"description", "description_ua"})
+_DESCRIPTION_TAGS: Final[frozenset[str]] = frozenset({"description"})
 
 
 def _wrap_cdata(content: str) -> str:
@@ -640,16 +720,15 @@ def _wrap_cdata(content: str) -> str:
 
 def normalize_name_description_tags(xml: str) -> str:
     """
-    Перейменовує теги назв і описів у формат Epicenter (lang-атрибут).
-    Description-теги додатково загортаються у CDATA-секцію.
+    Перейменовує теги назв і опису у формат Epicenter (lang-атрибут).
+    Description-тег додатково загортається у CDATA-секцію.
 
-        <n>TEXT</n>                          → <name lang="ru">TEXT</name>
-        <name_ua>TEXT</name_ua>              → <name lang="ua">TEXT</name>
-        <description>...</description>       → <description lang="ru"><![CDATA[...]]></description>
-        <description_ua>...</description_ua> → <description lang="ua"><![CDATA[...]]></description>
+    Prom UK-only фід віддає тільки ці два теги (вже українською мовою):
+        <name>TEXT</name>               → <name lang="ua">TEXT</name>
+        <description>...</description>  → <description lang="ua"><![CDATA[...]]></description>
 
     Безпечно для CDATA-вмісту (ламбда замість рядка заміни уникає проблем з спецсимволами).
-    Викликати ПІСЛЯ inject_epicenter_attrs — вміст description_ua вже оновлено.
+    Викликати ПІСЛЯ inject_epicenter_attrs — вміст description вже оновлено.
     """
     for prom_tag, epic_tag, lang in _TAG_RENAMES:
         is_description = prom_tag in _DESCRIPTION_TAGS
@@ -696,9 +775,13 @@ def main() -> None:
     updated_xml = fill_missing_vendor(updated_xml)
     updated_xml = add_name_ua(updated_xml)
     updated_xml = strip_prom_categories(updated_xml)
+    updated_xml = strip_prom_shop_fields(updated_xml)            # видаляємо <company>, <url>, <currencies>
     updated_xml = inject_epicenter_attrs(updated_xml)
     updated_xml = normalize_name_description_tags(updated_xml)  # після inject: description_ua вже оновлена
+    updated_xml = set_shop_name(updated_xml)                     # після normalize: <name lang="ua"> вже є
     updated_xml = strip_prom_offer_fields(updated_xml)           # після fill_missing_vendor
+    updated_xml = sanitize_russian_chars(updated_xml)             # ы→и, ъ→' у всьому фіді
+    updated_xml = strip_html_classes(updated_xml)                  # видаляємо class="..." з HTML
 
     # Гарантуємо коректну XML-декларацію незалежно від того,
     # чи Prom-фід її надсилає і в якому форматі.
