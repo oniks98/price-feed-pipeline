@@ -18,6 +18,8 @@ OptionMap  = dict[str, dict[str, AttrOption]]
 DefaultsMap = dict[str, dict[str, AttrOption]]
     set_code → attr_code → AttrOption (дефолтна опція для конкретного сету)
     Приклад: {"5926": {"measure": AttrOption(..., option_code="measure_pcs", option_name="шт.")}}
+    Для multiselect дефолтів option_code містить кілька кодів через кому (без пробілів):
+    Приклад: {"5926": {"3176":  AttrOption(option_code="bsz6btxa,wle9vq5zsirz1dni", option_name="тварини, коти")}}
 
 NumericMap = dict[str, AttrMeta]
     prom_param_name → AttrMeta  (для float / int / text / string атрибутів)
@@ -122,6 +124,29 @@ def _parse_set_codes(raw: object) -> list[str]:
     return [s.strip() for s in str(raw).split(",") if s.strip()]
 
 
+def _parse_default_option_codes(raw: object) -> list[str]:
+    """
+    Парсить default_option_code як comma-separated список кодів опцій.
+
+    Розділювач — кома БЕЗ пробілів: option_code є технічними slug-рядками
+    (напр. "bsz6btxa"), тому кома без пробілу є однозначним роздільником.
+    Порівняти з:
+        _parse_prom_param_aliases  → розділювач «;»  (назви можуть містити кому)
+        _parse_set_codes           → розділювач «,»  (числові ID, кома безпечна)
+
+    Одне значення — повертає список з одного елемента (поведінка без змін).
+    Кілька значень → merged AttrOption з combined option_code і option_name.
+
+    Приклад: "bsz6btxa,wle9vq5zsirz1dni"
+             → ["bsz6btxa", "wle9vq5zsirz1dni"]
+    Приклад: "measure_pcs"
+             → ["measure_pcs"]
+    """
+    if not raw:
+        return []
+    return [s.strip() for s in str(raw).split(",") if s.strip()]
+
+
 def _load_workbook() -> openpyxl.Workbook:
     if not _XLSX_PATH.exists():
         raise FileNotFoundError(
@@ -136,36 +161,46 @@ def _load_workbook() -> openpyxl.Workbook:
 
 def _parse_prom_param_aliases(raw: object) -> list[str]:
     """
-    Парсить prom_param_name як comma-separated список алиасів.
+    Парсить prom_param_name як semicolon-separated список алиасів.
+
+    Розділювач «;» (крапка з комою) — а НЕ кома — щоб уникнути конфліктів
+    з назвами характеристик що самі містять кому (напр. «Вихідна напруга, В»).
 
     Перший елемент — найчастіший варіант (основний).
     Повертає порожній список якщо значення відсутнє.
 
-    Приклад: "Розміри, Розмір, Размер, Розмір упаковки"
+    Приклад: "Розміри; Розмір; Размер; Розмір упаковки"
              → ["Розміри", "Розмір", "Размер", "Розмір упаковки"]
+    Приклад: "Вихідна напруга, В"
+             → ["Вихідна напруга, В"]   (кома всередині — не розділювач)
     """
     if not raw:
         return []
-    return [s.strip() for s in str(raw).split(",") if s.strip()]
+    return [s.strip() for s in str(raw).split(";") if s.strip()]
 
 
 def _parse_prom_option_aliases(raw: object) -> list[str]:
     """
-    Парсить prom_option_name як comma-separated список алиасів значення опції.
+    Парсить prom_option_name як semicolon-separated список алиасів значення опції.
+
+    Розділювач «;» (крапка з комою) — а НЕ кома — щоб уникнути конфліктів
+    з опціями що самі містять кому (напр. «4-тактний, з повітряним охолодженням»).
 
     Аналог _parse_prom_param_aliases — для колонки prom_option_name
     аркуша «Опції атрибутів».
     Всі алиаси реєструються як окремі ключі:
         option_map[param_alias][option_alias] → AttrOption
 
-    Приклад: "Білий, Белый, White"
+    Приклад: "Білий; Белый; White"
              → ["Білий", "Белый", "White"]
+    Приклад: "4-тактний, з повітряним охолодженням"
+             → ["4-тактний, з повітряним охолодженням"]   (кома всередині — не розділювач)
     Приклад: "120"
              → ["120"]   (одне значення — поведінка без змін)
     """
     if not raw:
         return []
-    return [s.strip() for s in str(raw).split(",") if s.strip()]
+    return [s.strip() for s in str(raw).split(";") if s.strip()]
 
 
 def _build_attr_indexes(
@@ -352,13 +387,41 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap, AttrDefaultsMap
 
     # --- крок 4: резолв дефолтів (key_index тепер повний) ---
     for row_idx, attr_code, default_code, set_codes_raw in pending_defaults:
-        default_option = key_index.get((attr_code, default_code))
-        if not default_option:
+        # default_option_code може містити один або кілька кодів через кому (multiselect).
+        # Кожен код шукається окремо в key_index → знайдені опції мержаться в один AttrOption:
+        #   option_code = "bsz6btxa,wle9vq5zsirz1dni"  (comma-joined, без пробілів)
+        #   option_name = "тварини, коти"               (comma-space-joined)
+        # XML: valuecode="bsz6btxa,wle9vq5zsirz1dni">тварини, коти</param>
+        # _render_select_param використовує option_code напряму → змін у генераторі не потрібно.
+        opt_codes   = _parse_default_option_codes(default_code)
+        found_opts  = [o for c in opt_codes if (o := key_index.get((attr_code, c))) is not None]
+        missing     = [c for c in opt_codes if key_index.get((attr_code, c)) is None]
+
+        if missing:
             logger.warning(
-                "Рядок %d: default_option_code=%r не знайдено для attr_code=%r → пропущено",
-                row_idx, default_code, attr_code,
+                "Рядок %d: default_option_code(s) %r не знайдено для attr_code=%r → пропущено",
+                row_idx, missing, attr_code,
             )
+        if not found_opts:
             continue
+
+        if len(found_opts) == 1:
+            default_option: AttrOption = found_opts[0]
+        else:
+            # multiselect: мержимо всі знайдені опції в одну зведену AttrOption.
+            # attr_code / attr_name беруться з першої опції (однакові для всіх).
+            default_option = AttrOption(
+                attr_code=found_opts[0].attr_code,
+                attr_name=found_opts[0].attr_name,
+                option_code=",".join(o.option_code for o in found_opts),
+                option_name=", ".join(o.option_name for o in found_opts),
+            )
+            logger.debug(
+                "Рядок %d: multiselect default | attr_code=%r | merged %d опцій: %r → valuecode=%r",
+                row_idx, attr_code, len(found_opts),
+                [o.option_code for o in found_opts],
+                default_option.option_code,
+            )
 
         # AttrDefaultsMap: перший зустрічний запис для кожного attr_code.
         # Це «глобальний» дефолт — незалежно від категорії.

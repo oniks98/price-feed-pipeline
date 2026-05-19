@@ -506,8 +506,14 @@ def inject_epicenter_attrs(xml: str) -> str:
                         params.append(_render_select_param(option))
                         mapped_attr_codes.add(option.attr_code)
                     elif not option:
-                        # Бренд є у Prom, але відсутній в option_map Epicenter → піде дефолт
-                        if prom_name == _brand_prom_param:
+                        # Бренд є у Prom, але відсутній в option_map Epicenter → піде дефолт.
+                        # Перевіряємо що attr_code ще не замаплений цим же оффером:
+                        # якщо в Prom два <param name="Компанія-виробник"> ("Dahua Technology" + "Dahua"),
+                        # step 2 об'єднує їх через ", " → split(",") дає два значення;
+                        # перше знаходиться → brand mapped; друге («Dahua») не знаходиться
+                        # але brand вже в mapped_attr_codes → дефолт не застосовується → лог брехливий.
+                        # Рішення: missed_brands тільки якщо attr_code ще НЕ в mapped_attr_codes.
+                        if prom_name == _brand_prom_param and "brand" not in mapped_attr_codes:
                             missed_brands[single_value] += 1
                         _logger.debug(
                             "offer %s | option_map miss | prom_param=%r value=%r "
