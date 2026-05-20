@@ -1,5 +1,6 @@
 # prom_noindex_automation.py
 # Python 3.10+ | Playwright sync
+# v2.7: Новий UI фільтрів Prom (двопанельний попап #js-filters-popup)
 #
 # Масово виставляє noindex на товари в Prom.ua через браузер.
 # Читає список SKU з NOINDEX_SKU_LIST, відкриває кажен товар і знімає з індексуації.
@@ -327,10 +328,65 @@ def set_per_page(page: Page, per_page: int = PER_PAGE) -> None:
     page.wait_for_timeout(400)
 
 
-def open_filter_dropdown(page: Page) -> None:
-    dd = page.locator("div.b-smart-filter__dd-value.qa_filter_dd_value").first
-    dd.wait_for(state="visible", timeout=30_000)
-    dd.click()
+def open_filter_popup(page: Page) -> None:
+    """
+    v2.7: Відкриває попап фільтрів (новий UI Prom — двопанельний попап).
+    Якщо попап вже відкритий — нічого не робить.
+    Перебирає відомі селектори кнопки відкриття фільтра з fallback-ланцюгом.
+    """
+    POPUP_SELECTOR = "#js-filters-popup"
+    FILTER_BTN_SELECTORS: list[str] = [
+        '[data-qaid="filter-btn"]',
+        '[data-qaid="filters_btn"]',
+        '[data-qaid="filter_btn"]',
+        'button[data-qaid*="filter"]',
+        '[class*="filter"][role="button"]',
+        # Текстовий fallback
+        'button:has-text("Фільтр")',
+        'button:has-text("Фильтр")',
+    ]
+
+    # Якщо попап вже відкритий — пропускаємо
+    try:
+        if page.locator(POPUP_SELECTOR).is_visible():
+            return
+    except Exception:
+        pass
+
+    last_err: Exception | None = None
+    for selector in FILTER_BTN_SELECTORS:
+        btn = page.locator(selector).first
+        try:
+            btn.wait_for(state="visible", timeout=4_000)
+            btn.click()
+            page.locator(POPUP_SELECTOR).wait_for(state="visible", timeout=8_000)
+            logger.debug("filter_popup opened via selector: %s", selector)
+            return
+        except Exception as e:
+            last_err = e
+            logger.debug("filter_popup selector miss: %s — %s", selector, e)
+            continue
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    try:
+        page.screenshot(path=f"filter_missing_{ts}.png", full_page=True)
+    except Exception:
+        pass
+
+    raise RuntimeError(
+        f"Cannot open filter popup with any known selector. "
+        f"Tried: {FILTER_BTN_SELECTORS}. "
+        f"Screenshot saved: filter_missing_{ts}.png. Last error: {last_err}"
+    )
+
+
+def close_filter_popup(page: Page) -> None:
+    """Закрити попап фільтра (Escape або клік поза попапом)."""
+    try:
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+    except Exception:
+        pass
 
 
 def close_overlays(page: Page) -> None:
@@ -346,48 +402,73 @@ def close_overlays(page: Page) -> None:
 
 def apply_queue_filter(page: Page, tag_name: str) -> bool:
     """
-    Застосовує фільтр по тегу.
-    Повертає False якщо тег відсутній в дропдауні (тобто товарів з цим тегом більше немає).
+    v2.7: Застосовує фільтр по тегу через новий двопанельний попап Prom.
+
+    Флоу:
+      1. Відкрити попап фільтрів (#js-filters-popup)
+      2. Клікнути "Нотатки" в лівій панелі ([data-qaid="item-block"])
+      3. Дочекатися правої панелі зі списком тегів
+      4. Знайти тег по [data-qaid="attribute-value-name"] — якщо відсутній → False
+      5. Клікнути чекбокс тегу
+      6. Натиснути "Застосувати" ([data-qaid="confirm_btn"])
+      7. Дочекатися появи тегів у рядках списку
+
+    Повертає False якщо тег відсутній у попапі (товарів з тегом більше немає).
     """
-    open_filter_dropdown(page)
-    page.locator('div[data-qaid="menu-item"]:has-text("Нотатки")').first.click()
-    # Prom підвантажує список нотаток 1-2 сек — чекаємо появи будь-якого пункту в підменю
-    try:
-        page.locator('[data-qaid="menu-item"]').nth(1).wait_for(state="visible", timeout=5_000)
-    except Exception:
-        page.wait_for_timeout(2_500)
+    open_filter_popup(page)
+    page.wait_for_timeout(400)
 
-    close_overlays(page)
-
-    option = page.locator(
-        f'xpath=//span[normalize-space(text())="{tag_name}"]'
-        f'/ancestor::*[@role="menuitem" or @data-qaid="menu-item"][1]'
+    # Крок 1: клікаємо "Нотатки" в лівій панелі
+    notes_item = page.locator(
+        '[data-qaid="item-block"]:has([data-qaid="item-name"]:text-is("Нотатки"))'
     ).first
-    if option.count() == 0:
-        option = page.locator(f'xpath=//span[normalize-space(text())="{tag_name}"]').first
-
-    # Якщо тег не зтявився в дропдауні за 5 секунди — товарів з цим тегом більше немає, закриваємо дропдаун
     try:
-        option.wait_for(state="visible", timeout=5_000)
-    except Exception:
-        page.keyboard.press("Escape")
-        page.wait_for_timeout(200)
-        logger.info("Tag '%s' not found in filter dropdown — no items left", tag_name)
+        notes_item.wait_for(state="visible", timeout=8_000)
+    except PWTimeoutError:
+        close_filter_popup(page)
+        raise RuntimeError("'Нотатки' item not found in filter popup left panel")
+
+    notes_item.click()
+    page.wait_for_timeout(600)
+
+    # Крок 2: шукаємо тег у правій панелі
+    tag_option = page.locator(
+        f'[data-qaid="attribute-value"]:has([data-qaid="attribute-value-name"]:text-is("{tag_name}"))'
+    ).first
+
+    try:
+        tag_option.wait_for(state="visible", timeout=5_000)
+    except PWTimeoutError:
+        # Тег відсутній у попапі — товарів з цим тегом більше немає
+        close_filter_popup(page)
+        logger.info("Tag '%s' not found in filter popup — no items left", tag_name)
         print(f"\n[ІНФО] Тег '{tag_name}' зник з фільтру — товарів більше немає.")
         return False
 
-    option.scroll_into_view_if_needed()
-    option.click()
+    # Крок 3: клікаємо чекбокс тегу (клік по всьому рядку — надійніше ніж по input)
+    tag_option.scroll_into_view_if_needed()
+    tag_option.click()
+    page.wait_for_timeout(300)
 
-    # Чекаємо поки теги реально з'являться в рядках списку (Prom рендерить їх асинхронно)
+    # Крок 4: натискаємо "Застосувати"
+    confirm_btn = page.locator('[data-qaid="confirm_btn"]').first
+    try:
+        confirm_btn.wait_for(state="visible", timeout=5_000)
+    except PWTimeoutError:
+        close_filter_popup(page)
+        raise RuntimeError("'Застосувати' button not found in filter popup")
+
+    confirm_btn.click()
+
+    # Крок 5: чекаємо появи тегів у рядках списку (Prom рендерить асинхронно)
     try:
         page.locator(
             f'[data-qaid="product_tag"] [data-qaid="tag_name"]:text-is("{tag_name}")'
         ).first.wait_for(state="visible", timeout=8_000)
-    except Exception:
-        # Fallback: фіксована пауза якщо тег так і не з'явився
+    except PWTimeoutError:
+        # Fallback: фіксована пауза
         page.wait_for_timeout(3_000)
-        logger.warning("Tag '%s' did not appear in product rows after filter — using fallback wait", tag_name)
+        logger.warning("Tag '%s' did not appear in rows after filter apply — using fallback wait", tag_name)
 
     page.wait_for_timeout(DELAY_AFTER_LIST_FILTER_MS)
     return True
