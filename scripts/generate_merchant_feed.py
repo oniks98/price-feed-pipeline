@@ -36,9 +36,12 @@ import html
 import logging
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Final, NamedTuple
-from urllib.request import Request, urlopen
+
+import requests
+from requests.exceptions import ChunkedEncodingError, ConnectionError as RequestsConnectionError
 
 from constants_feed_url import FEED_URL_MERCHANT as FEED_URL
 
@@ -188,16 +191,47 @@ def resolve_labels(
 # XML fetch
 # ---------------------------------------------------------------------------
 
+_FETCH_RETRIES:    Final[int]   = 3
+_FETCH_BACKOFF:    Final[float] = 10.0
+_FETCH_CHUNK_SIZE: Final[int]   = 1024 * 1024  # 1 MB
+
+
 def fetch_feed(url: str) -> str:
-    """Скачивает фид, возвращает строку."""
+    """
+    Завантажує XML-фід потоково (stream=True) з retry при обриві з'єднання.
+
+    urllib IncompleteRead та requests ChunkedEncodingError мають одну причину:
+    сервер закриває chunked-з'єднання до завершення передачі.
+    stream=True + iter_content збирає байти шматками і дозволяє повторити спробу.
+    """
     log.info("Завантаження фіду: %s", url.split("?")[0])
-    req = Request(url, headers={"User-Agent": "MerchantFeedGenerator/1.0"})
-    with urlopen(req, timeout=60) as resp:
-        raw = resp.read()
+
+    headers = {"User-Agent": "MerchantFeedGenerator/1.0"}
+    raw: bytes = b""
+
+    for attempt in range(1, _FETCH_RETRIES + 1):
+        try:
+            with requests.get(url, headers=headers, timeout=120, stream=True) as resp:
+                resp.raise_for_status()
+                chunks: list[bytes] = []
+                for chunk in resp.iter_content(chunk_size=_FETCH_CHUNK_SIZE):
+                    if chunk:
+                        chunks.append(chunk)
+                raw = b"".join(chunks)
+            break
+        except (ChunkedEncodingError, RequestsConnectionError) as exc:
+            if attempt == _FETCH_RETRIES:
+                raise
+            wait = _FETCH_BACKOFF * attempt
+            log.warning(
+                "Спроба %d/%d невдала: %s. Повтор через %.0f с...",
+                attempt, _FETCH_RETRIES, exc, wait,
+            )
+            time.sleep(wait)
 
     match = re.search(rb'encoding=["\']([^"\']+)["\']', raw[:200])
     src_encoding = match.group(1).decode("ascii") if match else "utf-8"
-    log.info("Кодування фіду: %s", src_encoding)
+    log.info("Кодування фіду: %s | Розмір: %d bytes", src_encoding, len(raw))
 
     return raw.decode(src_encoding)
 
