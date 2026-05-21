@@ -18,12 +18,14 @@ URL фідів               → constants_feed_url.py
 
 import csv
 import re
+import time
 from collections import Counter
 from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 from pathlib import Path
 from typing import TypeAlias
 
 import requests
+from requests.exceptions import ChunkedEncodingError, ConnectionError as RequestsConnectionError
 
 # ---------------------------------------------------------------------------
 # Public config — змінюйте тут при додаванні нових постачальників
@@ -79,19 +81,43 @@ OfferData: TypeAlias = dict[str, dict]
 # XML feed — завантаження та парсинг
 # ---------------------------------------------------------------------------
 
+_FETCH_RETRIES: int = 3
+_FETCH_BACKOFF: float = 10.0
+_FETCH_CHUNK_SIZE: int = 1024 * 1024  # 1 MB
+
+
 def fetch_xml(url: str) -> str:
     """
-    Завантажує XML-фід, декодує з правильним кодуванням,
-    нормалізує encoding declaration на utf-8.
+    Завантажує XML-фід потоково (stream=True) з retry при передчасному обриві.
+
+    Chunked-відповідь може обриватись на великих фідах (ProtocolError /
+    ChunkedEncodingError).  stream=True + iter_content дозволяє зібрати
+    байти по шматках і повторити спробу без завантаження всього тіла одразу.
     """
     print("⬇️  Завантаження фіду...")
-    response = requests.get(url, timeout=120)
-    response.raise_for_status()
-    raw = response.content
+
+    last_exc: Exception | None = None
+    for attempt in range(1, _FETCH_RETRIES + 1):
+        try:
+            with requests.get(url, timeout=120, stream=True) as response:
+                response.raise_for_status()
+                chunks: list[bytes] = []
+                for chunk in response.iter_content(chunk_size=_FETCH_CHUNK_SIZE):
+                    if chunk:
+                        chunks.append(chunk)
+                raw = b"".join(chunks)
+            break  # успішно завантажено
+        except (ChunkedEncodingError, RequestsConnectionError) as exc:
+            last_exc = exc
+            if attempt == _FETCH_RETRIES:
+                raise
+            wait = _FETCH_BACKOFF * attempt
+            print(f"⚠️  Спроба {attempt}/{_FETCH_RETRIES} невдала: {exc}. Повтор через {wait:.0f}с...")
+            time.sleep(wait)
 
     match = re.search(rb'encoding=["\']([^"\']+)["\']', raw[:200])
-    encoding = match.group(1).decode("ascii") if match else (response.encoding or "utf-8")
-    print(f"🔍 Кодування фіду: {encoding}")
+    encoding = match.group(1).decode("ascii") if match else "utf-8"
+    print(f"🔍 Кодування фіду: {encoding} | Розмір: {len(raw):,} байт")
 
     xml = raw.decode(encoding)
     xml = re.sub(
