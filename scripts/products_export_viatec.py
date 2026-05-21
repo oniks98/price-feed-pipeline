@@ -1,19 +1,19 @@
 """
 python scripts/products_export_viatec.py
 
-Extracts every filter-checkbox URL from a viatec.ua catalog page and writes
-rows (url, name, category) to CSV — each checkbox entry written REPEAT_COUNT
-times consecutively, skipping the configured excluded groups.
+Витягує всі URL фільтрів-чекбоксів зі сторінки каталогу viatec.ua
+та записує рядки (url, name, category) у CSV — кожен запис повторюється
+REPEAT_COUNT разів поспіль, пропускаючи налаштовані виключені групи.
 
-URL format in output:
+Формат URL у виводі:
     data-href:  https://viatec.ua/catalog/elektroinstrumenti/tip-instrumentu-elektro:frezer
-    written as: https://viatec.ua/catalog/elektroinstrumenti/0:0;tip-instrumentu-elektro:frezer
+    записується: https://viatec.ua/catalog/elektroinstrumenti/0:0;tip-instrumentu-elektro:frezer
 
-Configuration (edit the block below, nothing else):
-    CATALOG_URL     — supplier catalog page to start from
-    OUTPUT_CSV      — destination CSV file
-    EXCLUDED_GROUPS — filter-group header names to ignore
-    REPEAT_COUNT    — how many times each row is repeated (default: 2)
+Налаштування (редагуйте тільки блок нижче):
+    CATALOG_URL     — сторінка каталогу постачальника для старту
+    OUTPUT_CSV      — вихідний CSV-файл
+    EXCLUDED_GROUPS — назви груп фільтрів, які потрібно пропустити
+    REPEAT_COUNT    — кількість повторень кожного рядка (за замовчуванням: 2)
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from bs4 import BeautifulSoup, Tag
 
 # ── Configuration (edit here only) ───────────────────────────────────────────
 
-CATALOG_URL: str = "https://viatec.ua/catalog/network-injectors"
+CATALOG_URL: str = "https://viatec.ua/catalog/alarm-detector"
 
 OUTPUT_CSV: Path = Path(
     r"C:\FullStack\PriceFeedPipeline\data\markets\products_export_viatec.csv"
