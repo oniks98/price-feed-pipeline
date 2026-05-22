@@ -1,4 +1,4 @@
-"""
+﻿"""
 rule_merchant_center.py
 -----------------------
 Крок 1 пайплайну: генерує CSV-правила для generate_merchant_feed.py.
@@ -26,6 +26,8 @@ CSV-схема (rule_merchant_center.csv):
   - Якщо файл відсутній — створюється з нуля.
   - --reclassify оновлює тільки theme == 'other' в існуючих рядках
     (schedule НЕ чіпає).
+  - --reclassify-all оновлює theme у всіх існуючих рядках за поточними правилами
+    (schedule НЕ чіпає).
 
 Запуск:
     python scripts/rule_merchant_center.py
@@ -36,6 +38,10 @@ CSV-схема (rule_merchant_center.csv):
 
     python scripts/rule_merchant_center.py --reclassify
         Перекласифікує theme == 'other' у існуючих рядках.
+        schedule залишається незмінним.
+
+    python scripts/rule_merchant_center.py --reclassify-all
+        Перекласифікує всі існуючі рядки за поточною semantic theme-мапою.
         schedule залишається незмінним.
 """
 
@@ -83,26 +89,42 @@ RULES_FIELDNAMES: Final[list[str]] = [
 THEME_RULES: Final[list[tuple[str, str]]] = [
 
     # ── Military ─────────────────────────────────────────────────────────────
+    ("тактичні тепловізори",                             "military"),
+    ("прилади нічного бачення",                          "military"),
+    ("приціли і мушки",                                  "military"),
+    ("тактичний захист",                                 "military"),
+    ("плитоноски",                                       "military"),
+    ("розвантажувальні жилети",                          "military"),
+    ("аксесуари та комплектуючі для касок",              "military"),
+    ("переговорні пристрої",                             "military"),
     ("воєнторг",                                        "military"),
 
     # ── Drone ────────────────────────────────────────────────────────────────
-    ("квадрокоптер",                                    "drone"),
+    ("квадрокоптер",                                    "military_drone"),
 
     # ── Alarm / Fire / Flood ─────────────────────────────────────────────────
     ("охоронні системи та сигналізації",                "alarm_systems"),
     ("приймально-контрольні прилади",                   "alarm_systems"),
+    ("модулі контролю та управління",                   "alarm_systems"),
+    ("гучномовці",                                      "alarm_audio"),
+    ("акустичні системи",                               "alarm_audio"),
+    ("підсилювачі звуку",                               "alarm_audio"),
+    ("охоронні сповіщувачі",                            "alarm_sensors"),
+    ("датчики для розумного будинку",                    "alarm_sensors"),
+    ("датчики якості повітря",                           "alarm_sensors"),
+    ("датчики вологості і температури",                  "alarm_sensors"),
+    ("датчики руху",                                    "alarm_sensors"),
     ("пожежн",                                          "alarm"),
     ("охоронні системи",                                "alarm"),
     ("тривожні кнопки",                                 "access"),
     ("системи охорони та оповіщення",                   "alarm"),
     ("охоронн",                                         "alarm"),
-    ("датчики руху",                                    "alarm"),
     ("від потопу",                                      "alarm"),
 
     # ── Access control ────────────────────────────────────────────────────────
     ("системи сквд",                                    "access_systems"),
     ("контролери сккд",                                 "access_controllers"),
-    ("аксесуари для домофонного",                       "access"),
+    ("аксесуари для домофонного",                       "access_components"),
     ("домофон",                                         "access_intercom"),
     ("зчитувач",                                        "access_readers"),
     ("ідентифікатор",                                   "access_identifiers"),
@@ -113,26 +135,58 @@ THEME_RULES: Final[list[tuple[str, str]]] = [
     ("кодонабірн",                                      "access"),
     ("турнікет",                                        "access"),
     ("комплектуючі для замків",                         "access"),
+    ("шлагбаум",                                        "access"),
+    ("ворота, огорожі",                                 "access"),
+    ("аксесуари для воріт",                             "access"),
+    ("механізми і автоматика для вікон і дверей",       "access"),
 
-    # ── Smart home ────────────────────────────────────────────────────────────
+    # ── Smart home / IoT sensors ──────────────────────────────────────────────
+    ("дверні дзвінки",                                   "home"),
     ("розумного будинку",                               "smarthome"),
     ("якості повітря",                                  "smarthome"),
-    ("зволожувачі",                                     "smarthome"),
-    ("кліматична техніка",                              "smarthome"),
-    ("інфрачервон",                                     "smarthome"),
-    ("зоотовари",                                       "smarthome"),
-    ("товари для домашніх тварин",                      "smarthome"),
-    ("годівниці",                                       "smarthome"),
-    ("побутове очищення води",                          "smarthome"),
-    ("фільтри комплексного очищення",                   "smarthome"),
-    ("побутове водопостачання",                         "smarthome"),
-    ("для особистого користування",                     "smarthome"),
+
+    # ── Industrial specifics that would otherwise match generic appliances ───
+    ("промислові пилососи",                             "tool_industrial"),
+
+    # ── Appliances / home utility ─────────────────────────────────────────────
+    ("запчастини для пилососів",                         "appliance"),
+    ("запчастини для зволожувачів",                      "appliance"),
+    ("очищувачів повітря",                               "appliance"),
+    ("зволожувачі та очищувачі",                         "appliance"),
+    ("засоби для очищення побутової техніки",            "appliance"),
+    ("очищення побутової техніки",                       "appliance"),
+    ("побутове очищення води",                           "appliance"),
+    ("фільтри комплексного очищення",                    "appliance"),
+    ("побутове водопостачання",                          "appliance"),
+    ("кліматична техніка",                               "appliance"),
+    ("інфрачервон",                                      "appliance"),
+    ("холодильники",                                     "appliance"),
+    ("пилососи",                                         "appliance"),
+    ("пароочисники",                                     "appliance"),
+    ("кухонні ваги",                                     "appliance"),
+
+    # ── Pet supplies ──────────────────────────────────────────────────────────
+    ("зоотовари",                                        "pet"),
+    ("товари для домашніх тварин",                       "pet"),
+    ("годівниці",                                        "pet"),
+    ("поїлки",                                           "pet"),
+    ("миски для домашніх тварин",                        "pet"),
+    ("сумки і контейнери для перенесення",               "pet"),
+    ("засоби для гігієни тварин",                        "pet"),
 
     # ── TV / Satellite ────────────────────────────────────────────────────────
-    ("кабелі для електроніки",                          "cable"),
+    ("кабелі для електроніки",                          "cable_components"),
     ("телевізійні антени",                              "tv_antennas"),
+    ("супутникові антени",                              "tv_antennas"),
     ("медіаплеєр",                                      "tv_players"),
     ("ресивер",                                         "tv_receivers"),
+    ("wi-fi адаптери",                                  "tv_network"),
+    ("антенні підсилювачі",                              "tv_network"),
+    ("ду пульти",                                       "tv_components"),
+    ("кріплення та ліфти",                              "tv_components"),
+    ("дайсеки",                                         "tv_components"),
+    ("запчастини для супутникового обладнання",         "tv_components"),
+    ("супутникові конвертери",                          "tv_components"),
     ("tv та відеотехніка",                              "tv"),
     ("кабельне телебачення",                            "tv"),
     ("супутников",                                      "tv"),
@@ -141,6 +195,11 @@ THEME_RULES: Final[list[tuple[str, str]]] = [
     ("запчастини для телевізорів",                      "tv"),
 
     # ── Video surveillance ────────────────────────────────────────────────────
+    ("відеокамери, екшн-камери",                        "video_action"),
+    ("автомобільні відеореєстратори",                   "video_auto"),
+    ("радіоняні, відеоняні",                            "video_baby"),
+    ("фотопастки, камери для полювання",                "video_trap"),
+    ("мікрофони",                                       "video_components"),
     ("камери відеоспостереження",                       "video_cameras"),
     ("стаціонарні відеореєстратор",                     "video_recorders"),
     ("відеокамер",                                      "video_cameras"),
@@ -148,14 +207,21 @@ THEME_RULES: Final[list[tuple[str, str]]] = [
     ("радіоняні",                                       "video_cameras"),
     ("фотопастк",                                       "video_cameras"),
     ("камери для полювання",                            "video_cameras"),
+    ("кожухи і кронштейни",                             "video_components"),
+    ("пульти для систем відеоспостереження",            "video_components"),
+    ("об'єктиви для камер відеоспостереження",          "video_components"),
+    ("комплектуючі для систем відеоспостереження",      "video_components"),
+    ("комутатори сигналу",                              "video_components"),
+    ("приймачі і передавачі сигналу",                   "video_components"),
+    ("відеореєстратор",                                 "video"),
     ("відеоспостереження",                              "video"),
     ("відеонагляд",                                     "video"),
-    ("відеореєстратор",                                 "video"),
-    ("комутатори сигналу",                              "video"),
 
     # ── Network / Telecom ─────────────────────────────────────────────────────
     ("роутер",                                          "network_routers"),
     ("комутатор",                                       "network_switches"),
+    ("кабельні тестери",                                "tool_network"),
+    ("інструмент для закладення кабелю",                "tool_network"),
     ("телекомунікації та зв'язок",                      "network"),
     ("бездротовий зв'язок",                             "network"),
     ("мережеве обладнання",                             "network"),
@@ -165,12 +231,10 @@ THEME_RULES: Final[list[tuple[str, str]]] = [
     ("gbic",                                            "network"),
     ("wi-fi",                                           "network"),
     ("оптоволокон",                                     "network"),
-    ("приймачі і передавачі сигналу",                   "network"),
     ("стаціонарні телефони",                            "network"),
     ("серверне обладнання",                             "network"),
     ("мережеві накопичувач",                            "network"),
-    ("кабельні тестери",                                "network"),
-    ("інструмент для закладення кабелю",                "network"),
+    ("обладнання для живлення по ethernet",             "network"),
 
     # ── Power ─────────────────────────────────────────────────────────────────
     ("джерела безперебійного",                          "power_ups"),
@@ -197,20 +261,33 @@ THEME_RULES: Final[list[tuple[str, str]]] = [
 
     # ── Cable / Wiring ────────────────────────────────────────────────────────
     ("монтажні шафи",                                   "cable_box"),
-    ("кабель для систем зв'язку",                       "cable_systems"),
+    ("кабель для систем зв'язку",                       "cable"),
+    ("шнури, перехідники",                              "cable_components"),
+    ("роз'єми та конектори",                            "cable_components"),
+    ("силові кабелі",                                   "cable_components"),
+    ("електроізоляційні стрічки",                       "cable_components"),
+    ("кабеленесучі системи",                            "cable_components"),
     ("монтажне обладнання",                             "cable"),
     ("кабеленесуч",                                     "cable"),
     ("електроізолятор",                                 "cable"),
-    ("силові кабелі",                                   "cable"),
 
     # ── Energy / Electrical infrastructure ───────────────────────────────────
-    ("вуличне освітлення",                              "energy"),
-    ("led освітлення",                                  "energy"),
     ("настінні вимикачі",                               "energy"),
     ("розетки електричні",                              "energy"),
     ("силові вилки та розетки",                         "energy"),
     ("електричні вилки",                                "energy"),
     ("електричні подовжувачі",                          "energy"),
+
+    # ── Lighting ──────────────────────────────────────────────────────────────
+    ("led освітлення",                                  "lighting"),
+    ("led підсвітка",                                   "lighting"),
+    ("вуличне освітлення",                              "lighting"),
+    ("стельові світильники",                            "lighting"),
+    ("лампочки",                                        "lighting"),
+    ("настільні лампи",                                 "lighting"),
+    ("нічники",                                         "lighting"),
+    ("точкові світильники",                             "lighting"),
+    ("трек-системи",                                    "lighting"),
 
     # ── IT / Computing ────────────────────────────────────────────────────────
     ("автомобільні відеосистеми",                       "video"),
@@ -224,66 +301,181 @@ THEME_RULES: Final[list[tuple[str, str]]] = [
     ("носії інформації",                                "it"),
 
     # ── Audio ─────────────────────────────────────────────────────────────────
-    ("мікрофон",                                        "components"),
-    ("аудіотехніка",                                    "audio"),
+    ("мікрофон",                                        "video_components"),
+    ("аудіотехніка",                                    "alarm_audio"),
 
-    # ── Tool ─────────────────────────────────────────────────────────────────
-    ("садові пилосмокти",                               "tool"),
-    ("інструменти для обробки грунту",                  "tool"),
-    ("інструменти для обрізки",                         "tool"),
-    ("електроінструмент",                               "tool"),
-    ("ручний інструмент",                               "tool"),
-    ("мультитул",                                       "tool"),
-    ("паяльник",                                        "tool"),
-    ("багатофункціональні інструменти",                 "tool"),
-    ("апарати високого тиску",                          "tool"),
-    ("драбин",                                          "tool"),
-    ("сходи",                                           "tool"),
-    ("риштування",                                      "tool"),
+    # ── Measuring / detectors ─────────────────────────────────────────────────
+    ("датчики вологості і температури",                  "alarm_sensors"),
+    ("термометри",                                      "tool_measuring"),
+    ("пірометри",                                       "tool_measuring"),
+    ("тепловізори",                                     "tool_measuring"),
+    ("прилади вимірювання",                             "tool_measuring"),
+    ("контрольно-вимірювальні прилади",                 "tool_measuring"),
+    ("мультиметр",                                      "tool_measuring"),
+    ("металошукач",                                     "tool_measuring"),
+    ("металодетектор",                                  "tool_measuring"),
+    ("детектори прихованої проводки",                   "tool_measuring"),
+    ("будівельні рівні",                                "tool_measuring"),
+    ("вимірювальні рулетки",                            "tool_measuring"),
+    ("нівелірні рейки",                                 "tool_measuring"),
+    ("лазерні далекоміри",                              "tool_measuring"),
+    ("штативи для вимірювального",                      "tool_measuring"),
 
-    # ── Components / Measurement ──────────────────────────────────────────────
-    ("термометри",                                      "components"),
-    ("пірометри",                                       "components"),
-    ("тепловізори",                                     "components"),
-    ("прилади вимірювання",                             "components"),
-    ("мультиметр",                                      "components"),
-    ("металошукач",                                     "components"),
-    ("металодетектор",                                  "components"),
-    ("запчастини для техніки",                          "components"),
-    ("комплектуючі для відеотехніки",                   "components"),
-    ("кухонні ваги",                                    "components"),
-    ("герметик",                                        "components"),
-    ("монтажна піна",                                   "components"),
-    ("силікон",                                         "components"),
-    ("кронштейн",                                       "components"),
-    ("засоби для очищення побутової техніки",           "components"),
-    ("очищення побутової техніки",                      "components"),
+    # ── Industrial equipment ──────────────────────────────────────────────────
+    ("точильні верстати",                               "tool_industrial"),
+    ("металообробні верстати",                          "tool_industrial"),
+    ("станини",                                         "tool_industrial"),
+    ("верстаки",                                        "tool_industrial"),
+    ("робочі столи",                                    "tool_industrial"),
+    ("поршневі компресори",                             "tool_industrial"),
+    ("промислові пилососи",                             "tool_industrial"),
+
+    # ── Power tools ───────────────────────────────────────────────────────────
+    ("будівельні фени",                                 "tool_power"),
+    ("електроінструмент",                               "tool_power"),
+    ("багатофункціональні інструменти",                 "tool_power"),
+    ("дрилі",                                           "tool_power"),
+    ("шуруповерти",                                     "tool_power"),
+    ("електричні будівельні міксери",                   "tool_power"),
+    ("електричні гайковерти",                           "tool_power"),
+    ("електроножівки",                                  "tool_power"),
+    ("ручні дискові пили",                              "tool_power"),
+    ("електролобзики",                                  "tool_power"),
+    ("клейові електричні пістолети",                    "tool_power"),
+    ("паяльник",                                        "tool_power"),
+    ("перфоратори",                                     "tool_power"),
+    ("фрезерні машини",                                 "tool_power"),
+    ("шліфувальні машини",                              "tool_power"),
+    ("штроборізи",                                      "tool_power"),
+    ("пневматичні відбійні молотки",                    "tool_power"),
+    ("гідравлічні ланцюгові пили",                      "tool_power"),
+
+    # ── Tool accessories ──────────────────────────────────────────────────────
+    ("запчастини для інструменту",                       "tool_accessories"),
+    ("ящики, сумки для інструментів",                    "tool_accessories"),
+    ("викруткові біти",                                  "tool_accessories"),
+    ("відрізні",                                         "tool_accessories"),
+    ("зачисні",                                          "tool_accessories"),
+    ("шліфувальні, пильні круги",                        "tool_accessories"),
+    ("зубила",                                           "tool_accessories"),
+    ("долото для перфоратора",                           "tool_accessories"),
+    ("ножувальні полотна",                               "tool_accessories"),
+    ("оливи, мастила для інструменту",                   "tool_accessories"),
+    ("пилки для лобзиків",                               "tool_accessories"),
+    ("свердла",                                          "tool_accessories"),
+    ("бури",                                             "tool_accessories"),
+
+    # ── Hand tools ────────────────────────────────────────────────────────────
+    ("ручні пили",                                       "tool_hand"),
+    ("ножівки",                                          "tool_hand"),
+    ("ручні ножиці по металу",                           "tool_hand"),
+    ("набори інструментів",                              "tool_hand"),
+    ("молотки",                                          "tool_hand"),
+    ("кувалди",                                          "tool_hand"),
+    ("киянки",                                           "tool_hand"),
+    ("будівельні ножі",                                  "tool_hand"),
+    ("будівельні олівці",                                "tool_hand"),
+    ("викрутки",                                         "tool_hand"),
+    ("бокорізи",                                         "tool_hand"),
+    ("кусачки",                                          "tool_hand"),
+    ("затискні кліщі",                                   "tool_hand"),
+    ("пасатижі",                                         "tool_hand"),
+    ("плоскогубці",                                      "tool_hand"),
+    ("тонкогубці",                                       "tool_hand"),
+    ("трубні кліщі",                                     "tool_hand"),
+    ("набори ключів",                                    "tool_hand"),
+    ("розвідні ключі",                                   "tool_hand"),
+    ("торцеві головки",                                  "tool_hand"),
+    ("шестигранні ключі",                                "tool_hand"),
+    ("монтажні пінцети",                                 "tool_hand"),
+    ("мультитул",                                        "tool_hand"),
+    ("знімачі ізоляції",                                 "tool_hand"),
+    ("ручні обтискні інструменти",                       "tool_hand"),
+    ("сокири",                                           "tool_hand"),
+
+    # ── Hardware / building consumables ───────────────────────────────────────
+    ("кронштейн",                                        "home"),
+    ("метричне кріплення",                               "home"),
+    ("гайки",                                            "home"),
+    ("герметик",                                         "hardware"),
+    ("монтажна піна",                                    "hardware"),
+    ("силікон",                                          "hardware"),
 
     # ── Safety / PPE ──────────────────────────────────────────────────────────
+    ("робочі рукавички",                                 "safety"),
+    ("господарські рукавички",                           "safety"),
+    ("захисний спецодяг",                                "safety"),
+    ("робочі комбінезони",                               "safety"),
+    ("напівкомбінезони",                                 "safety"),
+    ("аксесуари для безпеки дітей",                      "safety"),
+    ("будівельні каски",                                 "safety"),
+    ("засоби захисту очей",                              "safety"),
+    ("засоби захисту органів дихання",                   "safety"),
+    ("засоби безпеки праці",                             "safety"),
+    ("засоби індивідуального захисту",                   "safety"),
     ("спецодяг",                                        "safety"),
-    ("захисний",                                        "safety"),
     ("проблискові маячки",                              "alarm"),
     ("спецсигнали",                                     "alarm"),
     ("сирени",                                          "alarm"),
     ("дорожні огорожі",                                 "safety"),
-    ("шлагбаум",                                        "safety"),
-    ("ворота, огорожі",                                 "safety"),
-    ("аксесуари для воріт",                             "safety"),
 
     # ── Outdoor / Camping ────────────────────────────────────────────────────
+    ("дощовики",                                        "military_outdoor"),
+    ("туристичні плити",                                "outdoor"),
+    ("пальники",                                         "outdoor"),
+    ("каремати",                                         "outdoor"),
+    ("сидушки",                                          "outdoor"),
+    ("туристичні фляги",                                 "outdoor"),
+    ("ручні та налобні ліхтарі",                         "outdoor"),
+    ("ножі для полювання",                               "outdoor"),
     ("туризм",                                          "outdoor"),
     ("туристичн",                                       "outdoor"),
-    ("садов",                                           "outdoor"),
-    ("садовий інвентар",                                "outdoor"),
     ("ліхтар",                                          "outdoor"),
-    ("ножі для полювання",                              "outdoor"),
     ("каремат",                                         "outdoor"),
-    ("тренажер",                                        "outdoor"),
-    ("спортивні стінки",                                "outdoor"),
-    ("вила",                                            "tool"),
-    ("граблі",                                          "tool"),
-    ("садові ножиці",                                   "tool"),
-    ("пилосмокти, повітродувки",                        "tool"),
+
+    # ── Garden tools ──────────────────────────────────────────────────────────
+    ("садові пилосмокти",                               "tool_garden"),
+    ("пилосмокти, повітродувки",                        "tool_garden"),
+    ("газонокосарки",                                   "tool_garden"),
+    ("мотокоси",                                         "tool_garden"),
+    ("тримери",                                          "tool_garden"),
+    ("інструменти для обробки грунту",                  "tool_garden"),
+    ("інструменти для обрізки",                         "tool_garden"),
+    ("вила",                                             "tool_garden"),
+    ("граблі",                                           "tool_garden"),
+    ("лопати",                                           "tool_garden"),
+    ("мотики",                                           "tool_garden"),
+    ("сапи",                                             "tool_garden"),
+    ("сапки",                                            "tool_garden"),
+    ("набори садових інструментів",                     "tool_garden"),
+    ("посадочні совки",                                  "tool_garden"),
+    ("ручні культиватори",                               "tool_garden"),
+    ("кущорізи",                                         "tool_garden"),
+    ("пили для обрізки гілок",                           "tool_garden"),
+    ("садові ножиці",                                    "tool_garden"),
+    ("секатори",                                         "tool_garden"),
+    ("садовий інвентар",                                 "tool_garden"),
+    ("апарати високого тиску",                           "tool_garden"),
+
+    # ── Ladders / scaffolding ─────────────────────────────────────────────────
+    ("будівельні та садові драбини",                     "tool_ladders"),
+    ("комплектуючі для сходів",                          "tool_ladders"),
+    ("будівельних риштувань",                            "tool_ladders"),
+    ("драбин",                                           "tool_ladders"),
+    ("сходи",                                            "tool_ladders"),
+    ("риштування",                                       "tool_ladders"),
+
+    # ── Auto tools / vehicle safety ───────────────────────────────────────────
+    ("автомобільні насоси",                              "tool_auto"),
+    ("компресори та манометри",                          "tool_auto"),
+    ("набори і аксесуари для автомобіліста",             "tool_auto"),
+
+    # ── Kitchenware ───────────────────────────────────────────────────────────
+    ("кухонні ножі",                                     "home"),
+    ("точила для ножів",                                 "home"),
+
+    # ── Optics ────────────────────────────────────────────────────────────────
+    ("комплектуючі для оптичних приладів",               "military_optics"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -363,22 +555,32 @@ def update_rules_csv(
     *,
     dry_run: bool = False,
     reclassify: bool = False,
+    reclassify_all: bool = False,
 ) -> None:
     """
     Дописує нові product_type рядки в кінець файлу.
     --reclassify: оновлює тільки theme == 'other'. schedule НЕ чіпає.
+    --reclassify-all: оновлює всі theme за поточними правилами. schedule НЕ чіпає.
     """
     existing_rows, known = load_rules(path)
 
     reclassified = 0
-    if reclassify:
+    if reclassify or reclassify_all:
         for row in existing_rows:
-            if row.get("theme", FALLBACK_THEME) == FALLBACK_THEME:
-                theme = classify_theme(row["keyword"])
-                if theme != FALLBACK_THEME:
-                    row["theme"] = theme
-                    log.info("RULE RECLASSIFY  theme=%-20s  kw=%s", theme, row["keyword"][:70])
-                    reclassified += 1
+            current_theme = row.get("theme", FALLBACK_THEME) or FALLBACK_THEME
+            if not reclassify_all and current_theme != FALLBACK_THEME:
+                continue
+
+            theme = classify_theme(row["keyword"])
+            if theme == FALLBACK_THEME or theme == current_theme:
+                continue
+
+            row["theme"] = theme
+            log.info(
+                "RULE RECLASSIFY  theme=%-20s  old=%-20s  kw=%s",
+                theme, current_theme, row["keyword"][:70],
+            )
+            reclassified += 1
 
     new_keywords = sorted(
         {item["product_type"] for item in items if item["product_type"]} - known
@@ -407,7 +609,7 @@ def update_rules_csv(
 
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    if reclassify or not path.exists():
+    if reclassify or reclassify_all or not path.exists():
         with path.open("w", encoding=ENCODING, newline="") as f:
             writer = csv.DictWriter(f, fieldnames=RULES_FIELDNAMES, delimiter=";")
             writer.writeheader()
@@ -435,9 +637,20 @@ def update_rules_csv(
 # Pipeline
 # ---------------------------------------------------------------------------
 
-def run(*, dry_run: bool = False, reclassify: bool = False) -> None:
+def run(
+    *,
+    dry_run: bool = False,
+    reclassify: bool = False,
+    reclassify_all: bool = False,
+) -> None:
     items = parse_xml(FEED_URL_MERCHANT)
-    update_rules_csv(RULES_CSV, items, dry_run=dry_run, reclassify=reclassify)
+    update_rules_csv(
+        RULES_CSV,
+        items,
+        dry_run=dry_run,
+        reclassify=reclassify,
+        reclassify_all=reclassify_all,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -462,13 +675,24 @@ def _parse_args() -> argparse.Namespace:
             "schedule залишається незмінним."
         ),
     )
+    p.add_argument(
+        "--reclassify-all", action="store_true",
+        help=(
+            "Перекласифікує theme у всіх існуючих рядках за поточними правилами. "
+            "schedule залишається незмінним."
+        ),
+    )
     return p.parse_args()
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)-8s %(message)s")
     args = _parse_args()
-    run(dry_run=args.dry_run, reclassify=args.reclassify)
+    run(
+        dry_run=args.dry_run,
+        reclassify=args.reclassify,
+        reclassify_all=args.reclassify_all,
+    )
 
 
 if __name__ == "__main__":
