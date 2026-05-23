@@ -4,7 +4,7 @@
     - Комісії    : https://admin.epicentrm.com.ua/public/commissions  (Angular SPA)
     - ID категорій: Google Sheets (стовпець A = ID, стовпець G = назва категорії останнього рівня)
 
-Результат : C:\\FullStack\\PriceFeedPipeline\\data\\markets\\royalty_epicenter.xlsx
+Результат : C:\\FullStack\\PriceFeedPipeline\\data\\markets\\epicenter_royalty.xlsx
 Стовпці   : ID категорії | Відкрита категорія | Відсоток роялті | parentCode
 
 Визначення ID:
@@ -37,7 +37,7 @@ import requests
 # ---------------------------------------------------------------------------
 
 TARGET_URL  = "https://admin.epicentrm.com.ua/public/commissions"
-OUTPUT_PATH = Path(r"C:\FullStack\PriceFeedPipeline\data\markets\royalty_epicenter.xlsx")
+OUTPUT_PATH = Path(r"C:\FullStack\PriceFeedPipeline\data\markets\epicenter_royalty.xlsx")
 
 # Google-таблиця з канонічними ID категорій
 # Лист 1: «Відкриті категорії позначені зеленим»

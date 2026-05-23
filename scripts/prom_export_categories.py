@@ -5,8 +5,9 @@ prom_export_categories.py
 Експортує ТІЛЬКИ ті категорії, під якими є реальні товари у фіді.
 Додає НОВІ категорії (яких ще немає по ID) до:
   - data/markets/markets_coefficients.csv             — коефіцієнти для маркетплейсів
-  - data/markets/mappings.xlsx (лист 'Категорія+')    — маппінг категорій Prom
+  - data/markets/mappings.xlsx (лист 'Категорія+')    — маппінг категорій Kasta
   - data/markets/epicenter_mappings.xlsx (лист 'Маппінг') — маппінг категорій Epicenter
+  - data/markets/rozetka_mappings.xlsx (лист 'Маппінг')   — маппінг категорій Rozetka
 
 Запуск:
     python scripts/prom_export_categories.py
@@ -40,6 +41,13 @@ EPICENTER_MAPPINGS_SHEET    = "Маппінг"
 EPICENTER_MAPPINGS_ID_COL   = "prom_category_id"
 EPICENTER_MAPPINGS_NAME_COL = "Категорія Прому"
 
+# ─── Config: rozetka_mappings.xlsx ───────────────────────────────────────────
+
+ROZETKA_MAPPINGS_XLSX     = _ROOT / "data" / "markets" / "rozetka_mappings.xlsx"
+ROZETKA_MAPPINGS_SHEET    = "Маппінг"
+ROZETKA_MAPPINGS_ID_COL   = "prom_category_id"
+ROZETKA_MAPPINGS_NAME_COL = "Категорія Прому"
+
 # ─── Config: markets_coefficients.csv ────────────────────────────────────────
 
 MARKETS_CSV          = _ROOT / "data" / "markets" / "markets_coefficients.csv"
@@ -72,6 +80,12 @@ EXCEL_TARGETS: tuple[ExcelTarget, ...] = (
         sheet=EPICENTER_MAPPINGS_SHEET,
         id_col=EPICENTER_MAPPINGS_ID_COL,
         name_col=EPICENTER_MAPPINGS_NAME_COL,
+    ),
+    ExcelTarget(
+        path=ROZETKA_MAPPINGS_XLSX,
+        sheet=ROZETKA_MAPPINGS_SHEET,
+        id_col=ROZETKA_MAPPINGS_ID_COL,
+        name_col=ROZETKA_MAPPINGS_NAME_COL,
     ),
 )
 
