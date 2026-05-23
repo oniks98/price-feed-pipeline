@@ -171,21 +171,26 @@ jobs:
         run: |
           BOT_NAME="github-actions[bot]"
           BOT_EMAIL="github-actions[bot]@users.noreply.github.com"
+          DATA_LATEST_REMOTE="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
 
-          if git ls-remote --exit-code --heads origin data-latest; then
+          if git ls-remote --exit-code --heads "${DATA_LATEST_REMOTE}" data-latest >/dev/null; then
             git clone --branch data-latest --single-branch \
-              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
+              "${DATA_LATEST_REMOTE}" \
               publish-dir
             echo "✅ data-latest клоновано"
           else
+            ls_remote_status=$?
+            if [ "${ls_remote_status}" -ne 2 ]; then
+              echo "::error::Failed to check data-latest branch (git ls-remote exit ${ls_remote_status}). This is auth/network error, not a missing branch."
+              exit "${ls_remote_status}"
+            fi
             echo "⚠️  Гілка data-latest не існує — створюємо порожню"
             mkdir -p publish-dir
             cd publish-dir
             git init
             git config user.name  "${BOT_NAME}"
             git config user.email "${BOT_EMAIL}"
-            git remote add origin \
-              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            git remote add origin "${DATA_LATEST_REMOTE}"
             git checkout -b data-latest
             git commit --allow-empty -m "chore: init data-latest branch"
             git push origin data-latest
@@ -515,9 +520,11 @@ jobs:
 
       - name: Restore *_old.csv from data-latest
         run: |
-          if git ls-remote --exit-code --heads origin data-latest; then
+          DATA_LATEST_REMOTE="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+
+          if git ls-remote --exit-code --heads "${DATA_LATEST_REMOTE}" data-latest >/dev/null; then
             git clone --branch data-latest --single-branch --depth 1 \
-              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
+              "${DATA_LATEST_REMOTE}" \
               data-latest-dir
             for supplier in viatec secur; do
               src="data-latest-dir/data/${supplier}/${supplier}_old.csv"
@@ -530,6 +537,11 @@ jobs:
               fi
             done
           else
+            ls_remote_status=$?
+            if [ "${ls_remote_status}" -ne 2 ]; then
+              echo "::error::Failed to check data-latest branch (git ls-remote exit ${ls_remote_status}). This is auth/network error, not a missing branch."
+              exit "${ls_remote_status}"
+            fi
             echo "⚠️  Гілка data-latest не існує — оптові ціни будуть пропущені (fallback на ціну XML)"
           fi
         env:
@@ -581,9 +593,11 @@ jobs:
 
       - name: Restore *_old.csv from data-latest
         run: |
-          if git ls-remote --exit-code --heads origin data-latest; then
+          DATA_LATEST_REMOTE="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+
+          if git ls-remote --exit-code --heads "${DATA_LATEST_REMOTE}" data-latest >/dev/null; then
             git clone --branch data-latest --single-branch --depth 1 \
-              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
+              "${DATA_LATEST_REMOTE}" \
               data-latest-dir
             for supplier in viatec secur; do
               src="data-latest-dir/data/${supplier}/${supplier}_old.csv"
@@ -596,6 +610,11 @@ jobs:
               fi
             done
           else
+            ls_remote_status=$?
+            if [ "${ls_remote_status}" -ne 2 ]; then
+              echo "::error::Failed to check data-latest branch (git ls-remote exit ${ls_remote_status}). This is auth/network error, not a missing branch."
+              exit "${ls_remote_status}"
+            fi
             echo "⚠️  Гілка data-latest не існує — оптові ціни будуть пропущені (fallback на ціну XML)"
           fi
         env:
@@ -645,9 +664,11 @@ jobs:
 
       - name: Restore *_old.csv from data-latest
         run: |
-          if git ls-remote --exit-code --heads origin data-latest; then
+          DATA_LATEST_REMOTE="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+
+          if git ls-remote --exit-code --heads "${DATA_LATEST_REMOTE}" data-latest >/dev/null; then
             git clone --branch data-latest --single-branch --depth 1 \
-              https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git \
+              "${DATA_LATEST_REMOTE}" \
               data-latest-dir
             for supplier in viatec secur; do
               src="data-latest-dir/data/${supplier}/${supplier}_old.csv"
@@ -660,6 +681,11 @@ jobs:
               fi
             done
           else
+            ls_remote_status=$?
+            if [ "${ls_remote_status}" -ne 2 ]; then
+              echo "::error::Failed to check data-latest branch (git ls-remote exit ${ls_remote_status}). This is auth/network error, not a missing branch."
+              exit "${ls_remote_status}"
+            fi
             echo "⚠️  Гілка data-latest не існує — оптові ціни будуть пропущені (fallback на ціну XML)"
           fi
         env:
