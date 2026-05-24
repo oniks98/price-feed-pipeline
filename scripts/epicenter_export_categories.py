@@ -9,7 +9,10 @@ epicenter_export_categories.py
     • Лист «Маппінг»             — заголовки для маппінгу (дані заповнює prom_export_categories.py)
     • Лист «Категорії Епіцентру» — повний довідник категорій Epicenter з API
 
-Якщо файл вже існує — нічого не робить (структура вже створена).
+Якщо файл вже існує, але лист «Категорії Епіцентру» відсутній —
+  завантажує категорії з API та додає лист у існуючий файл.
+
+Якщо файл вже існує і лист є — нічого не робить.
 
 Наступний крок після першого запуску:
   Заповни лист «Маппінг» (prom_category_id, Категорія Прому):
@@ -28,7 +31,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import requests
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from requests.adapters import HTTPAdapter
@@ -46,6 +49,8 @@ HEADERS   = {
 
 OUTPUT_PATH = Path(__file__).parents[1] / "data" / "markets" / "epicenter_mappings.xlsx"
 REQ_TIMEOUT = (10, 30)
+
+CATEGORIES_SHEET = "Категорії Епіцентру"
 
 # Заголовки та ширини колонок листа «Маппінг»
 MAPPING_COLUMNS: list[tuple[str, int]] = [
@@ -236,7 +241,7 @@ def _build_mapping_sheet(wb: Workbook) -> None:
 
 def _build_categories_sheet(wb: Workbook, categories: list[dict]) -> None:
     """Створює лист «Категорії Епіцентру» з даними з API."""
-    ws = wb.create_sheet("Категорії Епіцентру")
+    ws = wb.create_sheet(CATEGORIES_SHEET)
 
     for ci, (header, width) in enumerate(EPICENTER_COLUMNS, 1):
         _style_header(ws.cell(row=1, column=ci, value=header))
@@ -258,9 +263,23 @@ def _build_categories_sheet(wb: Workbook, categories: list[dict]) -> None:
 
 def _build_empty_categories_sheet(wb: Workbook) -> None:
     """Запасний варіант: якщо API не відповів — лист з попередженням."""
-    ws = wb.create_sheet("Категорії Епіцентру")
+    ws = wb.create_sheet(CATEGORIES_SHEET)
     ws["A1"] = "⚠️ Не завантажено. Перевір токен API та повтори запуск."
     ws["A1"].font = Font(bold=True, color="C00000", name="Arial")
+
+
+def _repopulate_categories_sheet(wb: Workbook, categories: list[dict]) -> None:
+    """
+    Видаляє існуючий лист «Категорії Епіцентру» (якщо є) та створює заново.
+    Використовується при відновленні відсутнього листа у вже існуючому файлі.
+    """
+    if CATEGORIES_SHEET in wb.sheetnames:
+        del wb[CATEGORIES_SHEET]
+
+    if categories:
+        _build_categories_sheet(wb, categories)
+    else:
+        _build_empty_categories_sheet(wb)
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -268,9 +287,44 @@ def _build_empty_categories_sheet(wb: Workbook) -> None:
 def main() -> None:
     print("🚀 epicenter_export_categories.py — КРОК 1\n")
 
-    if OUTPUT_PATH.exists():
+    # ── Сценарій 1: файл не існує → створити з нуля ──────────────────────────
+    if not OUTPUT_PATH.exists():
+        categories = fetch_epicenter_categories()
+
+        wb = Workbook()
+        wb.remove(wb.active)
+
+        _build_instructions_sheet(wb)
+        _build_mapping_sheet(wb)
+
+        if categories:
+            _build_categories_sheet(wb, categories)
+        else:
+            _build_empty_categories_sheet(wb)
+
+        OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        wb.save(OUTPUT_PATH)
+
+        print(f"\n✅ Збережено: {OUTPUT_PATH}")
+        print(f"   Листи: {wb.sheetnames}")
         print(
-            f"ℹ️  Файл вже існує: {OUTPUT_PATH}\n"
+            "\n📌 Наступні кроки:\n"
+            "   1. Заповни «Маппінг» (prom_category_id, Категорія Прому):\n"
+            "      python scripts/prom_export_categories.py\n"
+            "   2. Заповни epicenter_category_id (крок 2):\n"
+            "      • Автоматично: python scripts/epicenter_map_categories.py\n"
+            "      • Вручну:      колонки C, D, E у листі «Маппінг»\n"
+            "   3. Далі → python scripts/epicenter_export_attr_sets.py"
+        )
+        return
+
+    # ── Сценарій 2: файл є → перевірити наявність листа ─────────────────────
+    wb = load_workbook(OUTPUT_PATH)
+
+    if CATEGORIES_SHEET in wb.sheetnames:
+        # Сценарій 2а: лист є → нічого не робити
+        print(
+            f"ℹ️  Файл вже існує і лист «{CATEGORIES_SHEET}» присутній: {OUTPUT_PATH}\n"
             f"   Структура створена. Подальші кроки:\n"
             f"   1. Заповни «Маппінг»:  python scripts/prom_export_categories.py\n"
             f"   2. Заповни epicenter_category_id: python scripts/epicenter_map_categories.py\n"
@@ -278,33 +332,18 @@ def main() -> None:
         )
         return
 
+    # Сценарій 2б: файл є, але лист відсутній → докачати і додати
+    print(
+        f"⚠️  Файл існує, але лист «{CATEGORIES_SHEET}» відсутній.\n"
+        f"   Завантажуємо категорії з API та відновлюємо лист...\n"
+    )
+
     categories = fetch_epicenter_categories()
-
-    wb = Workbook()
-    wb.remove(wb.active)
-
-    _build_instructions_sheet(wb)
-    _build_mapping_sheet(wb)
-
-    if categories:
-        _build_categories_sheet(wb, categories)
-    else:
-        _build_empty_categories_sheet(wb)
-
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _repopulate_categories_sheet(wb, categories)
     wb.save(OUTPUT_PATH)
 
-    print(f"\n✅ Збережено: {OUTPUT_PATH}")
+    print(f"\n✅ Лист «{CATEGORIES_SHEET}» відновлено: {OUTPUT_PATH}")
     print(f"   Листи: {wb.sheetnames}")
-    print(
-        "\n📌 Наступні кроки:\n"
-        "   1. Заповни «Маппінг» (prom_category_id, Категорія Прому):\n"
-        "      python scripts/prom_export_categories.py\n"
-        "   2. Заповни epicenter_category_id (крок 2):\n"
-        "      • Автоматично: python scripts/epicenter_map_categories.py\n"
-        "      • Вручну:      колонки C, D, E у листі «Маппінг»\n"
-        "   3. Далі → python scripts/epicenter_export_attr_sets.py"
-    )
 
 
 if __name__ == "__main__":

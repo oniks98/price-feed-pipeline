@@ -1,16 +1,26 @@
 """
 rozetka_map_categories.py
 -------------------------
-Maps Prom categories from rozetka_mappings.xlsx sheet "Маппінг" to
-Rozetka categories from sheet "Категорії Розетки".
+Маппінг категорій Prom з аркуша "Маппінг" файлу rozetka_mappings.xlsx
+на категорії Rozetka з аркуша "Категорії Розетки".
 
-Default mode is conservative: existing complete mappings are not overwritten.
-Use --overwrite when you want to recompute current mappings.
+Консервативний режим за замовчуванням: вже заповнені рядки не перезаписуються.
+Використовуй --overwrite для примусового перерахунку існуючих маппінгів.
 
-Run:
+Запуск:
     python scripts/rozetka_map_categories.py
     python scripts/rozetka_map_categories.py --overwrite
     python scripts/rozetka_map_categories.py --overwrite --dry-run
+
+Оптимізації відносно v1:
+    1. Інвертований токен-індекс — попередня фільтрація кандидатів до скорингу (O(R) → O(k)).
+    2. Розбиття складових назв Prom по "," — кожна частина скориться окремо.
+    3. Швидкий set-lookup у token_overlap перед fuzz.ratio.
+    4. М'якший extra_penalty (множник 16 → 10) — менш агресивний на часткових збігах.
+    5. Fuzzy-розширення індексу — токени Prom порівнюються з ключами індексу через fuzz.ratio,
+       щоб близькі за значенням стеми потрапляли до кандидатів.
+    6. Дедуплікація суфіксів у stem() + безпечний мінімальний залишок кореня.
+    7. AUTO_THRESHOLD знижено з 88 → 85 (перевірено на граничних REVIEW-кейсах).
 """
 
 from __future__ import annotations
@@ -19,6 +29,7 @@ import argparse
 import logging
 import re
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -58,8 +69,16 @@ COL_CANDIDATE_1 = "candidate_1"
 COL_CANDIDATE_2 = "candidate_2"
 COL_CANDIDATE_3 = "candidate_3"
 
-AUTO_THRESHOLD = 88.0
+# Lowered from 88 → 85: "Ручний обтискний інструмент" at 84.9 is a clear match.
+AUTO_THRESHOLD = 85.0
 REVIEW_THRESHOLD = 72.0
+
+# How many token-index candidates to pre-select before full scoring.
+# If fewer than MIN_CANDIDATES found → fall back to full category list.
+MIN_CANDIDATES = 30
+
+# Fuzz threshold for fuzzy token-index key expansion (stem similarity).
+INDEX_FUZZY_THRESHOLD = 80
 
 # High-confidence domain overrides for known generic Prom categories where
 # fuzzy matching tends to choose too narrow Rozetka child categories.
@@ -143,6 +162,12 @@ SYNONYM_REPLACEMENTS = {
     "wi fi": "wifi",
     "usb накопичувачі": "флешки usb накопичувачі",
     "жорсткі диски": "hdd ssd жорсткі диски",
+    # NEW: frequent mismatches between Prom and Rozetka terminology
+    "полотна для лобзиків": "пилки для лобзиків",
+    "пиляльні полотна": "пилки",
+    "шліфувальні круги": "шліфувальні диски",
+    "відрізні круги": "відрізні диски",
+    "зачисні круги": "зачисні диски",
 }
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
@@ -225,54 +250,36 @@ def last_segment(text: str) -> str:
 
 
 def normalize(text: str) -> str:
-    value = str(text or "").lower().replace("'", " ").replace("’", " ")
+    value = str(text or "").lower().replace("\u2019", " ").replace("'", " ")
     for source, target in SYNONYM_REPLACEMENTS.items():
         value = re.sub(rf"\b{re.escape(source)}\b", target, value, flags=re.IGNORECASE)
     value = re.sub(r"[^\w\s]", " ", value, flags=re.UNICODE)
     return re.sub(r"\s+", " ", value).strip()
 
 
+# Deduplicated, ordered by length descending (critical for greedy matching).
+_STEM_SUFFIXES: tuple[str, ...] = tuple(
+    sorted(
+        {
+            "ування", "ювання", "ання", "ення", "іння",
+            "ський", "цький", "зький",
+            "ними", "ному", "ного", "ної", "ній",
+            "ові", "ева", "ями", "ами",
+            "ого", "ому", "ими", "их",
+            "ою", "ею", "ів", "ов", "ев",
+            "ий", "ій",
+            "а", "и", "і", "у", "я", "ю", "е",
+        },
+        key=len,
+        reverse=True,
+    )
+)
+
+
 def stem(word: str) -> str:
-    suffixes = [
-        "ування",
-        "ювання",
-        "ання",
-        "ення",
-        "іння",
-        "ський",
-        "цький",
-        "зький",
-        "ними",
-        "ному",
-        "ного",
-        "ної",
-        "ній",
-        "ові",
-        "ева",
-        "ями",
-        "ами",
-        "ого",
-        "ому",
-        "ими",
-        "ими",
-        "их",
-        "ою",
-        "ею",
-        "ів",
-        "ов",
-        "ев",
-        "ий",
-        "ій",
-        "а",
-        "и",
-        "і",
-        "у",
-        "я",
-        "ю",
-        "е",
-    ]
-    for suffix in sorted(set(suffixes), key=len, reverse=True):
-        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+    """Light Ukrainian stemmer — strips inflectional suffixes."""
+    for suffix in _STEM_SUFFIXES:
+        if word.endswith(suffix) and len(word) - len(suffix) >= 4:
             return word[: -len(suffix)]
     return word
 
@@ -280,21 +287,34 @@ def stem(word: str) -> str:
 def tokens(text: str) -> tuple[str, ...]:
     result: list[str] = []
     for token in normalize(text).split():
-        if token in STOPWORDS:
-            continue
-        if len(token) < 2:
+        if token in STOPWORDS or len(token) < 2:
             continue
         result.append(stem(token))
     return tuple(result)
 
 
-def token_overlap(query_tokens: tuple[str, ...], target_tokens: tuple[str, ...]) -> float:
+def token_overlap(
+    query_tokens: tuple[str, ...],
+    target_tokens: tuple[str, ...],
+) -> float:
+    """
+    Fraction of query_tokens covered by target_tokens.
+    Fast path: exact stem match via set lookup.
+    Slow path: fuzz.ratio only for unmatched tokens.
+    """
     if not query_tokens or not target_tokens:
         return 0.0
+
+    target_set = set(target_tokens)
     matched = 0
+
     for query in query_tokens:
-        if any(fuzz.ratio(query, target) >= 84 for target in target_tokens):
+        if query in target_set:
+            # O(1) exact match — no fuzz needed.
             matched += 1
+        elif any(fuzz.ratio(query, t) >= INDEX_FUZZY_THRESHOLD for t in target_tokens):
+            matched += 1
+
     return matched / len(query_tokens) * 100.0
 
 
@@ -306,6 +326,90 @@ def format_candidate(candidate: Candidate | None) -> str:
         f"{cat.category_id} | {cat.name} | score={candidate.score:.1f} | "
         f"parent={cat.parent_id} | path={cat.path}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Inverted token index
+# ---------------------------------------------------------------------------
+
+
+def build_token_index(
+    categories: list[RozetkaCategory],
+) -> dict[str, list[str]]:
+    """
+    Maps every stem token (from name + path) → list of category_ids.
+    Used to pre-filter candidates before expensive full scoring.
+    """
+    index: defaultdict[str, list[str]] = defaultdict(list)
+    for cat in categories:
+        seen: set[str] = set()
+        for token in cat.name_tokens + cat.path_tokens:
+            if token not in seen:
+                index[token].append(cat.category_id)
+                seen.add(token)
+    log.debug("Token index built: %d unique stems.", len(index))
+    return dict(index)
+
+
+def get_candidates(
+    prom_tokens: tuple[str, ...],
+    index: dict[str, list[str]],
+    by_id: dict[str, RozetkaCategory],
+    all_categories: list[RozetkaCategory],
+) -> list[RozetkaCategory]:
+    """
+    Fast candidate pre-selection:
+      1. Exact stem lookup in index.
+      2. If still < MIN_CANDIDATES, fuzzy-expand against all index keys.
+      3. If still < MIN_CANDIDATES, fall back to full category list.
+    """
+    candidate_ids: set[str] = set()
+
+    # Step 1: exact stem hits.
+    for token in prom_tokens:
+        for cid in index.get(token, []):
+            candidate_ids.add(cid)
+
+    # Step 2: fuzzy expansion against index keys (handles synonym stems).
+    if len(candidate_ids) < MIN_CANDIDATES:
+        index_keys = list(index.keys())
+        for token in prom_tokens:
+            for key in index_keys:
+                if key not in candidate_ids and fuzz.ratio(token, key) >= INDEX_FUZZY_THRESHOLD:
+                    for cid in index[key]:
+                        candidate_ids.add(cid)
+
+    # Step 3: hard fallback.
+    if len(candidate_ids) < MIN_CANDIDATES:
+        log.debug(
+            "Candidate index too small (%d), falling back to full list.", len(candidate_ids)
+        )
+        return all_categories
+
+    return [by_id[cid] for cid in candidate_ids if cid in by_id]
+
+
+# ---------------------------------------------------------------------------
+# Composite name splitting
+# ---------------------------------------------------------------------------
+
+
+def split_composite_name(name: str) -> list[str]:
+    """
+    "Відрізні, зачисні, шліфувальні, пиляльні круги" →
+    ["Відрізні, зачисні, шліфувальні, пиляльні круги",
+     "Відрізні", "зачисні", "шліфувальні", "пиляльні круги"]
+
+    The full name is always tried first.
+    Individual comma-parts are added only if they are meaningful (> 3 chars).
+    This lets us find narrow rozetka sub-categories even from long compound prom names.
+    """
+    parts = [p.strip() for p in name.split(",")]
+    if len(parts) == 1:
+        return [name]
+    # Full name + each non-trivial part.
+    meaningful = [p for p in parts if len(p) > 3]
+    return [name] + meaningful
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +425,9 @@ def headers(ws) -> dict[str, int]:
     }
 
 
-def require_columns(found: dict[str, int], required: tuple[str, ...], sheet_name: str) -> None:
+def require_columns(
+    found: dict[str, int], required: tuple[str, ...], sheet_name: str
+) -> None:
     missing = [column for column in required if column not in found]
     if missing:
         raise ValueError(
@@ -343,19 +449,15 @@ def load_rozetka_categories(ws) -> list[RozetkaCategory]:
     require_columns(
         found,
         (
-            ROZ_COL_ID,
-            ROZ_COL_NAME,
-            ROZ_COL_PARENT,
-            ROZ_COL_PARENT_NAME,
-            ROZ_COL_LEVEL,
-            ROZ_COL_LEAF,
-            ROZ_COL_PATH,
+            ROZ_COL_ID, ROZ_COL_NAME, ROZ_COL_PARENT,
+            ROZ_COL_PARENT_NAME, ROZ_COL_LEVEL, ROZ_COL_LEAF, ROZ_COL_PATH,
         ),
         SHEET_ROZETKA,
     )
 
     categories: list[RozetkaCategory] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
+
         def value(column: str) -> Any:
             index = found[column] - 1
             return row[index] if index < len(row) else None
@@ -397,7 +499,11 @@ def load_rozetka_categories(ws) -> list[RozetkaCategory]:
 # ---------------------------------------------------------------------------
 
 
-def score_name(prom_name: str, prom_tokens: tuple[str, ...], category: RozetkaCategory) -> float:
+def score_name(
+    prom_name: str,
+    prom_tokens: tuple[str, ...],
+    category: RozetkaCategory,
+) -> float:
     prom_norm = normalize(prom_name)
     if prom_norm and prom_norm == category.name_norm:
         return 100.0
@@ -411,7 +517,11 @@ def score_name(prom_name: str, prom_tokens: tuple[str, ...], category: RozetkaCa
     return max(ratio, token_sort, coverage)
 
 
-def score_context(prom_path: str, prom_context_tokens: tuple[str, ...], category: RozetkaCategory) -> float:
+def score_context(
+    prom_path: str,
+    prom_context_tokens: tuple[str, ...],
+    category: RozetkaCategory,
+) -> float:
     if not prom_context_tokens:
         return 0.0
     overlap = token_overlap(prom_context_tokens, category.path_tokens)
@@ -431,7 +541,8 @@ def score_penalty(
     extra_tokens = set(category.name_tokens) - set(prom_tokens)
     if extra_tokens and not exact_name:
         extra_ratio = len(extra_tokens) / max(len(category.name_tokens), 1)
-        extra_penalty = min(20.0, extra_ratio * 16.0)
+        # v1 used 16.0 — too aggressive. 10.0 allows partial matches to surface.
+        extra_penalty = min(15.0, extra_ratio * 10.0)
         penalty += extra_penalty
         reasons.append(f"extra-name-tokens={len(extra_tokens)}")
 
@@ -448,16 +559,20 @@ def score_penalty(
     return penalty, reasons
 
 
-def score_candidate(prom_path: str, category: RozetkaCategory) -> Candidate:
-    prom_name = last_segment(prom_path)
-    prom_tokens = tokens(prom_name)
+def score_candidate(
+    prom_path: str,
+    prom_name_variant: str,
+    category: RozetkaCategory,
+) -> Candidate:
+    """Score a single (prom_name_variant, rozetka_category) pair."""
+    prom_tokens_var = tokens(prom_name_variant)
     context_text = " > ".join(split_path(prom_path)[:-1])
     context_tokens = tokens(context_text)
 
-    exact_name = normalize(prom_name) == category.name_norm
-    name_s = score_name(prom_name, prom_tokens, category)
+    exact_name = normalize(prom_name_variant) == category.name_norm
+    name_s = score_name(prom_name_variant, prom_tokens_var, category)
     context_s = score_context(prom_path, context_tokens, category)
-    penalty, penalty_reasons = score_penalty(prom_tokens, category, exact_name=exact_name)
+    penalty, penalty_reasons = score_penalty(prom_tokens_var, category, exact_name=exact_name)
 
     score = (0.78 * name_s) + (0.22 * context_s) - penalty
     if exact_name:
@@ -467,10 +582,10 @@ def score_candidate(prom_path: str, category: RozetkaCategory) -> Candidate:
     reason_parts = [
         "exact" if exact_name else "fuzzy",
         f"name={name_s:.1f}",
-        f"context={context_s:.1f}",
+        f"ctx={context_s:.1f}",
     ]
     if penalty:
-        reason_parts.append(f"penalty={penalty:.1f}")
+        reason_parts.append(f"pen={penalty:.1f}")
         reason_parts.extend(penalty_reasons)
 
     return Candidate(
@@ -483,15 +598,38 @@ def score_candidate(prom_path: str, category: RozetkaCategory) -> Candidate:
     )
 
 
-def rank_candidates(prom_path: str, categories: list[RozetkaCategory]) -> tuple[Candidate, ...]:
+def rank_candidates(
+    prom_path: str,
+    all_categories: list[RozetkaCategory],
+    index: dict[str, list[str]],
+    by_id: dict[str, RozetkaCategory],
+) -> tuple[Candidate, ...]:
+    """
+    1. Split composite prom name into variants.
+    2. Pre-filter candidates via inverted token index per variant.
+    3. Score each (variant, candidate) pair.
+    4. Keep the best score per category across all variants.
+    5. Return top-5 sorted by score.
+    """
+    prom_name = last_segment(prom_path)
+    name_variants = split_composite_name(prom_name)
+
+    # Best score per rozetka category_id across all name variants.
+    best_per_category: dict[str, Candidate] = {}
+
+    for variant in name_variants:
+        variant_tokens = tokens(variant)
+        candidates = get_candidates(variant_tokens, index, by_id, all_categories)
+
+        for category in candidates:
+            candidate = score_candidate(prom_path, variant, category)
+            existing = best_per_category.get(category.category_id)
+            if existing is None or candidate.score > existing.score:
+                best_per_category[category.category_id] = candidate
+
     ranked = sorted(
-        (score_candidate(prom_path, category) for category in categories),
-        key=lambda item: (
-            item.score,
-            item.name_score,
-            -item.penalty,
-            -item.category.level,
-        ),
+        best_per_category.values(),
+        key=lambda c: (c.score, c.name_score, -c.penalty, -c.category.level),
         reverse=True,
     )
     return tuple(ranked[:5])
@@ -500,8 +638,9 @@ def rank_candidates(prom_path: str, categories: list[RozetkaCategory]) -> tuple[
 def select_match(
     prom_id: str,
     prom_path: str,
-    categories: list[RozetkaCategory],
+    all_categories: list[RozetkaCategory],
     by_id: dict[str, RozetkaCategory],
+    index: dict[str, list[str]],
 ) -> MatchDecision:
     if prom_id in MANUAL_OVERRIDES:
         rozetka_id, note = MANUAL_OVERRIDES[prom_id]
@@ -517,7 +656,7 @@ def select_match(
             )
             return MatchDecision("OVERRIDE", candidate, (candidate,), note)
 
-    candidates = rank_candidates(prom_path, categories)
+    candidates = rank_candidates(prom_path, all_categories, index, by_id)
     best = candidates[0] if candidates else None
     if best is None:
         return MatchDecision("NO_MATCH", None, (), "no candidates")
@@ -569,11 +708,11 @@ def write_decision(
     ws.cell(row=row, column=columns[COL_MATCH_STATUS]).value = decision.status
     ws.cell(row=row, column=columns[COL_MATCH_NOTE]).value = decision.note
 
-    for index, column_name in enumerate(
+    for index_i, column_name in enumerate(
         (COL_CANDIDATE_1, COL_CANDIDATE_2, COL_CANDIDATE_3),
         start=0,
     ):
-        candidate = decision.candidates[index] if index < len(decision.candidates) else None
+        candidate = decision.candidates[index_i] if index_i < len(decision.candidates) else None
         ws.cell(row=row, column=columns[column_name]).value = format_candidate(candidate)
 
 
@@ -590,8 +729,10 @@ def map_categories(*, overwrite: bool, dry_run: bool) -> dict[str, int]:
         ws_map = workbook[SHEET_MAPPING]
         ws_roz = workbook[SHEET_ROZETKA]
 
-        categories = load_rozetka_categories(ws_roz)
-        by_id = {category.category_id: category for category in categories}
+        # Load once — build index once.
+        all_categories = load_rozetka_categories(ws_roz)
+        by_id = {cat.category_id: cat for cat in all_categories}
+        index = build_token_index(all_categories)
 
         map_headers = headers(ws_map)
         require_columns(
@@ -601,40 +742,39 @@ def map_categories(*, overwrite: bool, dry_run: bool) -> dict[str, int]:
         )
 
         for column in (
-            COL_MATCH_SCORE,
-            COL_MATCH_STATUS,
-            COL_MATCH_NOTE,
-            COL_CANDIDATE_1,
-            COL_CANDIDATE_2,
-            COL_CANDIDATE_3,
+            COL_MATCH_SCORE, COL_MATCH_STATUS, COL_MATCH_NOTE,
+            COL_CANDIDATE_1, COL_CANDIDATE_2, COL_CANDIDATE_3,
         ):
             ensure_column(ws_map, map_headers, column)
 
-        stats = {
-            "AUTO": 0,
-            "OVERRIDE": 0,
-            "REVIEW": 0,
-            "NO_MATCH": 0,
-            "EXISTING": 0,
-            "EMPTY_PROM": 0,
+        stats: dict[str, int] = {
+            "AUTO": 0, "OVERRIDE": 0, "REVIEW": 0,
+            "NO_MATCH": 0, "EXISTING": 0, "EMPTY_PROM": 0,
         }
 
         for row_index in range(2, ws_map.max_row + 1):
             prom_id = norm_id(ws_map.cell(row=row_index, column=map_headers[COL_PROM_ID]).value)
-            prom_path = str(ws_map.cell(row=row_index, column=map_headers[COL_PROM_NAME]).value or "").strip()
+            prom_path = str(
+                ws_map.cell(row=row_index, column=map_headers[COL_PROM_NAME]).value or ""
+            ).strip()
+
             if not prom_path:
                 stats["EMPTY_PROM"] += 1
                 continue
 
             existing_id = norm_id(ws_map.cell(row=row_index, column=map_headers[COL_ROZ_ID]).value)
-            existing_name = str(ws_map.cell(row=row_index, column=map_headers[COL_ROZ_NAME]).value or "").strip()
-            existing_parent = norm_id(ws_map.cell(row=row_index, column=map_headers[COL_PARENT]).value)
+            existing_name = str(
+                ws_map.cell(row=row_index, column=map_headers[COL_ROZ_NAME]).value or ""
+            ).strip()
+            existing_parent = norm_id(
+                ws_map.cell(row=row_index, column=map_headers[COL_PARENT]).value
+            )
 
             if existing_id and existing_name and existing_parent and not overwrite:
                 stats["EXISTING"] += 1
                 continue
 
-            decision = select_match(prom_id, prom_path, categories, by_id)
+            decision = select_match(prom_id, prom_path, all_categories, by_id, index)
             stats[decision.status] += 1
             write_decision(ws_map, row_index, decision, map_headers)
 
@@ -645,7 +785,11 @@ def map_categories(*, overwrite: bool, dry_run: bool) -> dict[str, int]:
                 row_index,
                 prom_id,
                 decision.status,
-                selected.score if selected else (decision.candidates[0].score if decision.candidates else 0.0),
+                (
+                    selected.score
+                    if selected
+                    else (decision.candidates[0].score if decision.candidates else 0.0)
+                ),
                 last_segment(prom_path),
                 selected_label,
             )

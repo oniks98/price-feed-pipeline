@@ -4,7 +4,6 @@ prom_export_categories.py
 Синхронізує категорії з фіду PROM з локальними файлами маркетплейсів.
 Експортує ТІЛЬКИ ті категорії, під якими є реальні товари у фіді.
 Додає НОВІ категорії (яких ще немає по ID) до:
-  - data/markets/markets_coefficients.csv             — коефіцієнти для маркетплейсів
   - data/markets/mappings.xlsx (лист 'Категорія+')    — маппінг категорій Kasta
   - data/markets/epicenter_mappings.xlsx (лист 'Маппінг') — маппінг категорій Epicenter
   - data/markets/rozetka_mappings.xlsx (лист 'Маппінг')   — маппінг категорій Rozetka
@@ -48,13 +47,11 @@ ROZETKA_MAPPINGS_SHEET    = "Маппінг"
 ROZETKA_MAPPINGS_ID_COL   = "prom_category_id"
 ROZETKA_MAPPINGS_NAME_COL = "Категорія Прому"
 
-# ─── Config: markets_coefficients.csv ────────────────────────────────────────
+# ─── Config: prom_coefficients.csv ──────────────────────────────────────────
+# Колонки: prom_category_id | prom_category_name | coef | coef_uncategorized | coef_no_base
+# Рядок 1 — заголовки, рядок 2 — дефолтні коефіцієнти (sentinel, без ID), рядки 3+ — дані.
 
-MARKETS_CSV          = _ROOT / "data" / "markets" / "markets_coefficients.csv"
-# category_id зарезервований як рядок дефолтних коефіцієнтів.
-# Щоб змінити дефолти — редагуй цей рядок у CSV, не чіпай код.
-DEFAULT_COEFS_ROW_ID = "1"
-
+PROM_COEF_CSV = _ROOT / "data" / "markets" / "prom_coefficients.csv"
 
 # ─── Excel target descriptor ──────────────────────────────────────────────────
 
@@ -231,53 +228,23 @@ def append_new_categories_to_excel(
         print(f"   + [{cat_id}] {build_display_name(cat_id, all_categories)}")
 
 
-# ─── CSV: markets_coefficients ────────────────────────────────────────────────
+# ─── CSV: prom_coefficients ────────────────────────────────────────────────
 
-def _load_coef_fields(fieldnames: list[str]) -> list[str]:
-    """Повертає список колонок коефіцієнтів (всі що починаються на 'coef_')."""
-    return [f for f in fieldnames if f.startswith("coef_")]
-
-
-def _load_default_coefs(rows: list[dict], coef_fields: list[str]) -> dict[str, str]:
-    """
-    Читає дефолтні коефіцієнти з рядка DEFAULT_COEFS_ROW_ID у CSV.
-    Щоб змінити дефолти — редагуй рядок з category_id=1 у файлі.
-    Якщо рядок не знайдено — падає з явною помилкою (не мовчки підставляє хардкод).
-    """
-    sentinel = next(
-        (row for row in rows if row.get("category_id") == DEFAULT_COEFS_ROW_ID),
-        None,
-    )
-    if sentinel is None:
-        raise ValueError(
-            f"Рядок дефолтних коефіцієнтів (category_id={DEFAULT_COEFS_ROW_ID}) "
-            f"не знайдено в {MARKETS_CSV}. "
-            f"Додай рядок: {DEFAULT_COEFS_ROW_ID};new_default_categories;<coef_kasta>;<coef_epicenter>;<coef_rozetka>"
-        )
-    coefs = {field: sentinel[field] for field in coef_fields if field in sentinel}
-    coef_str = ";".join(f"{k}={v}" for k, v in coefs.items())
-    print(f"📐 Дефолтні коефіцієнти (category_id={DEFAULT_COEFS_ROW_ID}): {coef_str}")
-    return coefs
-
-
-def update_markets_csv(
+def update_prom_coef_csv(
     active_categories: dict[str, dict],
     all_categories: dict[str, dict],
 ) -> None:
-    """Дописує в markets_coefficients.csv тільки НОВІ категорії з дефолтними коефіцієнтами."""
-    if not MARKETS_CSV.exists():
-        print(f"⚠️  markets_coefficients.csv не знайдено: {MARKETS_CSV}")
+    """Дописує в prom_coefficients.csv тільки НОВІ категорії. Поля coef не заповнюються."""
+    if not PROM_COEF_CSV.exists():
+        print(f"⚠️  prom_coefficients.csv не знайдено: {PROM_COEF_CSV}")
         return
 
-    with MARKETS_CSV.open("r", encoding="utf-8-sig") as f:
-        reader    = csv.DictReader(f, delimiter=";")
-        fieldnames = reader.fieldnames or []
-        rows      = list(reader)
+    with PROM_COEF_CSV.open("r", encoding="utf-8-sig") as f:
+        reader     = csv.DictReader(f, delimiter=";")
+        fieldnames = list(reader.fieldnames or [])
+        rows       = list(reader)
 
-    coef_fields   = _load_coef_fields(fieldnames)
-    default_coefs = _load_default_coefs(rows, coef_fields)
-
-    existing_ids = {row["category_id"] for row in rows}
+    existing_ids = {row["prom_category_id"] for row in rows if row.get("prom_category_id")}
 
     new_categories = {
         cat_id: cat
@@ -286,22 +253,20 @@ def update_markets_csv(
     }
 
     if not new_categories:
-        print("✅ Нових категорій немає — markets_coefficients.csv не змінено")
+        print("✅ Нових категорій немає — prom_coefficients.csv не змінено")
         return
 
-    with MARKETS_CSV.open("a", encoding="utf-8-sig", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
+    with PROM_COEF_CSV.open("a", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";", extrasaction="ignore")
         for cat_id in sorted(new_categories, key=lambda x: int(x)):
             writer.writerow({
-                "category_id":   cat_id,
-                "category_name": build_display_name(cat_id, all_categories),
-                **default_coefs,
+                "prom_category_id":   cat_id,
+                "prom_category_name": build_display_name(cat_id, all_categories),
             })
 
-    coef_display = ";".join(default_coefs.values())
-    print(f"✅ Додано {len(new_categories)} нових категорій → {MARKETS_CSV}")
+    print(f"✅ Додано {len(new_categories)} нових категорій → {PROM_COEF_CSV}")
     for cat_id in sorted(new_categories, key=lambda x: int(x)):
-        print(f"   + [{cat_id}] {build_display_name(cat_id, all_categories)}  {coef_display}")
+        print(f"   + [{cat_id}] {build_display_name(cat_id, all_categories)}")
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -336,7 +301,7 @@ def main() -> None:
         append_new_categories_to_excel(target, active_categories, all_categories)
 
     # ── CSV ───────────────────────────────────────────────────────────────────
-    update_markets_csv(active_categories, all_categories)
+    update_prom_coef_csv(active_categories, all_categories)
 
 
 if __name__ == "__main__":

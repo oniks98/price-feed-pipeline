@@ -1,13 +1,13 @@
 """
 kasta_export_coef.py
 --------------------
-Generates data/markets/kasta_coefficients.csv from:
-  - data/markets/mappings.xlsx, sheet "Категорія+"
-  - data/markets/kasta_royalty.xlsx, sheet "Роялті"
+Генерує data/markets/kasta_coefficients.csv з:
+- data/markets/mappings.xlsx, аркуш "Категорія+"
+- data/markets/kasta_royalty.xlsx, аркуш "Роялті"
 
-The output contains price-range rules, not one max coefficient per category.
-Each Prom category is matched to Kasta royalty rows by all common mapping
-headers present in both files, currently: Приналежність, Група, Вид.
+Вивід містить правила цінового діапазону, а не один максимальний коефіцієнт на категорію.
+Кожна категорія Prom зіставляється з рядками роялті Kasta за всіма спільними
+заголовками зіставлення, присутніми в обох файлах, наразі: Приналежність, Група, Вид.
 
 Run:
     python scripts/kasta_export_coef.py
