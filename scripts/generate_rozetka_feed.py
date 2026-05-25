@@ -1,7 +1,7 @@
 """
 Генерує фід для Розетки:
   1. Завантажує XML фід з сайту
-  2. Читає data/markets/markets_coefficients.csv (колонка coef_rozetka)
+  2. Читає data/markets/rozetka_coefficients.csv (через services/market_pricing.py)
   3. Визначає базову ціну: Оптова_ціна з *_old.csv або fallback на ціну з XML
   4. Базова ціна × коефіцієнт категорії = нова ціна
   5. Зберігає результат in data/markets/rozetka_feed.xml
@@ -23,8 +23,6 @@ from pathlib import Path
 
 from constants_feed_url import FEED_URL_PROM as FEED_URL
 from generate_utils_feed import (
-    apply_prices,
-    build_offer_data_map,
     fetch_xml,
     fill_missing_vendor,
     filter_unavailable_offers,
@@ -32,7 +30,7 @@ from generate_utils_feed import (
     parse_currency_rates,
     transform_prom_image_urls,
 )
-from services.market_coefficients import get_coefficients, get_default_coefficient
+from services.market_pricing import apply_market_prices
 
 # ---------------------------------------------------------------------------
 # Market-specific config
@@ -42,8 +40,6 @@ MARKET = "rozetka"
 
 ROOT = Path(__file__).parents[1]
 OUTPUT_PATH = ROOT / "data" / "markets" / "rozetka_feed.xml"
-
-DEFAULT_COEFFICIENT = get_default_coefficient(MARKET)
 
 
 # ---------------------------------------------------------------------------
@@ -57,14 +53,9 @@ def main() -> None:
     currency_rates = parse_currency_rates(xml)
     updated_xml = filter_unavailable_offers(xml)
 
-    coefficients = get_coefficients(MARKET)
-
     wholesale_index = load_wholesale_price_index(ROOT)
 
-    offer_map = build_offer_data_map(updated_xml, coefficients, wholesale_index, DEFAULT_COEFFICIENT)
-    print(f"🏷️  Доступних офферів: {len(offer_map)}")
-
-    updated_xml = apply_prices(updated_xml, offer_map, currency_rates)
+    updated_xml = apply_market_prices(MARKET, updated_xml, wholesale_index, currency_rates)
     updated_xml = transform_prom_image_urls(updated_xml)
     updated_xml = fill_missing_vendor(updated_xml)
     # Примітка: add_name_ua не викликається — Розетка використовує тег <n> напряму

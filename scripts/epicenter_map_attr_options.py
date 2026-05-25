@@ -197,6 +197,10 @@ _PRIORITY_OPTION_NAMES: Final[list[str]] = [
     # Загальні / нейтральні
     "загальний", "загальна", "загальне",
     "стандартний", "стандартна", "стандартне",
+    "звичайний", "звичайна", "звичайне",
+    "побутовий", "побутова", "побутове",
+    "для дому",
+    "класичний", "класична", "класичне",
     "універсальний", "універсальна", "універсальне",
     # Розмір
     "середній", "середня", "середнє",
@@ -277,6 +281,7 @@ class OptionRow:
     needs_default: bool
     default_code : str          # default_option_code — вже заповнено або порожньо
     prom_params  : list[str]    # розпарсений prom_param_name (кома-розділений)
+    set_codes    : str = ""     # set_codes — ключ для grouping дефолтів по набору
 
 
 @dataclass
@@ -583,6 +588,7 @@ def load_sheet_snapshot(ws) -> tuple[dict[str, int], list[OptionRow]]:
             needs_default = needs_raw in ("TRUE", "1", "YES"),
             default_code  = _get(_C_DEFAULT_CODE),
             prom_params   = prom_params,
+            set_codes     = _get(_C_SET_CODES),
         ))
 
     return hdr, rows
@@ -622,22 +628,32 @@ def _group_by_attr_code(rows: list[OptionRow]) -> dict[str, list[OptionRow]]:
 
 def _precompute_defaults(
     groups: dict[str, list[OptionRow]],
-) -> dict[str, str | None]:
+) -> dict[tuple[str, str], str | None]:
     """
-    For every select/multiselect attr_code, pre-resolve default_option_code
-    using all option rows that have an option_code.
+    For every select/multiselect (attr_code, set_codes) pair, pre-resolve
+    default_option_code using only the option rows that belong to that pair.
 
-    Returns {attr_code: code_or_None}.
+    Different set_codes within the same attr_code get independent defaults,
+    resolved against their own subset of options — so e.g. attr_code=8142
+    with set_codes=2569 and set_codes=8241 each pick their own first/priority
+    option rather than sharing one global default.
+
+    Returns {(attr_code, set_codes): code_or_None}.
     """
-    result: dict[str, str | None] = {}
+    result: dict[tuple[str, str], str | None] = {}
     for ac, rows in groups.items():
         if rows[0].attr_type not in _SELECT_TYPES:
             continue
-        opt_rows = [r for r in rows if r.option_code]
-        if not opt_rows:
-            result[ac] = None
-            continue
-        result[ac] = resolve_default_option_code(rows[0].attr_name, opt_rows)
+        # Group rows within attr_code by set_codes value
+        by_set: dict[str, list[OptionRow]] = defaultdict(list)
+        for r in rows:
+            by_set[r.set_codes].append(r)
+        for sc, sc_rows in by_set.items():
+            opt_rows = [r for r in sc_rows if r.option_code]
+            if not opt_rows:
+                result[(ac, sc)] = None
+                continue
+            result[(ac, sc)] = resolve_default_option_code(sc_rows[0].attr_name, opt_rows)
     return result
 
 
@@ -663,8 +679,8 @@ def process(
     groups = _group_by_attr_code(rows)
     defaults = _precompute_defaults(groups)   # attr_code → default_option_code
 
-    # Track which attr_codes have already had default_option_code written
-    written_defaults: set[str] = set()
+    # Track which (attr_code, set_codes) pairs have already had default written
+    written_defaults: set[tuple[str, str]] = set()
 
     def _write(row_idx: int, col: str, value: object) -> None:
         if dry_run:
@@ -672,34 +688,38 @@ def process(
             return
         ws.cell(row=row_idx, column=hdr[col] + 1).value = value
 
-    def _write_default_for_attr(ac: str, source_rule: int) -> bool:
+    def _write_default_for_attr(ac: str, sc: str, source_rule: int) -> bool:
         """
-        Write default_option_code to ALL rows of attr_code that don't have it yet.
+        Write default_option_code to all rows of (attr_code, set_codes) that
+        don't have it yet.  Each (attr_code, set_codes) pair gets its own
+        independently resolved default — rows belonging to different set_codes
+        within the same attr_code are never mixed.
         Returns True if anything was written.
         """
-        if ac in written_defaults:
+        key = (ac, sc)
+        if key in written_defaults:
             return False
 
-        written_defaults.add(ac)
-        code = defaults.get(ac)
+        written_defaults.add(key)
+        code = defaults.get(key)
 
         if not code:
             logger.warning(
-                "   ⚠️  Не знайдено default_option_code для attr_code=%s (%s)",
-                ac, groups[ac][0].attr_name if groups.get(ac) else "?",
+                "   ⚠️  Не знайдено default_option_code для attr_code=%s set_codes=%s (%s)",
+                ac, sc, groups[ac][0].attr_name if groups.get(ac) else "?",
             )
             return False
 
         count = 0
         for r2 in groups[ac]:
-            if not r2.default_code:           # snapshot empty → write
+            if r2.set_codes == sc and not r2.default_code:
                 _write(r2.row_idx, _C_DEFAULT_CODE, code)
                 count += 1
 
         if count:
             logger.info(
-                "   R%d default_option_code=%s → %d rows [attr=%s / %s]",
-                source_rule, code, count, ac, groups[ac][0].attr_name,
+                "   R%d default_option_code=%s → %d rows [attr=%s / %s / set=%s]",
+                source_rule, code, count, ac, groups[ac][0].attr_name, sc,
             )
         return count > 0
 
@@ -797,8 +817,8 @@ def process(
                     )
                     stats.no_match += 1
 
-            # 3b. default_option_code — один для всього attr_code
-            if _write_default_for_attr(ac, source_rule=3):
+            # 3b. default_option_code — один для кожної (attr_code, set_codes) пари
+            if _write_default_for_attr(ac, row.set_codes, source_rule=3):
                 stats.rule3_default += 1
 
         else:

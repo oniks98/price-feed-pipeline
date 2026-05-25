@@ -1,7 +1,7 @@
 """
 Генерує фід для Епіцентру:
   1. Завантажує XML фід з сайту
-  2. Читає data/markets/markets_coefficients.csv (колонка coef_epicenter)
+  2. Читає data/markets/epicenter_coefficients.csv (через services/market_pricing.py)
   3. Визначає базову ціну: Оптова_ціна з *_old.csv або fallback на ціну з XML
   4. Базова ціна × коефіцієнт категорії = нова ціна
   5. Інжектує атрибути Epicenter (<category>, <attribute_set>, <param>) з маппінгу
@@ -28,8 +28,6 @@ _logger = logging.getLogger(__name__)
 from constants_feed_url import FEED_URL_PROM_UK as FEED_URL
 from generate_utils_feed import (
     add_name_ua,
-    apply_prices,
-    build_offer_data_map,
     fetch_xml,
     fill_missing_vendor,
     filter_unavailable_offers,
@@ -51,7 +49,7 @@ from services.epicenter_attr_service import (
     get_option_map,
 )
 from services.epicenter_category_service import get_category
-from services.market_coefficients import get_coefficients, get_default_coefficient
+from services.market_pricing import apply_market_prices
 
 # ---------------------------------------------------------------------------
 # Market-specific config
@@ -62,7 +60,6 @@ MARKET = "epicenter"
 ROOT = Path(__file__).parents[1]
 OUTPUT_PATH = ROOT / "data" / "markets" / "epicenter_feed.xml"
 
-DEFAULT_COEFFICIENT = get_default_coefficient(MARKET)
 
 # Regex для парсингу <param> тегів Прому в тілі офера
 _PROM_PARAM_RE = re.compile(
@@ -769,14 +766,9 @@ def main() -> None:
     currency_rates = parse_currency_rates(xml)
     updated_xml = filter_unavailable_offers(xml)
 
-    coefficients = get_coefficients(MARKET)
-
     wholesale_index = load_wholesale_price_index(ROOT)
 
-    offer_map = build_offer_data_map(updated_xml, coefficients, wholesale_index, DEFAULT_COEFFICIENT)
-    print(f"🏷️  Доступних офферів: {len(offer_map)}")
-
-    updated_xml = apply_prices(updated_xml, offer_map, currency_rates)
+    updated_xml = apply_market_prices(MARKET, updated_xml, wholesale_index, currency_rates)
     updated_xml = transform_prom_image_urls(updated_xml)
     updated_xml = fill_missing_vendor(updated_xml)
     updated_xml = add_name_ua(updated_xml)

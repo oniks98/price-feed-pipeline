@@ -4,25 +4,16 @@ generate_utils_feed.py — спільні утиліти для генераці
 Підключається з generate_{market}_feed.py.
 Кожна функція відповідає за одну конкретну задачу.
 
-Коефіцієнти маркетплейсів → services/market_coefficients.py
-URL фідів               → constants_feed_url.py
-
-Алгоритм ціноутворення:
-  1. З XML-фіду витягуємо <article>ЧИСЛО</article> кожного оферу
-  2. Шукаємо ЧИСЛО в data/{supplier}/{supplier}_old.csv (стовпець Код_товару)
-  3. З відповідних рядків беремо той, де Ідентифікатор_товару НЕ має префіксу prom_
-  4. Оптова_ціна з цього рядка × коефіцієнт категорії = нова ціна
-  5. Fallback (якщо артикул не знайдено або Оптова_ціна порожня / нульова):
-     ціна з XML × DEFAULT_COEFFICIENT (не коефіцієнт категорії)
+Ціноутворення → services/market_pricing.py (apply_market_prices)
+URL фідів     → constants_feed_url.py
 """
 
 import csv
 import re
 import time
 from collections import Counter
-from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
+from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
-from typing import TypeAlias
 
 import requests
 from requests.exceptions import ChunkedEncodingError, ConnectionError as RequestsConnectionError
@@ -69,13 +60,6 @@ _VENDOR_FULL_RE: re.Pattern[str] = re.compile(
 _COUNTRY_FULL_RE: re.Pattern[str] = re.compile(
     r"<country_of_origin\s*/>|<country_of_origin>(.*?)</country_of_origin>", re.DOTALL
 )
-
-# ---------------------------------------------------------------------------
-# Type aliases
-# ---------------------------------------------------------------------------
-
-OfferData: TypeAlias = dict[str, dict]
-
 
 # ---------------------------------------------------------------------------
 # XML feed — завантаження та парсинг
@@ -152,7 +136,6 @@ def parse_currency_rates(xml: str) -> dict[str, Decimal]:
 
 # ---------------------------------------------------------------------------
 # CSV — завантаження оптових цін
-# Коефіцієнти маркетплейсів → services/market_coefficients.py
 # ---------------------------------------------------------------------------
 
 def _detect_csv_encoding(path: Path) -> str:
@@ -186,7 +169,7 @@ def load_wholesale_price_index(root: Path) -> dict[str, Decimal]:
       - Рядки з порожньою або нульовою Оптова_ціна пропускаємо.
 
     Повертає порожній dict, якщо файли відсутні (GitHub Actions:
-    гілка data-latest не була відновлена) — apply_prices автоматично
+    гілка data-latest не була відновлена) — market_pricing автоматично
     використає ціну з XML-фіду.
     """
     index: dict[str, Decimal] = {}
@@ -232,143 +215,6 @@ def load_wholesale_price_index(root: Path) -> dict[str, Decimal]:
         print(f"✅ Індекс оптових цін: {len(index)} позицій (джерела: {WHOLESALE_SUPPLIERS})")
 
     return index
-
-
-# ---------------------------------------------------------------------------
-# Побудова мапи офферів
-# ---------------------------------------------------------------------------
-
-def build_offer_data_map(
-    xml: str,
-    coefficients: dict[str, Decimal],
-    wholesale_index: dict[str, Decimal],
-    default_coefficient: Decimal,
-) -> OfferData:
-    """
-    Повертає {offer_id: {coefficient, fallback_coefficient, currency_id, wholesale_price}}
-    для кожного оферу у XML.
-
-    coefficient          — коефіцієнт категорії з CSV (для оптової ціни).
-    fallback_coefficient — default_coefficient (для XML-ціни при відсутності оптової).
-    wholesale_price = None → apply_prices використає ціну з XML (fallback).
-    """
-    offer_map: OfferData = {}
-
-    for m in re.finditer(r'<offer\s+id="(\d+)"[^>]*>(.*?)</offer>', xml, re.DOTALL):
-        offer_id = m.group(1)
-        body = m.group(2)
-
-        cat_match = re.search(r"<categoryId>(\d+)</categoryId>", body)
-        cat_id = cat_match.group(1) if cat_match else ""
-
-        cur_match = re.search(r"<currencyId>([^<]+)</currencyId>", body)
-        currency_id = cur_match.group(1).strip().upper() if cur_match else "UAH"
-
-        article_match = re.search(r"<article>(\d+)</article>", body)
-        article = article_match.group(1).strip() if article_match else None
-
-        offer_map[offer_id] = {
-            # Коефіцієнт категорії з CSV — застосовується лише до оптової ціни.
-            "coefficient": coefficients.get(cat_id, default_coefficient),
-            # Для fallback (ціна з XML) завжди використовуємо default_coefficient,
-            # незалежно від того, чи є категорія у CSV-файлі коефіцієнтів.
-            "fallback_coefficient": default_coefficient,
-            "currency_id": currency_id,
-            # None якщо артикул відсутній у XML або не знайдено в оптовому індексі
-            "wholesale_price": wholesale_index.get(article) if article else None,
-        }
-
-    return offer_map
-
-
-# ---------------------------------------------------------------------------
-# Застосування цін
-# ---------------------------------------------------------------------------
-
-def apply_prices(
-    xml: str,
-    offer_map: OfferData,
-    currency_rates: dict[str, Decimal],
-) -> str:
-    """
-    Замінює <price> у кожному офері:
-      - Є wholesale_price → використовуємо оптову ціну (вже в UAH, конвертація не потрібна)
-      - Інакше (fallback) → ціна з XML, конвертація з іноземної валюти якщо потрібно
-
-    В обох випадках <currencyId> оновлюється на UAH.
-    """
-    wholesale_count = 0
-    fallback_count = 0
-    converted_count = 0
-
-    def on_offer(m: re.Match) -> str:
-        nonlocal wholesale_count, fallback_count, converted_count
-        offer_id: str = m.group(1)
-        tail_attrs: str = m.group(2)
-        body: str = m.group(3)
-
-        data = offer_map.get(offer_id)
-        if data is None:
-            return m.group(0)
-
-        # Коефіцієнт залежить від джерела ціни:
-        #   wholesale_price → коефіцієнт категорії з CSV
-        #   fallback (XML)  → default_coefficient
-        wholesale_price: Decimal | None = data["wholesale_price"]
-        coeff: Decimal = (
-            data["coefficient"] if wholesale_price is not None
-            else data["fallback_coefficient"]
-        )
-        currency_id: str = data["currency_id"]
-
-        def replace_price(pm: re.Match) -> str:
-            nonlocal wholesale_count, fallback_count, converted_count
-            raw = pm.group(1).strip()
-            try:
-                if wholesale_price is not None:
-                    # Оптова ціна вже в UAH — конвертація не потрібна
-                    base_price = wholesale_price
-                    wholesale_count += 1
-                else:
-                    # Fallback: ціна з XML
-                    base_price = Decimal(raw.replace(",", "."))
-                    if currency_id != "UAH":
-                        rate = currency_rates.get(currency_id)
-                        if rate is None:
-                            print(
-                                f"⚠️  Курс для {currency_id} не знайдено, "
-                                f"оффер {offer_id} — ціна без конвертації"
-                            )
-                        else:
-                            base_price *= rate
-                            converted_count += 1
-                    fallback_count += 1
-
-                new_price = (base_price * coeff).quantize(Decimal("1"), rounding=ROUND_CEILING)
-                return f"<price>{new_price}</price>"
-            except Exception:
-                return pm.group(0)
-
-        new_body = re.sub(r"<price>(.*?)</price>", replace_price, body)
-        new_body = re.sub(
-            r"<currencyId>[^<]+</currencyId>",
-            "<currencyId>UAH</currencyId>",
-            new_body,
-        )
-        return f'<offer id="{offer_id}"{tail_attrs}>{new_body}</offer>'
-
-    xml = re.sub(
-        r'<offer\s+id="(\d+)"([^>]*)>(.*?)</offer>',
-        on_offer,
-        xml,
-        flags=re.DOTALL,
-    )
-
-    print(f"💰 Ціна з оптового прайсу: {wholesale_count} | Fallback (XML): {fallback_count}")
-    if converted_count:
-        print(f"💱 Конвертовано з іноземної валюти в UAH: {converted_count}")
-
-    return xml
 
 
 # ---------------------------------------------------------------------------

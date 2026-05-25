@@ -16,6 +16,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Callable, Final
 
+from .pricing_rules import epicenter as _epicenter
 from .pricing_rules import kasta as _kasta
 
 # ---------------------------------------------------------------------------
@@ -26,11 +27,13 @@ _ApplyFn = Callable[[str, dict[str, Decimal], dict[str, Decimal]], str]
 _CoefFn = Callable[[], Decimal]
 
 _APPLY_ROUTERS: Final[dict[str, _ApplyFn]] = {
-    "kasta": _kasta.apply_prices,
+    "kasta":     _kasta.apply_prices,
+    "epicenter": _epicenter.apply_prices,
 }
 
 _COEF_ROUTERS: Final[dict[str, _CoefFn]] = {
-    "kasta": _kasta.get_default_coefficient,
+    "kasta":     _kasta.get_default_coefficient,
+    "epicenter": _epicenter.get_default_coefficient,
 }
 
 
