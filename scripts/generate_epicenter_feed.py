@@ -382,12 +382,16 @@ def inject_epicenter_attrs(xml: str) -> str:
     missed_brands: Counter[str] = Counter()   # prom-бренд → кількість (є в Prom, нема в Epicenter)
 
     # Зворотній індекс: знаходимо prom_param_name що маппиться на attr_code="brand".
-    # Використовується щоб визначити яке поле Prom є брендом (зазвичай "Бренд").
+    # option_map[prom_name][prom_value] тепер list[AttrOption] — перевіряємо всі елементи списків.
     _brand_prom_param: str | None = next(
         (
             prom_name
             for prom_name, opts in option_map.items()
-            if any(o.attr_code == "brand" for o in opts.values())
+            if any(
+                o.attr_code == "brand"
+                for options_list in opts.values()
+                for o in options_list
+            )
         ),
         None,
     )
@@ -491,25 +495,20 @@ def inject_epicenter_attrs(xml: str) -> str:
             param_opts = option_map.get(prom_name, {})
             if param_opts:
                 # option_map має маппінг для цього prom_param_name.
-                # Кожне значення (після split по ", ") шукається окремо.
-                # Якщо значення не знайдено — логуємо debug (не тихо ігноруємо).
-                # continue виконується завжди: цей prom_name — select/multiselect,
-                # numeric_map lookup нижче не потрібен.
+                # Один (prom_param, prom_value) може маппитись на КІЛЬКА attr_code:
+                #   "Форм-фактор" / "Безконтактна картка" → [4626 "ключ", 10701 "картка"]
+                # param_opts[value] — list[AttrOption], ітеруємо всі.
                 for single_value in (v.strip() for v in prom_value.split(",")):
                     if not single_value:
                         continue
-                    option = param_opts.get(single_value)
-                    if option and option.attr_code not in mapped_attr_codes:
-                        params.append(_render_select_param(option))
-                        mapped_attr_codes.add(option.attr_code)
-                    elif not option:
-                        # Бренд є у Prom, але відсутній в option_map Epicenter → піде дефолт.
-                        # Перевіряємо що attr_code ще не замаплений цим же оффером:
-                        # якщо в Prom два <param name="Компанія-виробник"> ("Dahua Technology" + "Dahua"),
-                        # step 2 об'єднує їх через ", " → split(",") дає два значення;
-                        # перше знаходиться → brand mapped; друге («Dahua») не знаходиться
-                        # але brand вже в mapped_attr_codes → дефолт не застосовується → лог брехливий.
-                        # Рішення: missed_brands тільки якщо attr_code ще НЕ в mapped_attr_codes.
+                    matched_options: list[AttrOption] = param_opts.get(single_value, [])
+                    if matched_options:
+                        for option in matched_options:
+                            if option.attr_code not in mapped_attr_codes:
+                                params.append(_render_select_param(option))
+                                mapped_attr_codes.add(option.attr_code)
+                    else:
+                        # Значення відсутнє в option_map → піде дефолт у кроці 6.
                         if prom_name == _brand_prom_param and "brand" not in mapped_attr_codes:
                             missed_brands[single_value] += 1
                         _logger.debug(

@@ -98,7 +98,10 @@ class AttrMeta:
     attr_type: str   # float | int | text | string
 
 
-OptionMap       = dict[str, dict[str, AttrOption]]  # prom_param → prom_value → AttrOption
+OptionMap       = dict[str, dict[str, list[AttrOption]]]  # prom_param → prom_value → list[AttrOption]
+# Примітка: один (prom_param, prom_value) може маппитись на ДЕКІЛЬКА attr_code.
+# Приклад: "Форм-фактор" / "Безконтактна картка" → [AttrOption(4626, "ключ"), AttrOption(10701, "картка")]
+# dict[str, AttrOption] (старий тип) перезаписував попередній запис → "лузер" ніколи не маппився.
 DefaultsMap     = dict[str, dict[str, AttrOption]]  # set_code   → attr_code  → AttrOption
 NumericMap      = dict[str, AttrMeta]               # prom_param → AttrMeta
 AttrDefaultsMap = dict[str, AttrOption]             # attr_code  → AttrOption (global default)
@@ -412,7 +415,8 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap, AttrDefaultsMap
                 option = key_index[(attr_code, option_code)]
                 for param_alias in prom_aliases:
                     for option_alias in prom_option_aliases:
-                        option_map.setdefault(param_alias, {})[option_alias] = option
+                        # append: один (param, value) може маппитись на кілька attr_code
+                        option_map.setdefault(param_alias, {}).setdefault(option_alias, []).append(option)
                 opt_mapped += 1
 
         # defaults: відкладаємо до завершення побудови key_index.
@@ -516,9 +520,14 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap, AttrDefaultsMap
     wb.close()
 
     logger.info(
-        "📐 option_map: %d prom_params / %d опцій | defaults: %d set_codes "
-        "| attr_defaults: %d глобальних | numeric_map: %d",
-        len(option_map), opt_mapped, len(defaults), len(attr_defaults), len(numeric_map),
+        "📐 option_map: %d prom_params / %d (param,value) ключів / %d opt_mapped записів "
+        "| defaults: %d set_codes | attr_defaults: %d глобальних | numeric_map: %d",
+        len(option_map),
+        sum(len(vals) for vals in option_map.values()),
+        opt_mapped,
+        len(defaults),
+        len(attr_defaults),
+        len(numeric_map),
     )
     return option_map, defaults, numeric_map, attr_defaults, float_defaults
 

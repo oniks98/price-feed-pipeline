@@ -1,15 +1,19 @@
 """
 kasta_export_coef.py
---------------------
+────────────────────
 Генерує data/markets/kasta_coefficients.csv з:
-- data/markets/mappings.xlsx, аркуш "Категорія+"
-- data/markets/kasta_royalty.xlsx, аркуш "Роялті"
+  - data/markets/mappings.xlsx, аркуш «Категорія+»
+  - data/markets/kasta_royalty.xlsx, аркуш «Роялті»
 
-Вивід містить правила цінового діапазону, а не один максимальний коефіцієнт на категорію.
-Кожна категорія Prom зіставляється з рядками роялті Kasta за всіма спільними
-заголовками зіставлення, присутніми в обох файлах, наразі: Приналежність, Група, Вид.
+Алгоритм:
+  1. З маппінгу читаємо prom_category_id → ключі зіставлення (Приналежність, Група, Вид)
+  2. З таблиці роялті збираємо правила цінових діапазонів [price_from, price_to) → royalty_percent
+  3. Для кожного збігу обчислюємо coef = calc_coef(royalty_percent)  # services/market_formula_coef.py
+  4. Вивід містить правила діапазонів, а не один максимальний коефіцієнт на категорію
 
-Run:
+Зіставлення відбувається за спільними заголовками обох файлів: Приналежність, Група, Вид.
+
+Запуск:
     python scripts/kasta_export_coef.py
 """
 
@@ -22,10 +26,12 @@ import re
 import sys
 import warnings
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import openpyxl
+
+from services.market_formula_coef import calc_coef
 
 warnings.filterwarnings(
     "ignore",
@@ -62,7 +68,8 @@ OUTPUT_FIELDS = [
     "price_from",
     "price_to",
     "coef",
-    "coef_uncategorized",
+    "coef_uncategorized",  # J — є оптова ціна, але немає правила для категорії
+    "coef_no_base",         # K — немає оптової ціни → базою стає ціна з XML-фіду
 ]
 
 OUTPUT_MAPPING_FIELDS = [
@@ -71,9 +78,8 @@ OUTPUT_MAPPING_FIELDS = [
     "Вид*:21",
 ]
 
-DEFAULT_UNCATEGORIZED_COEF = Decimal("1.2")
-KASTA_FEE_PERCENT = Decimal("8.5")
-FORMULA_NUMERATOR = Decimal("110")
+DEFAULT_UNCATEGORIZED_COEF = Decimal("1.45")
+DEFAULT_NO_BASE_COEF       = Decimal("1.2")
 
 ROYALTY_MEASURE_HEADERS = {
     "відсоток роялті",
@@ -160,18 +166,6 @@ def format_decimal(value: Decimal) -> str:
     return format(value.normalize(), "f").rstrip("0").rstrip(".")
 
 
-def calc_coef(royalty_percent: Decimal) -> Decimal:
-    denominator = Decimal("100") - (KASTA_FEE_PERCENT + royalty_percent)
-    if denominator <= 0:
-        raise ValueError(
-            f"Invalid royalty={royalty_percent}: 100 - "
-            f"({KASTA_FEE_PERCENT} + {royalty_percent}) = {denominator}"
-        )
-    return (FORMULA_NUMERATOR / denominator).quantize(
-        Decimal("0.01"),
-        rounding=ROUND_HALF_UP,
-    )
-
 
 # ---------------------------------------------------------------------------
 # XLSX / CSV loading
@@ -210,25 +204,43 @@ def get_cell(row: tuple, index: int) -> object:
     return row[index] if index < len(row) else None
 
 
-def read_existing_default_coef(path: Path) -> Decimal:
+def read_existing_defaults(path: Path) -> tuple[Decimal, Decimal]:
+    """Читає coef_uncategorized та coef_no_base зі рядка дефолтів (порожній prom_category_id)."""
     if not path.exists():
-        return DEFAULT_UNCATEGORIZED_COEF
+        return DEFAULT_UNCATEGORIZED_COEF, DEFAULT_NO_BASE_COEF
 
     with path.open(encoding=CSV_ENCODING, errors="replace", newline="") as file:
         reader = csv.DictReader(file, delimiter=CSV_DELIMITER)
-        if not reader.fieldnames or "coef_uncategorized" not in reader.fieldnames:
-            return DEFAULT_UNCATEGORIZED_COEF
+        if not reader.fieldnames:
+            return DEFAULT_UNCATEGORIZED_COEF, DEFAULT_NO_BASE_COEF
+
+        coef_unc: Decimal | None = None
+        coef_nb:  Decimal | None = None
 
         for row in reader:
-            raw = (row.get("coef_uncategorized") or "").strip()
-            if not raw:
-                continue
-            try:
-                return parse_decimal(raw)
-            except InvalidOperation:
-                log.warning("Invalid coef_uncategorized=%r in %s", raw, path)
+            if coef_unc is None:
+                raw = (row.get("coef_uncategorized") or "").strip()
+                if raw:
+                    try:
+                        coef_unc = parse_decimal(raw)
+                    except InvalidOperation:
+                        log.warning("Invalid coef_uncategorized=%r in %s", raw, path)
 
-    return DEFAULT_UNCATEGORIZED_COEF
+            if coef_nb is None:
+                raw = (row.get("coef_no_base") or "").strip()
+                if raw:
+                    try:
+                        coef_nb = parse_decimal(raw)
+                    except InvalidOperation:
+                        log.warning("Invalid coef_no_base=%r in %s", raw, path)
+
+            if coef_unc is not None and coef_nb is not None:
+                break
+
+    return (
+        coef_unc if coef_unc is not None else DEFAULT_UNCATEGORIZED_COEF,
+        coef_nb  if coef_nb  is not None else DEFAULT_NO_BASE_COEF,
+    )
 
 
 def load_mappings(
@@ -335,10 +347,12 @@ def build_output_rows(
     royalty_index: dict[tuple[str, ...], list[RoyaltyRule]],
     dimensions: list[str],
     default_coef: Decimal,
+    no_base_coef: Decimal,
 ) -> tuple[list[dict[str, str]], int, int, int]:
     rows: list[dict[str, str]] = []
     rows.append({field: "" for field in OUTPUT_FIELDS})
     rows[0]["coef_uncategorized"] = format_decimal(default_coef)
+    rows[0]["coef_no_base"]       = format_decimal(no_base_coef)
 
     matched_categories = 0
     unmatched_categories = 0
@@ -445,7 +459,7 @@ def main() -> None:
 
     log.info("matching dimensions: %s", ", ".join(dimensions))
 
-    default_coef = read_existing_default_coef(OUTPUT_CSV_PATH)
+    default_coef, no_base_coef = read_existing_defaults(OUTPUT_CSV_PATH)
     mappings = load_mappings(mapping_rows, dimensions, mapping_headers)
     royalty_index = load_royalty_index(royalty_rows, dimensions, royalty_headers)
 
@@ -454,15 +468,18 @@ def main() -> None:
         royalty_index,
         dimensions,
         default_coef,
+        no_base_coef,
     )
     write_csv(OUTPUT_CSV_PATH, rows)
 
     log.info(
-        "=== done: matched_categories=%d, unmatched_categories=%d, rules=%d, default=%s ===",
+        "=== done: matched_categories=%d, unmatched_categories=%d, rules=%d, "
+        "coef_uncategorized=%s, coef_no_base=%s ===",
         matched,
         unmatched,
         rules,
         format_decimal(default_coef),
+        format_decimal(no_base_coef),
     )
     log.info("saved: %s", OUTPUT_CSV_PATH)
 
