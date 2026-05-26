@@ -1,15 +1,24 @@
 """
-Epicenter pricing rules.
+Епіцентр — правила ціноутворення
+=================================
 
-CSV schema (semicolon-delimited, utf-8-sig):
+Логіка формування ціни (порядок кроків):
+  1. Визначити базову ціну (оптова або XML-ціна).
+  2. Конвертувати у UAH, якщо currencyId ≠ UAH.
+  3. Помножити на коефіцієнт категорії (або на запасний коефіцієнт).
+  4. Округлити вгору до цілої гривні (ceil_uah).
+  5. Якщо отримана ціна потрапляє у діапазон
+     SURCHARGE_PRICE_MIN..SURCHARGE_PRICE_MAX — додати SURCHARGE_AMOUNT.
+
+CSV-схема коефіцієнтів (роздільник «;», кодування utf-8-sig):
   A  prom_category_id
   B  prom_category_name
-  C  coef                — per-category coefficient (applied to wholesale price)
-  D  coef_uncategorized  — wholesale price exists, but no category rule found
-  E  coef_no_base        — no wholesale price → XML price used as base
+  C  coef                — коефіцієнт категорії (застосовується до оптової ціни)
+  D  coef_uncategorized  — оптова ціна є, але правило категорії відсутнє
+  E  coef_no_base        — оптової ціни немає → базою слугує XML-ціна
 
-Unlike Kasta, Epicenter uses a flat lookup (one coefficient per category),
-with no price-range brackets.
+На відміну від Kasta, тут плоска таблиця: один коефіцієнт на категорію,
+без цінових діапазонів.
 """
 
 from __future__ import annotations
@@ -31,7 +40,7 @@ from ._base import (
 )
 
 # ---------------------------------------------------------------------------
-# Paths
+# Шляхи до файлів
 # ---------------------------------------------------------------------------
 
 _ROOT: Final[Path] = Path(__file__).resolve().parents[3]
@@ -42,7 +51,17 @@ _CSV_ENCODING: Final[str] = "utf-8-sig"
 
 
 # ---------------------------------------------------------------------------
-# Data structure
+# Надбавка до ціни після множення на коефіцієнт
+# Застосовується якщо ціна ∈ [SURCHARGE_PRICE_MIN, SURCHARGE_PRICE_MAX]
+# ---------------------------------------------------------------------------
+
+SURCHARGE_PRICE_MIN: Final[Decimal] = Decimal("199")
+SURCHARGE_PRICE_MAX: Final[Decimal] = Decimal("1000")
+SURCHARGE_AMOUNT:    Final[Decimal] = Decimal("35")
+
+
+# ---------------------------------------------------------------------------
+# Структури даних
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -53,7 +72,7 @@ class EpicenterPricingTable:
 
 
 # ---------------------------------------------------------------------------
-# Logger
+# Логер
 # ---------------------------------------------------------------------------
 
 def _build_logger() -> logging.Logger:
@@ -75,7 +94,7 @@ def _build_logger() -> logging.Logger:
 
 
 # ---------------------------------------------------------------------------
-# CSV loading
+# Завантаження CSV-коефіцієнтів
 # ---------------------------------------------------------------------------
 
 @lru_cache(maxsize=1)
@@ -123,7 +142,7 @@ def _load_pricing() -> EpicenterPricingTable:
 
 
 # ---------------------------------------------------------------------------
-# Public API (consumed by market_pricing.py facade)
+# Публічне API (використовується фасадом market_pricing.py)
 # ---------------------------------------------------------------------------
 
 def get_default_coefficient() -> Decimal:
@@ -185,6 +204,10 @@ def apply_prices(
                     reason = "xml_fallback"
 
                 new_price = ceil_uah(base_price * coefficient)
+
+                # Крок 5: надбавка після округлення
+                if SURCHARGE_PRICE_MIN <= new_price <= SURCHARGE_PRICE_MAX:
+                    new_price += SURCHARGE_AMOUNT
 
                 if reason:
                     log.info(
