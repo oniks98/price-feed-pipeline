@@ -18,6 +18,7 @@ from typing import Callable, Final
 
 from .pricing_rules import epicenter as _epicenter
 from .pricing_rules import kasta as _kasta
+from .pricing_rules import rozetka as _rozetka
 
 # ---------------------------------------------------------------------------
 # Registry — add new markets here
@@ -29,11 +30,13 @@ _CoefFn = Callable[[], Decimal]
 _APPLY_ROUTERS: Final[dict[str, _ApplyFn]] = {
     "kasta":     _kasta.apply_prices,
     "epicenter": _epicenter.apply_prices,
+    "rozetka":   _rozetka.apply_prices,
 }
 
 _COEF_ROUTERS: Final[dict[str, _CoefFn]] = {
     "kasta":     _kasta.get_default_coefficient,
     "epicenter": _epicenter.get_default_coefficient,
+    "rozetka":   _rozetka.get_default_coefficient,
 }
 
 
