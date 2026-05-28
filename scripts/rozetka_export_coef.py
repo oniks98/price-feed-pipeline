@@ -10,14 +10,19 @@ rozetka_export_coef.py
   2. Шукаємо rozetka_category_id напряму в індексі роялті → є → стоп, фіксуємо.
   3. Немає → переходимо до «Категорії Розетки», беремо parentCode цієї категорії.
   4. Перевіряємо parentCode в роялті → є → стоп, фіксуємо.
-  5. Немає → піднімаємось ще на рівень вгору (parentCode.parentCode), і так далі.
+  5. Немає → піднімаємось ще на рівень вгору, і так далі.
   6. Якщо жоден рівень ієрархії не знайдено → warning, запис пропускається.
-  Мета: завжди зупинитися на найближчому предку, що є в роялті.
+
+Заповнення першого діапазону (Rozetka rule):
+  Якщо знайдені правила НЕ мають рядка «-» (ставка для всіх цін) і мінімальна
+  ціна правил > 0 → для діапазону [0, min_price_from-1] застосовується ставка
+  батьківської категорії (піднімаємося вгору по ієрархії до першого предка,
+  що має правило для ціни 0; 0-категорія гарантовано має таке правило).
 
 Особливості формату роялті:
   - Порожній «ID категорії» → forward-fill з попереднього рядка
   - Бренд «-»       → "" (правило для всіх брендів)
-  - Діапазон «-»    → price_from="", price_to="" (немає обмеження)
+  - Діапазон «-»    → price_from="", price_to="" (ставка для всіх цін)
   - Діапазон «FROM-TO» → розбивається на дві окремі цифри
   - Відсоток «7,5»  → кома замінюється на крапку
 
@@ -74,7 +79,7 @@ OUTPUT_FIELDS = [
     "rozetka_category_name",
     "matched_royalty_id",      # ID категорії в роялті (може бути предком)
     "matched_royalty_name",    # Назва тієї категорії (для діагностики)
-    "match_level",             # 0 = прямий, 1+ = рівень предка
+    "match_level",             # "0"=прямий, "1+"=рівень предка, "gap:ID"=синтетичний
     "brand",
     "royalty_percent",
     "price_from",
@@ -121,6 +126,9 @@ MAX_HIERARCHY_DEPTH = 10
 _BRAND_ANY  = "-"
 _RANGE_NONE = "-"
 
+# Ціна для пошуку «ставки першого діапазону» в батьківській категорії
+_PRICE_ZERO = Decimal("0")
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(message)s",
@@ -154,8 +162,8 @@ class RozetkaCategory:
 @dataclass(frozen=True)
 class RoyaltyRule:
     brand:           str
-    price_from:      str
-    price_to:        str
+    price_from:      str     # "" означає «з нуля» (рядок «-» у файлі)
+    price_to:        str     # "" означає «до нескінченності»
     price_from_dec:  Decimal
     price_to_dec:    Decimal
     royalty_percent: Decimal
@@ -167,6 +175,21 @@ class MatchResult:
     matched_id:        str   # rozetka_category_id у роялті
     matched_name:      str   # назва тієї категорії
     match_level:       int   # 0 = прямий; 1+ = рівень предка
+
+
+@dataclass(frozen=True)
+class ResolvedRule:
+    """
+    Правило роялті зі збагаченою інформацією про джерело.
+
+    Для звичайних правил matched_id / matched_name = match.matched_id / match.matched_name.
+    Для синтетичного правила (gap-fill) вони вказують на БАТЬКІВСЬКУ категорію,
+    з якої взята ставка, а match_level_str = "gap:<match.matched_id>".
+    """
+    rule:            RoyaltyRule
+    matched_id:      str
+    matched_name:    str
+    match_level_str: str   # "0", "1", "gap:12345" тощо
 
 
 # ---------------------------------------------------------------------------
@@ -335,7 +358,7 @@ def load_mappings(path: Path, sheet: str) -> list[MappingEntry]:
 def load_category_tree(path: Path, sheet: str) -> dict[str, RozetkaCategory]:
     """
     Повертає: rozetka_category_id → RozetkaCategory.
-    Використовується для bubble-up по ієрархії.
+    Використовується для bubble-up по ієрархії та для gap-fill.
     """
     wb, ws = _open_sheet(path, sheet)
     try:
@@ -398,6 +421,12 @@ def load_category_tree(path: Path, sheet: str) -> dict[str, RozetkaCategory]:
 
 
 def _parse_range(raw: str) -> tuple[str, str, Decimal, Decimal]:
+    """
+    Розбирає рядок діапазону цін.
+
+    «-»         → ("", "", 0, Infinity)  — ставка для всіх цін (fallback рядка)
+    «2000-6999» → ("2000", "6999", 2000, 6999)
+    """
     value = normalize_text(raw)
     if not value or value == _RANGE_NONE:
         return "", "", Decimal("0"), Decimal("Infinity")
@@ -503,7 +532,7 @@ def find_rules_by_hierarchy(
     Алгоритм:
       1. Перевіряємо rozetka_id напряму в royalty_index.
       2. Якщо немає — беремо parentCode з category_tree і перевіряємо.
-      3. Повторюємо вгору по дереву до MAX_HIERARCHY_DEPTH.
+      3. Повторюємо вгору до MAX_HIERARCHY_DEPTH.
       4. Якщо нічого не знайдено → повертаємо None.
 
     Повертає MatchResult із першим (найближчим) знайденим набором правил.
@@ -520,8 +549,8 @@ def find_rules_by_hierarchy(
 
         rules = royalty_index.get(current_id)
         if rules:
-            cat       = category_tree.get(current_id)
-            cat_name  = cat.name if cat else current_id
+            cat      = category_tree.get(current_id)
+            cat_name = cat.name if cat else current_id
             return MatchResult(
                 rules        = rules,
                 matched_id   = current_id,
@@ -529,7 +558,6 @@ def find_rules_by_hierarchy(
                 match_level  = level,
             )
 
-        # піднімаємося на рівень вгору
         cat = category_tree.get(current_id)
         if cat is None or not cat.parent_id:
             break
@@ -537,6 +565,160 @@ def find_rules_by_hierarchy(
         level += 1
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# Gap-fill: перший діапазон від батьківської категорії
+# ---------------------------------------------------------------------------
+
+
+def find_gap_fill_rate(
+    source_cat_id: str,
+    category_tree: dict[str, RozetkaCategory],
+    royalty_index: dict[str, list[RoyaltyRule]],
+) -> tuple[Decimal, str, str] | None:
+    """
+    Шукає % комісії для ціни 0 у батьківській категорії source_cat_id,
+    піднімаючись вгору по ієрархії до першого предка, що покриває ціну 0.
+
+    Правило Розетки:
+      «У разі відсутності в певній категорії відсоткової ставки для першого
+      діапазону (від 0 до другого діапазону), для нього діє ставка категорії
+      вищого рівня.»
+
+    Покриття ціни 0 є якщо у предка є:
+      - рядок-прочерк («-», тобто price_from_dec=0, price_to_dec=Infinity)
+      - або конкретний діапазон що починається з 0 (price_from_dec=0)
+
+    Повертає (royalty_percent, cat_id, cat_name) або None якщо не знайдено.
+    """
+    visited:    set[str] = set()
+    cat        = category_tree.get(source_cat_id)
+    current_id = cat.parent_id if cat else ""
+    depth      = 0
+
+    while current_id and depth < MAX_HIERARCHY_DEPTH:
+        if current_id in visited:
+            log.warning("gap_fill: cycle detected at id=%s", current_id)
+            break
+        visited.add(current_id)
+
+        rules = royalty_index.get(current_id, [])
+        for rule in rules:
+            # Перевіряємо лише правила для «всіх брендів» (brand="")
+            if rule.brand != "":
+                continue
+            # Правило покриває ціну 0 якщо price_from_dec == 0
+            # (як dash-рядок з price_from_dec=0,Inf, так і діапазон 0-X)
+            if rule.price_from_dec == _PRICE_ZERO:
+                cat_info = category_tree.get(current_id)
+                cat_name = cat_info.name if cat_info else current_id
+                return rule.royalty_percent, current_id, cat_name
+
+        parent_cat = category_tree.get(current_id)
+        if parent_cat is None or not parent_cat.parent_id:
+            break
+        current_id = parent_cat.parent_id
+        depth += 1
+
+    return None
+
+
+def _has_gap_at_zero(rules: list[RoyaltyRule]) -> tuple[bool, Decimal]:
+    """
+    Визначає чи є «gap» у правилах для ціни від 0.
+
+    Gap існує якщо:
+      - немає рядка-прочерка (dash rule: price_from_dec=0, price_to_dec=Infinity)
+      - і мінімальна price_from_dec серед конкретних діапазонів > 0
+
+    Повертає (has_gap, min_price_from).
+    min_price_from — нижня межа першого конкретного діапазону (або 0 якщо gap=False).
+    """
+    has_dash_rule = any(
+        r.price_from_dec == _PRICE_ZERO and r.price_to_dec == Decimal("Infinity")
+        for r in rules
+        if r.brand == ""
+    )
+    if has_dash_rule:
+        return False, _PRICE_ZERO
+
+    specific = [r for r in rules if r.brand == "" and r.price_from != ""]
+    if not specific:
+        return False, _PRICE_ZERO
+
+    min_from = min(r.price_from_dec for r in specific)
+    return min_from > _PRICE_ZERO, min_from
+
+
+def resolve_match_rules(
+    match:         MatchResult,
+    category_tree: dict[str, RozetkaCategory],
+    royalty_index: dict[str, list[RoyaltyRule]],
+) -> list[ResolvedRule]:
+    """
+    Конвертує MatchResult у список ResolvedRule, додаючи синтетичне правило
+    для першого діапазону [0, min_price_from-1] якщо він відсутній у маппінгу.
+
+    Логіка gap-fill:
+      1. Визначаємо чи є gap (_has_gap_at_zero).
+      2. Якщо є → шукаємо ставку у батьківській категорії (find_gap_fill_rate).
+      3. Синтетичне правило: price_from=0, price_to=min_from-1, % з батька.
+      4. Синтетичне правило додається ПЕРШИМ у список (найменший діапазон).
+      5. В match_level_str синтетичного правила вказується "gap:<source_cat_id>"
+         щоб було видно звідки взята ставка.
+
+    Якщо батьківська ставка не знайдена (нестандартна ієрархія) — логується warning,
+    синтетичне правило НЕ додається (безпечний fallback: інші правила виводяться як є).
+    """
+    resolved: list[ResolvedRule] = []
+    level_str = str(match.match_level)
+
+    has_gap, min_from = _has_gap_at_zero(match.rules)
+
+    if has_gap:
+        gap_price_to = min_from - Decimal("1")
+        fill = find_gap_fill_rate(match.matched_id, category_tree, royalty_index)
+
+        if fill:
+            fill_percent, fill_cat_id, fill_cat_name = fill
+            synthetic = RoyaltyRule(
+                brand           = "",
+                price_from      = "0",
+                price_to        = format_decimal(gap_price_to),
+                price_from_dec  = _PRICE_ZERO,
+                price_to_dec    = gap_price_to,
+                royalty_percent = fill_percent,
+            )
+            resolved.append(ResolvedRule(
+                rule            = synthetic,
+                matched_id      = fill_cat_id,
+                matched_name    = fill_cat_name,
+                match_level_str = f"gap:{match.matched_id}",
+            ))
+            log.info(
+                "gap_fill: cat=%s (%s) | gap [0-%s] → %s%% з батьківської %s (%s)",
+                match.matched_id, match.matched_name,
+                format_decimal(gap_price_to),
+                format_decimal(fill_percent),
+                fill_cat_id, fill_cat_name,
+            )
+        else:
+            log.warning(
+                "gap_fill: cat=%s (%s) | gap [0-%s] → батьківська ставка НЕ знайдена",
+                match.matched_id, match.matched_name,
+                format_decimal(gap_price_to),
+            )
+
+    for rule in match.rules:
+        resolved.append(ResolvedRule(
+            rule            = rule,
+            matched_id      = match.matched_id,
+            matched_name    = match.matched_name,
+            match_level_str = level_str,
+        ))
+
+    return resolved
 
 
 # ---------------------------------------------------------------------------
@@ -593,22 +775,23 @@ def build_output_rows(
     royalty_index: dict[str, list[RoyaltyRule]],
     default_coef:  Decimal,
     no_base_coef:  Decimal,
-) -> tuple[list[dict[str, str]], int, int, int, int]:
+) -> tuple[list[dict[str, str]], int, int, int, int, int]:
     """
-    Повертає (rows, matched_direct, matched_ancestor, unmatched, generated_rules).
+    Повертає (rows, matched_direct, matched_ancestor, unmatched, generated_rules, gap_fills).
     Перший рядок — рядок дефолтів (порожній prom_category_id).
     """
     rows: list[dict[str, str]] = []
 
-    defaults: dict[str, str] = {f: "" for f in OUTPUT_FIELDS}
-    defaults["coef_uncategorized"] = format_decimal(default_coef)
-    defaults["coef_no_base"]       = format_decimal(no_base_coef)
-    rows.append(defaults)
+    defaults_row: dict[str, str] = {f: "" for f in OUTPUT_FIELDS}
+    defaults_row["coef_uncategorized"] = format_decimal(default_coef)
+    defaults_row["coef_no_base"]       = format_decimal(no_base_coef)
+    rows.append(defaults_row)
 
     matched_direct   = 0
     matched_ancestor = 0
     unmatched        = 0
     generated        = 0
+    gap_fills        = 0
 
     for entry in mappings:
         match = find_rules_by_hierarchy(entry.rozetka_id, category_tree, royalty_index)
@@ -637,7 +820,12 @@ def build_output_rows(
                 full_path,
             )
 
-        for rule in match.rules:
+        # Розгортаємо правила з gap-fill якщо потрібно
+        resolved_rules = resolve_match_rules(match, category_tree, royalty_index)
+
+        for resolved in resolved_rules:
+            rule = resolved.rule
+
             try:
                 coef = calc_coef(rule.royalty_percent)
             except ValueError as exc:
@@ -647,14 +835,18 @@ def build_output_rows(
                 )
                 continue
 
+            is_gap_fill = resolved.match_level_str.startswith("gap:")
+            if is_gap_fill:
+                gap_fills += 1
+
             row: dict[str, str] = {f: "" for f in OUTPUT_FIELDS}
             row["prom_category_id"]      = entry.category_id
             row["prom_category_name"]    = entry.category_name
             row["rozetka_category_id"]   = entry.rozetka_id
             row["rozetka_category_name"] = entry.rozetka_name
-            row["matched_royalty_id"]    = match.matched_id
-            row["matched_royalty_name"]  = match.matched_name
-            row["match_level"]           = str(match.match_level)
+            row["matched_royalty_id"]    = resolved.matched_id
+            row["matched_royalty_name"]  = resolved.matched_name
+            row["match_level"]           = resolved.match_level_str
             row["brand"]                 = rule.brand
             row["royalty_percent"]       = format_decimal(rule.royalty_percent)
             row["price_from"]            = rule.price_from
@@ -663,7 +855,7 @@ def build_output_rows(
             rows.append(row)
             generated += 1
 
-    return rows, matched_direct, matched_ancestor, unmatched, generated
+    return rows, matched_direct, matched_ancestor, unmatched, generated, gap_fills
 
 
 # ---------------------------------------------------------------------------
@@ -712,16 +904,18 @@ def main() -> None:
     category_tree = load_category_tree(MAPPINGS_PATH, CATEGORIES_SHEET)
     royalty_index = load_royalty_index(ROYALTY_PATH, ROYALTY_SHEET)
 
-    rows, matched_direct, matched_ancestor, unmatched, generated = build_output_rows(
+    rows, matched_direct, matched_ancestor, unmatched, generated, gap_fills = build_output_rows(
         mappings, category_tree, royalty_index, default_coef, no_base_coef,
     )
 
     write_csv(OUTPUT_CSV_PATH, rows)
 
     log.info(
-        "=== done: matched_direct=%d, matched_ancestor=%d, unmatched=%d, rules=%d, "
+        "=== done: matched_direct=%d, matched_ancestor=%d, unmatched=%d, "
+        "rules=%d (gap_fills=%d), "
         "coef_uncategorized=%s, coef_no_base=%s ===",
-        matched_direct, matched_ancestor, unmatched, generated,
+        matched_direct, matched_ancestor, unmatched,
+        generated, gap_fills,
         format_decimal(default_coef),
         format_decimal(no_base_coef),
     )
