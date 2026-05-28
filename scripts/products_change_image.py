@@ -1,5 +1,5 @@
 """
-change_image.py
+python scripts/change_image.py
 
 Algorithm:
     For every row where Ідентифікатор_товару starts with "prom_",

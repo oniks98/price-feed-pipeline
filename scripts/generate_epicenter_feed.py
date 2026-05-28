@@ -48,7 +48,7 @@ from services.epicenter_attr_service import (
     get_numeric_map,
     get_option_map,
 )
-from services.epicenter_category_service import get_category
+from services.epicenter_category_service import CategoryEntry, build_categories_xml, get_category
 from services.market_pricing import apply_market_prices
 
 # ---------------------------------------------------------------------------
@@ -350,7 +350,7 @@ def _render_attr_payload(payload: dict[str, str]) -> str:
 # Core: inject Epicenter attributes into every offer
 # ---------------------------------------------------------------------------
 
-def inject_epicenter_attrs(xml: str) -> str:
+def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
     """
     Для кожного офера:
       1. <categoryId>N</categoryId>
@@ -376,6 +376,8 @@ def inject_epicenter_attrs(xml: str) -> str:
     mapped_count    = 0
     skipped_no_cat  = 0
     skipped_cat_ids: set[int] = set()
+    # dict keyed by epicenter code — дедублікація, порядок першої появи
+    used: dict[str, CategoryEntry] = {}
     total_params    = 0
     missing_measure = 0
     brand_defaults_total: int = 0             # скільки офферів отримали дефолтний brand
@@ -418,6 +420,7 @@ def inject_epicenter_attrs(xml: str) -> str:
 
         cat_code = category['code']
         cat_name = category['name']
+        used.setdefault(cat_code, category)
 
         # --- 2. Парсимо prom params до видалення ---
         # Prom може передавати кілька <param> тегів з однаковим name (multiselect).
@@ -577,7 +580,7 @@ def inject_epicenter_attrs(xml: str) -> str:
     if skipped_cat_ids:
         ids_str = ', '.join(str(i) for i in sorted(skipped_cat_ids))
         _logger.warning('Prom categoryId без маппінгу (%d): %s', len(skipped_cat_ids), ids_str)
-    return xml
+    return xml, list(used.values())
 
 
 # ---------------------------------------------------------------------------
@@ -636,18 +639,26 @@ def set_shop_name(xml: str) -> str:
     return xml
 
 
-def strip_prom_categories(xml: str) -> str:
+def replace_prom_categories(xml: str, entries: list[CategoryEntry]) -> str:
     """
-    Видаляє блок <categories>...</categories> з Prom XML.
+    Замінює Prom <categories>...</categories> блок на Epicenter-категорії.
 
-    Epicenter-фід не має власного дерева категорій у такому форматі:
-    назва та код категорії підставляються безпосередньо у кожен <offer>
-    через <category code="..."> та <attribute_set code="...">,
-    тому батьківський блок <categories> є зайвим і відсутній у форматі Епіцентру.
+    Вхід entries — лише реально використані у фіді категорії,
+    зібрані під час inject_epicenter_attrs.
+
+    Epicenter використовує рядковий code (= set_code) як id у <categories>.
+
+    До:   <categories><category id="513">Подовжувачі</category>...</categories>
+    Після: <categories>
+               <category id="84863">Мережеві фільтри...</category>
+           </categories>
     """
-    cleaned, n = _PROM_CATEGORIES_RE.subn('', xml)
+    epicenter_block = build_categories_xml(entries)
+
+    # lambda уникає інтерпретації спецсимволів (\1, \g) у назвах категорій
+    cleaned, n = _PROM_CATEGORIES_RE.subn(lambda _: epicenter_block, xml)
     if n:
-        print(f"🗑️  Видалено Prom <categories> блок ({n} входжень)")
+        print(f"🗂️  <categories> замінено на {len(entries)} Epicenter-категорій")
     else:
         _logger.warning("<categories> блок не знайдено у XML — перевірте структуру фіду")
     return cleaned
@@ -732,11 +743,16 @@ def normalize_name_description_tags(xml: str) -> str:
     Безпечно для CDATA-вмісту (ламбда замість рядка заміни уникає проблем з спецсимволами).
     Викликати ПІСЛЯ inject_epicenter_attrs — вміст description вже оновлено.
     """
+    renamed_counts: dict[str, int] = {}
     for prom_tag, epic_tag, lang in _TAG_RENAMES:
         is_description = prom_tag in _DESCRIPTION_TAGS
+        # (?:\s[^>]*)? — матчить теги як з атрибутами (<description lang="ua">),
+        # так і без (<description>). Без цього Prom-фіди, що вже містять lang="ua",
+        # не проходять підміну → CDATA не додається.
+        pattern = rf'<{prom_tag}(?:\s[^>]*)?>(.*?)</{prom_tag}>'
         if is_description:
-            xml = re.sub(
-                rf'<{prom_tag}>(.*?)</{prom_tag}>',
+            xml, n = re.subn(
+                pattern,
                 lambda m, t=epic_tag, l=lang: (
                     f'<{t} lang="{l}">{_wrap_cdata(m.group(1))}</{t}>'
                 ),
@@ -744,13 +760,24 @@ def normalize_name_description_tags(xml: str) -> str:
                 flags=re.DOTALL,
             )
         else:
-            xml = re.sub(
-                rf'<{prom_tag}>(.*?)</{prom_tag}>',
+            xml, n = re.subn(
+                pattern,
                 lambda m, t=epic_tag, l=lang: f'<{t} lang="{l}">{m.group(1)}</{t}>',
                 xml,
                 flags=re.DOTALL,
             )
-    print("🏷️  Перейменовано теги name/description → Epicenter формат (lang=..., description у CDATA)")
+        renamed_counts[prom_tag] = n
+
+    total_renamed = sum(renamed_counts.values())
+    if total_renamed:
+        detail = ", ".join(f"<{t}>×{c}" for t, c in renamed_counts.items() if c)
+        print(f"🏷️  Перейменовано теги → Epicenter формат (lang=..., description у CDATA): {detail}")
+    else:
+        _logger.warning(
+            "normalize_name_description_tags: жодного тегу не перейменовано — "
+            "перевірте структуру фіду (очікуються теги: %s)",
+            ", ".join(t for t, _, _ in _TAG_RENAMES),
+        )
     return xml
 
 
@@ -771,10 +798,10 @@ def main() -> None:
     updated_xml = transform_prom_image_urls(updated_xml)
     updated_xml = fill_missing_vendor(updated_xml)
     updated_xml = add_name_ua(updated_xml)
-    updated_xml = strip_prom_categories(updated_xml)
-    updated_xml = strip_prom_shop_fields(updated_xml)            # видаляємо <company>, <url>, <currencies>
-    updated_xml = inject_epicenter_attrs(updated_xml)
-    updated_xml = normalize_name_description_tags(updated_xml)  # після inject: description_ua вже оновлена
+    updated_xml = strip_prom_shop_fields(updated_xml)                        # видаляємо <company>, <url>, <currencies>
+    updated_xml, used_entries = inject_epicenter_attrs(updated_xml)
+    updated_xml = replace_prom_categories(updated_xml, used_entries)         # Prom → Epicenter <categories>
+    updated_xml = normalize_name_description_tags(updated_xml)               # після inject: description вже оновлено
     updated_xml = set_shop_name(updated_xml)                     # після normalize: <name lang="ua"> вже є
     updated_xml = strip_prom_offer_fields(updated_xml)           # після fill_missing_vendor
     updated_xml = sanitize_russian_chars(updated_xml)             # ы→и, ъ→' у всьому фіді

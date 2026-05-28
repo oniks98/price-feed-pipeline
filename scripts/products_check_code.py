@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-products_check_code.py
+python scripts/products_check_code.py
 ----------------------
 Перевіряє стовпець `Код_товару` у файлі export-products.xlsx:
   - Кожен реальний код повинен зустрічатися рівно 2 рази.
