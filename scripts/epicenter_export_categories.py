@@ -12,7 +12,8 @@ epicenter_export_categories.py
 Якщо файл вже існує, але лист «Категорії Епіцентру» відсутній —
   завантажує категорії з API та додає лист у існуючий файл.
 
-Якщо файл вже існує і лист є — нічого не робить.
+Якщо файл вже існує і лист є — нічого не робить
+  (використай --force щоб примусово перезаписати лист).
 
 Наступний крок після першого запуску:
   Заповни лист «Маппінг» (prom_category_id, Категорія Прому):
@@ -24,10 +25,12 @@ epicenter_export_categories.py
 
 Запуск:
     python scripts/epicenter_export_categories.py
+    python scripts/epicenter_export_categories.py --force   # перезаписати лист
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import requests
@@ -68,6 +71,7 @@ EPICENTER_COLUMNS: list[tuple[str, int]] = [
     ("name_uk",    50),
     ("parentCode", 30),
     ("hasChild",   12),
+    ("deleted",    12),  # E — True = мертва категорія, не використовувати в маппінгу
 ]
 
 
@@ -76,6 +80,7 @@ EPICENTER_COLUMNS: list[tuple[str, int]] = [
 _HDR_FILL    = PatternFill("solid", start_color="1F4E79", end_color="1F4E79")
 _HDR_FONT    = Font(bold=True, color="FFFFFF", name="Calibri", size=14)
 _YELLOW_FILL = PatternFill("solid", start_color="FFFF99", end_color="FFFF99")
+_RED_FILL    = PatternFill("solid", start_color="FFB3B3", end_color="FFB3B3")  # deleted=True
 _THIN_BORDER = Border(
     left=Side(style="thin"), right=Side(style="thin"),
     top=Side(style="thin"),  bottom=Side(style="thin"),
@@ -92,7 +97,7 @@ def _style_header(cell, fill=_HDR_FILL) -> None:
 
 
 def _style_data(cell, fill=None) -> None:
-    cell.font      = Font(name="Calibri", size=9)
+    cell.font      = Font(name="Calibri", size=14)
     cell.alignment = _LEFT
     cell.border    = _THIN_BORDER
     if fill:
@@ -139,7 +144,8 @@ def fetch_epicenter_categories() -> list[dict]:
             break
         page += 1
 
-    print(f"✅ Категорій всього: {len(items)}")
+    deleted_count = sum(1 for c in items if c.get("deleted"))
+    print(f"✅ Категорій всього: {len(items)}  (з них deleted=True: {deleted_count})")
     return items
 
 
@@ -171,6 +177,7 @@ def _build_instructions_sheet(wb: Workbook) -> None:
         ("body",  "   Запуск: python scripts/epicenter_export_categories.py"),
         ("body",  "   Результат: створюється файл epicenter_mappings.xlsx з трьома листами."),
         ("body",  "   Лист «Категорії Епіцентру» — заповнюється автоматично з API."),
+        ("body",  "   ⚠️  Рядки підсвічені червоним = deleted=True (мертві категорії, не використовувати)."),
         ("body",  "   Лист «Маппінг» — містить тільки заголовки (дані додає наступний крок)."),
         ("body",  "   Запуск: python scripts/prom_export_categories.py"),
         ("body",  "   Результат: лист «Маппінг» заповнюється колонками prom_category_id та Категорія Прому."),
@@ -209,9 +216,9 @@ def _build_instructions_sheet(wb: Workbook) -> None:
         if kind == "title":
             cell.font = Font(bold=True, size=14, color="1F4E79", name="Calibri")
         elif kind == "step":
-            cell.font = Font(bold=True, size=11, color="2E75B6", name="Calibri")
+            cell.font = Font(bold=True, size=14, color="2E75B6", name="Calibri")
         elif kind == "warn":
-            cell.font = Font(bold=True, size=10, color="C00000", name="Calibri")
+            cell.font = Font(bold=True, size=14, color="C00000", name="Calibri")
         else:
             cell.font = Font(size=10, name="Calibri")
         cell.alignment = _LEFT
@@ -248,14 +255,18 @@ def _build_categories_sheet(wb: Workbook, categories: list[dict]) -> None:
         ws.column_dimensions[get_column_letter(ci)].width = width
 
     for ri, cat in enumerate(categories, 2):
+        deleted = cat.get("deleted", False)
+        row_fill = _RED_FILL if deleted else None
+
         values = [
             cat.get("code", ""),
             _get_translation(cat.get("translations", [])),
             cat.get("parentCode", ""),
             cat.get("hasChild", ""),
+            deleted,
         ]
         for ci, val in enumerate(values, 1):
-            _style_data(ws.cell(row=ri, column=ci, value=val))
+            _style_data(ws.cell(row=ri, column=ci, value=val), fill=row_fill)
 
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = f"A1:{get_column_letter(len(EPICENTER_COLUMNS))}{len(categories) + 1}"
@@ -271,7 +282,7 @@ def _build_empty_categories_sheet(wb: Workbook) -> None:
 def _repopulate_categories_sheet(wb: Workbook, categories: list[dict]) -> None:
     """
     Видаляє існуючий лист «Категорії Епіцентру» (якщо є) та створює заново.
-    Використовується при відновленні відсутнього листа у вже існуючому файлі.
+    Використовується при відновленні відсутнього листа або при --force.
     """
     if CATEGORIES_SHEET in wb.sheetnames:
         del wb[CATEGORIES_SHEET]
@@ -285,6 +296,7 @@ def _repopulate_categories_sheet(wb: Workbook, categories: list[dict]) -> None:
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    force = "--force" in sys.argv
     print("🚀 epicenter_export_categories.py — КРОК 1\n")
 
     # ── Сценарій 1: файл не існує → створити з нуля ──────────────────────────
@@ -321,28 +333,34 @@ def main() -> None:
     # ── Сценарій 2: файл є → перевірити наявність листа ─────────────────────
     wb = load_workbook(OUTPUT_PATH)
 
-    if CATEGORIES_SHEET in wb.sheetnames:
-        # Сценарій 2а: лист є → нічого не робити
+    if CATEGORIES_SHEET in wb.sheetnames and not force:
+        # Сценарій 2а: лист є, --force не передано → нічого не робити
         print(
             f"ℹ️  Файл вже існує і лист «{CATEGORIES_SHEET}» присутній: {OUTPUT_PATH}\n"
-            f"   Структура створена. Подальші кроки:\n"
+            f"   Щоб перезаписати лист (наприклад, після оновлення схеми),\n"
+            f"   запусти з прапором: python scripts/epicenter_export_categories.py --force\n"
+            f"\n"
+            f"   Подальші кроки:\n"
             f"   1. Заповни «Маппінг»:  python scripts/prom_export_categories.py\n"
             f"   2. Заповни epicenter_category_id: python scripts/epicenter_map_categories.py\n"
             f"   3. Далі → python scripts/epicenter_export_attr_sets.py"
         )
         return
 
-    # Сценарій 2б: файл є, але лист відсутній → докачати і додати
-    print(
-        f"⚠️  Файл існує, але лист «{CATEGORIES_SHEET}» відсутній.\n"
-        f"   Завантажуємо категорії з API та відновлюємо лист...\n"
-    )
+    # Сценарій 2б: лист відсутній АБО --force → докачати і перезаписати
+    if force and CATEGORIES_SHEET in wb.sheetnames:
+        print(f"🔄 --force: перезаписуємо лист «{CATEGORIES_SHEET}»...\n")
+    else:
+        print(
+            f"⚠️  Файл існує, але лист «{CATEGORIES_SHEET}» відсутній.\n"
+            f"   Завантажуємо категорії з API та відновлюємо лист...\n"
+        )
 
     categories = fetch_epicenter_categories()
     _repopulate_categories_sheet(wb, categories)
     wb.save(OUTPUT_PATH)
 
-    print(f"\n✅ Лист «{CATEGORIES_SHEET}» відновлено: {OUTPUT_PATH}")
+    print(f"\n✅ Лист «{CATEGORIES_SHEET}» оновлено: {OUTPUT_PATH}")
     print(f"   Листи: {wb.sheetnames}")
 
 
