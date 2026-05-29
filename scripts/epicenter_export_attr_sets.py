@@ -92,7 +92,7 @@ def _get_translation(translations: list[dict], lang: str = "ua") -> str:
 # ─── Styles ───────────────────────────────────────────────────────────────────
 
 HDR_FILL    = PatternFill("solid", start_color="1F4E79", end_color="1F4E79")
-HDR_FONT    = Font(bold=True, color="FFFFFF", name="Arial", size=10)
+HDR_FONT    = Font(bold=True, color="FFFFFF", name="Calibri", size=14)
 YELLOW_FILL = PatternFill("solid", start_color="FFFF99", end_color="FFFF99")
 GRAY_FILL   = PatternFill("solid", start_color="F2F2F2", end_color="F2F2F2")
 THIN_BORDER = Border(
@@ -111,7 +111,7 @@ def _hdr(cell, fill=HDR_FILL) -> None:
 
 
 def _data(cell, fill=None) -> None:
-    cell.font = Font(name="Arial", size=9)
+    cell.font = Font(name="Calibri", size=14)
     cell.alignment = LEFT
     cell.border = THIN_BORDER
     if fill:
@@ -251,7 +251,7 @@ def build_attr_sets_sheet(wb: Workbook, attr_sets: list[dict], filter_set_codes:
     ws.cell(
         row=1, column=12,
         value="🟡 J (prom_param_name) — заповни вручну або запусти epicenter_map_attributes.py | 🔴 = обов'язково",
-    ).font = Font(bold=True, color="7F6000", name="Arial", size=9)
+    ).font = Font(bold=True, color="7F6000", name="Calibri", size=14)
 
     written = 0
     row_idx = 2

@@ -8,7 +8,8 @@ market_formula_coef.py
 Константи та calc_coef() імпортуються всіма скриптами генерації коефіцієнтів:
   - epicenter_export_coef.py
   - kasta_export_coef.py
-  - rozetka_export_coef.py  (майбутнє)
+  - prom_export_coef.py
+  - rozetka_export_coef.py
 
 Щоб змінити числа формули — редагуй лише цей файл.
 """

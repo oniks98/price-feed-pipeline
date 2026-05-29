@@ -156,7 +156,7 @@ def _parse_option_name(opt: dict) -> str:
 # ─── Styles ───────────────────────────────────────────────────────────────────
 
 HDR_FILL    = PatternFill("solid", start_color="1F4E79", end_color="1F4E79")
-HDR_FONT    = Font(bold=True, color="FFFFFF", name="Arial", size=10)
+HDR_FONT    = Font(bold=True, color="FFFFFF", name="Calibri", size=14)
 ORANGE_FILL = PatternFill("solid", start_color="FCE4D6", end_color="FCE4D6")
 THIN_BORDER = Border(
     left=Side(style="thin"), right=Side(style="thin"),
@@ -495,7 +495,7 @@ def _write_row_to_ws(ws, ri: int, vals: list) -> None:
         cell = ws.cell(row=ri, column=ci, value=val)
         if needs_default:
             cell.fill = ORANGE_FILL
-        cell.font      = Font(name="Arial", size=9)
+        cell.font      = Font(name="Calibri", size=14)
         cell.alignment = LEFT
 
 

@@ -28,9 +28,12 @@ import csv
 import io
 import logging
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 import requests
+
+from services.market_formula_coef import PLATFORM_FEE_PERCENT, calc_coef
 
 # ─────────────────────────────── config ───────────────────────────────────────
 
@@ -58,9 +61,6 @@ CSV_COL_COEF_TRANSITION = "coef_transition"  # источник fallback-зна�
 # Строка дефолтов идентифицируется пустым prom_category_id (первая строка данных).
 # Её coef_transition используется как fallback для категорий, не найденных в Google Sheets.
 # Скрипт эту строку не трогает.
-
-PROM_FEE_PERCENT  = 8.5    # фиксированная комиссия Prom, %
-FORMULA_NUMERATOR = 110.0  # числитель формулы
 
 CSV_DELIMITER   = ";"
 CSV_ENCODING    = "utf-8-sig"  # обрабатывает BOM автоматически
@@ -184,19 +184,6 @@ def read_fallback_coef(csv_path: Path) -> str | None:
     return None
 
 
-# ─────────────────────────────── formula ──────────────────────────────────────
-
-def calc_coef(commission: float) -> float:
-    """Y = round(110 / (100 - (8.5 + X)), 2)"""
-    denominator = 100.0 - (PROM_FEE_PERCENT + commission)
-    if denominator <= 0:
-        raise ValueError(
-            f"Знаменатель ≤ 0 при комиссии={commission}: "
-            f"100 - ({PROM_FEE_PERCENT} + {commission}) = {denominator}"
-        )
-    return round(FORMULA_NUMERATOR / denominator, 2)
-
-
 # ─────────────────────────────── CSV processing ───────────────────────────────
 
 def _ensure_coef_column(fieldnames: list[str]) -> list[str]:
@@ -257,7 +244,7 @@ def process_csv(
         if commission is not None:
             # Обычный путь: считаем коэф по формуле
             try:
-                coef_str = str(calc_coef(commission))
+                coef_str = str(calc_coef(Decimal(str(commission))))
             except ValueError as exc:
                 log.error("category_id=%d: %s — пропускаем", cat_id, exc)
                 continue

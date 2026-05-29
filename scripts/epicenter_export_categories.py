@@ -74,7 +74,7 @@ EPICENTER_COLUMNS: list[tuple[str, int]] = [
 # ─── Styles ───────────────────────────────────────────────────────────────────
 
 _HDR_FILL    = PatternFill("solid", start_color="1F4E79", end_color="1F4E79")
-_HDR_FONT    = Font(bold=True, color="FFFFFF", name="Arial", size=10)
+_HDR_FONT    = Font(bold=True, color="FFFFFF", name="Calibri", size=14)
 _YELLOW_FILL = PatternFill("solid", start_color="FFFF99", end_color="FFFF99")
 _THIN_BORDER = Border(
     left=Side(style="thin"), right=Side(style="thin"),
@@ -92,7 +92,7 @@ def _style_header(cell, fill=_HDR_FILL) -> None:
 
 
 def _style_data(cell, fill=None) -> None:
-    cell.font      = Font(name="Arial", size=9)
+    cell.font      = Font(name="Calibri", size=9)
     cell.alignment = _LEFT
     cell.border    = _THIN_BORDER
     if fill:
@@ -207,13 +207,13 @@ def _build_instructions_sheet(wb: Workbook) -> None:
         ws.row_dimensions[ri].height = 18
         cell = ws.cell(row=ri, column=2, value=text)
         if kind == "title":
-            cell.font = Font(bold=True, size=14, color="1F4E79", name="Arial")
+            cell.font = Font(bold=True, size=14, color="1F4E79", name="Calibri")
         elif kind == "step":
-            cell.font = Font(bold=True, size=11, color="2E75B6", name="Arial")
+            cell.font = Font(bold=True, size=11, color="2E75B6", name="Calibri")
         elif kind == "warn":
-            cell.font = Font(bold=True, size=10, color="C00000", name="Arial")
+            cell.font = Font(bold=True, size=10, color="C00000", name="Calibri")
         else:
-            cell.font = Font(size=10, name="Arial")
+            cell.font = Font(size=10, name="Calibri")
         cell.alignment = _LEFT
 
 
@@ -230,10 +230,10 @@ def _build_mapping_sheet(wb: Workbook) -> None:
     # Підказки у колонці H та I (поза основною таблицею, обидві в row=1)
     hint_col = len(MAPPING_COLUMNS) + 2
     ws.cell(row=1, column=hint_col, value="🟡 C — epicenter_category_id — заповнити (крок 2)").font = (
-        Font(bold=True, color="7F6000", name="Arial", size=9)
+        Font(bold=True, color="7F6000", name="Calibri", size=9)
     )
     ws.cell(row=1, column=hint_col + 1, value="🟢 A, B — заповнює prom_export_categories.py").font = (
-        Font(bold=True, color="375623", name="Arial", size=9)
+        Font(bold=True, color="375623", name="Calibri", size=9)
     )
 
     ws.freeze_panes = "A2"
@@ -265,7 +265,7 @@ def _build_empty_categories_sheet(wb: Workbook) -> None:
     """Запасний варіант: якщо API не відповів — лист з попередженням."""
     ws = wb.create_sheet(CATEGORIES_SHEET)
     ws["A1"] = "⚠️ Не завантажено. Перевір токен API та повтори запуск."
-    ws["A1"].font = Font(bold=True, color="C00000", name="Arial")
+    ws["A1"].font = Font(bold=True, color="C00000", name="Calibri")
 
 
 def _repopulate_categories_sheet(wb: Workbook, categories: list[dict]) -> None:
