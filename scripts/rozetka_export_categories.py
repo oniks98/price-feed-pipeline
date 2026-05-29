@@ -88,7 +88,7 @@ MAPPING_COLUMNS: list[tuple[str, int]] = [
 # ---------------------------------------------------------------------------
 
 HEADER_FILL = PatternFill("solid", start_color="1F4E79", end_color="1F4E79")
-HEADER_FONT = Font(bold=True, color="FFFFFF", name="Arial", size=10)
+HEADER_FONT = Font(bold=True, color="FFFFFF", name="Calibri", size=14)
 THIN_BORDER = Border(
     left=Side(style="thin"),
     right=Side(style="thin"),
@@ -107,7 +107,7 @@ def style_header(cell) -> None:
 
 
 def style_data(cell) -> None:
-    cell.font = Font(name="Arial", size=9)
+    cell.font = Font(name="Calibri", size=14)
     cell.alignment = LEFT
     cell.border = THIN_BORDER
 

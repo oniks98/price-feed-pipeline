@@ -1,4 +1,4 @@
-﻿keyword;theme;schedule;google_cat_id;google_cat_hint;notes
+﻿product_type;theme;schedule;google_cat_id;google_cat_hint;notes
 Дім і сад > сучасний будинок > кодонабірні клавіатури;access;day;1870;Hardware > Locks & Keys > Key Card Entry Systems;auto
 безпека та захист > засоби і системи СККД > турнікети;access;day;1870;Hardware > Locks & Keys > Key Card Entry Systems;auto
 безпека та захист > системи охорони та оповіщення > тривожні кнопки і кнопки виходу;access;day;365;Home & Garden > Business & Home Security > Security System Sensors;auto
@@ -12,6 +12,7 @@
 безпека та захист > засоби і системи СККД > ідентифікатори;access_identifiers;day;1870;Hardware > Locks & Keys > Key Card Entry Systems;auto
 Дім і сад > сучасний будинок > домофони;access_intercom;night;360;Electronics > Communications > Intercoms;auto
 матеріали для ремонту > аксесуари та фурнітура для вікон і дверей > замки та клямки > Замки;access_locks;day;503730;Hardware > Locks & Keys > Locks & Latches;auto
+матеріали для ремонту > аксесуари та фурнітура для вікон і дверей > клямки;access_locks;day;503730;Hardware > Locks & Keys > Locks & Latches;auto
 безпека та захист > засоби і системи СККД > зчитувачі;access_readers;day;1870;Hardware > Locks & Keys > Key Card Entry Systems;auto
 безпека та захист > засоби і системи СККД > системи СКВД;access_systems;day;3873;Home & Garden > Business & Home Security > Home Alarm Systems;auto
 "авто-, мото > аксесуари для авто > засоби аварійної безпеки > проблискові маячки, спецсигнали та сирени";alarm;night;3318;Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Parts > Motor Vehicle Lighting;auto
@@ -61,6 +62,8 @@
 матеріали для ремонту > аксесуари та фурнітура для вікон і дверей > дверні дзвінки;home;day;2972;Hardware > Building Materials > Door Hardware > Door Bells & Chimes;auto
 Дім і сад > посуд > кухонне приладдя > кухонні ножі та підставки;home;day;665;Home & Garden > Kitchen & Dining > Kitchen Tools & Utensils > Kitchen Knives;auto
 Дім і сад > посуд > кухонне приладдя > точила для ножів;home;day;752;Home & Garden > Kitchen & Dining > Kitchen Appliances > Knife Sharpeners;auto
+Дім і сад > догляд за будинком > прибирання > освіжувачі повітря;home;day;3898;Home & Garden > Decor > Home Fragrances > Air Fresheners;auto
+Дім і сад > догляд за будинком > прибирання > щітки та скребачки для прибирання;home;day;4670;Home & Garden > Household Supplies > Household Cleaning Supplies > Scrub Brushes;auto
 техніка та електроніка > комп'ютерна техніка та ПЗ > Планшети;it;day;4745;Electronics > Computers > Tablet Computers;auto
 "техніка та електроніка > комп'ютерна техніка та ПЗ > комплектуючі для комп'ютерної техніки > внутрішні та зовнішні жорсткі диски, HDD, SSD";it;day;380;Electronics > Electronics Accessories > Computer Components > Storage Devices > Hard Drives;auto
 техніка та електроніка > комп'ютерна техніка та ПЗ > монітори;it;day;305;Electronics > Video > Computer Monitors;auto
@@ -111,6 +114,7 @@
 "промислове обладнання та верстати > альтернативні джерела енергії > системи, які використовують сонячну енергію > сонячні панелі";power;day;4714;Hardware > Power & Electrical Supplies > Solar Panels;auto
 техніка та електроніка > аудіотехніка та аксесуари > батарейки;power;day;4928;Electronics > Electronics Accessories > Power > Batteries > General Purpose Batteries;auto
 техніка та електроніка > телефони та аксесуари > аксесуари для мобільних телефонів > Зарядні пристрої для смартфонів та планшетів;power;day;505295;Electronics > Electronics Accessories > Power > Power Adapters & Chargers;auto
+"авто-, мото > електромобільні зарядні пристрої та станції";power_auto;day;7414;"Vehicles & Parts > Vehicle Parts & Accessories > Vehicle Maintenance, Care & Decor > Vehicle Repair & Specialty Tools > Vehicle Battery Chargers";auto
 техніка та електроніка > Повербанки та зарядні станції > Повербанки;power_banks;day;505295;Electronics > Electronics Accessories > Power > Power Adapters & Chargers;auto
 електрообладнання > батареї та акумулятори > акумулятори загального призначення;power_battery;day;4928;Electronics > Electronics Accessories > Power > Batteries > General Purpose Batteries;auto
 електрообладнання > генератори та електростанції > електрогенератори;power_generators;day;1218;Hardware > Power & Electrical Supplies > Generators;auto

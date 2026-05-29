@@ -4,13 +4,17 @@ generate_merchant_feed.py
 Крок 2 пайплайну: обогащает Google Merchant Center XML-фид метками.
 
 Читает:
-  data/markets/rule_merchant_center.csv   → custom_label_0 (theme), custom_label_3 (schedule)
+  data/markets/rule_merchant_center.csv   → custom_label_0 (theme), custom_label_3 (schedule),
+                                            google_product_category (google_cat_id)
 
 Добавляет к каждому <item>:
-  <g:custom_label_0> = theme    (по g:product_type → keyword в rules CSV)
+  <g:google_product_category> = числовой ID из таксономии Google (из google_cat_id в rules CSV)
+  <g:custom_label_0> = theme    (по g:product_type → product_type в rules CSV)
   <g:custom_label_1> = brand    (напрямую из g:brand, очищен от HTML-тегов и сущностей)
   <g:custom_label_2> = price_tier (по g:price → PRICE_BUCKETS)
   <g:custom_label_3> = schedule (по g:product_type → schedule в rules CSV)
+
+Колонки google_cat_hint и notes в rules CSV — справочные, в пайплайн не попадают.
 
 Цена: берётся из <g:price> as-is, только для классификации тира.
 custom_label теги отсутствуют в исходном фиде — вставляются после <g:condition>.
@@ -83,8 +87,9 @@ PRICE_BUCKETS: Final[list[tuple[float, str]]] = [
 # ---------------------------------------------------------------------------
 
 class RuleEntry(NamedTuple):
-    theme:    str
-    schedule: str
+    theme:         str
+    schedule:      str
+    google_cat_id: str
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +127,9 @@ def _normalize_text(raw: str) -> str:
 def load_rules(path: Path) -> dict[str, RuleEntry]:
     """
     Читает rule_merchant_center.csv.
-    Возвращает {keyword: RuleEntry(theme, schedule)}.
+    Колонки: product_type, theme, schedule, google_cat_id.
+    Колонки google_cat_hint и notes — справочные, игнорируются.
+    Возвращает {product_type: RuleEntry(theme, schedule, google_cat_id)}.
     """
     if not path.exists():
         log.error("rules CSV не знайдено: %s", path)
@@ -131,15 +138,19 @@ def load_rules(path: Path) -> dict[str, RuleEntry]:
     index: dict[str, RuleEntry] = {}
     with path.open(encoding=ENCODING, newline="") as f:
         for row in csv.DictReader(f, delimiter=DELIMITER):
-            keyword  = _normalize_text(row.get("keyword")  or "")
-            theme    = _normalize_text(row.get("theme")    or "") or FALLBACK_THEME
-            schedule = _normalize_text(row.get("schedule") or "") or FALLBACK_SCHEDULE
-            if keyword:
-                index[keyword] = RuleEntry(theme=theme, schedule=schedule)
+            product_type  = _normalize_text(row.get("product_type") or "")
+            theme         = _normalize_text(row.get("theme")        or "") or FALLBACK_THEME
+            schedule      = _normalize_text(row.get("schedule")     or "") or FALLBACK_SCHEDULE
+            google_cat_id = (row.get("google_cat_id") or "").strip()
+            if product_type:
+                index[product_type] = RuleEntry(
+                    theme=theme,
+                    schedule=schedule,
+                    google_cat_id=google_cat_id,
+                )
 
     log.info("Завантажено %d правил з %s", len(index), path.name)
     return index
-
 
 
 # ---------------------------------------------------------------------------
@@ -174,17 +185,18 @@ def resolve_labels(
     brand: str,
     price_str: str,
     rules_index: dict[str, RuleEntry],
-) -> tuple[str, str, str, str]:
-    """Возвращает (theme, brand, price_tier, schedule)."""
+) -> tuple[str, str, str, str, str]:
+    """Возвращает (theme, brand, price_tier, schedule, google_cat_id)."""
     rule     = rules_index.get(product_type)
-    theme    = rule.theme    if rule else FALLBACK_THEME
-    schedule = rule.schedule if rule else FALLBACK_SCHEDULE
+    theme    = rule.theme         if rule else FALLBACK_THEME
+    schedule = rule.schedule      if rule else FALLBACK_SCHEDULE
+    cat_id   = rule.google_cat_id if rule else ""
     tier     = classify_price_tier(price_str)
 
     if not rule:
         log.debug("rule miss: product_type=%r", product_type)
 
-    return theme, brand, tier, schedule
+    return theme, brand, tier, schedule, cat_id
 
 
 # ---------------------------------------------------------------------------
@@ -250,19 +262,33 @@ _RE_CUSTOM_LABELS = re.compile(
     re.DOTALL,
 )
 
+_RE_GOOGLE_CAT = re.compile(
+    r"\s*<g:google_product_category>.*?</g:google_product_category>",
+    re.DOTALL,
+)
+
 
 def _xml_escape(value: str) -> str:
     """Экранирует &, <, > для вставки в XML-тег."""
     return html.escape(value, quote=False)
 
 
-def _build_labels_block(theme: str, segment: str, tier: str, schedule: str) -> str:
-    return (
+def _build_labels_block(theme: str, segment: str, tier: str, schedule: str, cat_id: str) -> str:
+    """
+    Строит блок тегов для вставки в <item>.
+    <g:google_product_category> ставится первым (числовой ID таксономии Google),
+    только если cat_id не пустой. custom_label_* идут следом.
+    """
+    labels = (
         f"<g:custom_label_0>{_xml_escape(theme)}</g:custom_label_0>\n"
         f"<g:custom_label_1>{_xml_escape(segment)}</g:custom_label_1>\n"
         f"<g:custom_label_2>{_xml_escape(tier)}</g:custom_label_2>\n"
         f"<g:custom_label_3>{_xml_escape(schedule)}</g:custom_label_3>"
     )
+    if cat_id:
+        # cat_id — числовой ID, xml_escape безвреден но явен
+        return f"<g:google_product_category>{cat_id}</g:google_product_category>\n" + labels
+    return labels
 
 
 def enrich_xml(
@@ -270,14 +296,15 @@ def enrich_xml(
     rules_index: dict[str, RuleEntry],
 ) -> tuple[str, dict[str, int]]:
     """
-    Один проход по всем <item>: вставляет/заменяет custom_label_0..3.
-    Возвращает (обогащённый_xml, stats).
+    Один проход по всем <item>: вставляет/заменяет custom_label_0..3
+    и <g:google_product_category>. Возвращает (обогащённый_xml, stats).
     """
     stats: dict[str, int] = {
         "total":        0,
         "rule_matched": 0,
         "rule_missed":  0,
         "no_brand":     0,
+        "no_cat_id":    0,
     }
 
     def on_item(m: re.Match) -> str:
@@ -293,7 +320,7 @@ def enrich_xml(
         brand        = _normalize_text(brand_match.group(1)) if brand_match else ""
         price_str    = _normalize_text(price_match.group(1)) if price_match else "0"
 
-        theme, segment, tier, schedule = resolve_labels(
+        theme, segment, tier, schedule, cat_id = resolve_labels(
             product_type, brand, price_str, rules_index,
         )
 
@@ -306,9 +333,15 @@ def enrich_xml(
             stats["no_brand"] += 1
             log.debug("no brand for item #%d", stats["total"])
 
-        body = _RE_CUSTOM_LABELS.sub("", body)
+        if not cat_id:
+            stats["no_cat_id"] += 1
+            log.debug("no google_cat_id for product_type=%r item #%d", product_type, stats["total"])
 
-        labels_block = _build_labels_block(theme, segment, tier, schedule)
+        # Идемпотентность: вырезаем старые теги перед вставкой новых
+        body = _RE_CUSTOM_LABELS.sub("", body)
+        body = _RE_GOOGLE_CAT.sub("", body)
+
+        labels_block = _build_labels_block(theme, segment, tier, schedule, cat_id)
 
         condition_match = _RE_CONDITION.search(body)
         if condition_match:
@@ -340,11 +373,12 @@ def run(*, dry_run: bool = False) -> None:
     enriched, stats = enrich_xml(xml, rules_index)
 
     log.info(
-        "Результат: total=%d | rule_matched=%d | rule_missed=%d | no_brand=%d",
+        "Результат: total=%d | rule_matched=%d | rule_missed=%d | no_brand=%d | no_cat_id=%d",
         stats["total"],
         stats["rule_matched"],
         stats["rule_missed"],
         stats["no_brand"],
+        stats["no_cat_id"],
     )
 
     if dry_run:
