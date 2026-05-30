@@ -105,6 +105,24 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Restore ${{ matrix.supplier }}_old.csv from data-latest
+        run: |
+          DATA_LATEST_REMOTE="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+
+          if git ls-remote --exit-code --heads "${DATA_LATEST_REMOTE}" data-latest >/dev/null 2>&1; then
+            git fetch origin data-latest --depth=1 --no-tags
+            mkdir -p data/${{ matrix.supplier }}
+            if git checkout FETCH_HEAD -- data/${{ matrix.supplier }}/${{ matrix.supplier }}_old.csv 2>/dev/null; then
+              echo "✅ Відновлено ${{ matrix.supplier }}_old.csv"
+            else
+              echo "⚠️  ${{ matrix.supplier }}_old.csv не знайдено в data-latest (перший запуск?)"
+            fi
+          else
+            echo "⚠️  Гілка data-latest не існує — fast-path вимкнено (перший запуск?)"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run spider
         uses: nick-fields/retry@v3
         with:
