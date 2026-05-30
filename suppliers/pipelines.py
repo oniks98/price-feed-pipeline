@@ -110,6 +110,8 @@ from suppliers.services.sku_code_service import SkuCodeService
 from suppliers.services.text_sanitizer import TextSanitizer
 from suppliers.constants import get_start_code
 
+RAW_CSV_ROWS_FIELD = "__raw_csv_rows__"
+
 
 class SuppliersPipeline:
     """
@@ -274,6 +276,18 @@ class SuppliersPipeline:
     def process_item(self, item, spider):
         adapter = ItemAdapter(item)
         output_file = adapter.get("output_file", f"{spider.name}.csv")
+
+        raw_rows = adapter.get(RAW_CSV_ROWS_FIELD)
+        if raw_rows is not None:
+            written = 0
+            for row in raw_rows:
+                self._write_raw_row(output_file, row)
+                written += 1
+            self.stats[output_file]["count"] += written
+            if written and hasattr(self, "_spider_logger"):
+                self._spider_logger.info(f"⚡ FAST CSV ROWS: записано {written}")
+            return item
+
         config = self.configs[spider.name]
 
         # ---- FILTERS (через ValidationService) ----------------------- #
@@ -341,10 +355,10 @@ class SuppliersPipeline:
                 #   dealer_uah = dealer_usd × usd_rate  → Оптова_ціна
                 #   prom: retail/dealer >= 1.35 → retail × coef_retail
                 #         retail/dealer <  1.35 → dealer × coef_dealer
-                #   site: retail/dealer >= 1.15 → retail × coef_retail
-                #         retail/dealer <  1.15 → dealer × coef_dealer
+                #   site: retail/dealer >= 1.7 → retail × coef_retail
+                #         retail/dealer <  1.7 → dealer × coef_dealer
                 # Secur dealer (dealer_price_uah є в item, вже в UAH):
-                #   prom: поріг 1.30, site: поріг 1.15
+                #   prom: поріг 1.30, site: поріг 1.7
                 # Legacy / інші пауки (без жодного з вище): коефіцієнтний режим
                 usd_rate_raw         = adapter.get("usd_rate", "")
                 dealer_price_uah_raw = adapter.get("dealer_price_uah", "")
@@ -355,22 +369,13 @@ class SuppliersPipeline:
                     dealer_uah = DealerPriceService.dealer_uah(base_price, usd_rate_raw)
                     cleaned["Оптова_ціна"] = DealerPriceService.format_price(dealer_uah)
 
-                    if channel_config.channel == "prom":
-                        price = DealerPriceService.prom_price(
-                            retail_uah=price_rrp_uah,
-                            dealer_uah_val=dealer_uah,
-                            coef_retail=channel_config.coef_retail,
-                            coef_dealer=channel_config.coef_dealer,
-                            threshold=VIATEC_PROM_THRESHOLD,
-                        )
-                    else:
-                        price = DealerPriceService.site_price(
-                            retail_uah=price_rrp_uah,
-                            dealer_uah_val=dealer_uah,
-                            coef_retail=channel_config.coef_retail,
-                            coef_dealer=channel_config.coef_dealer,
-                            threshold=VIATEC_SITE_THRESHOLD,
-                        )
+                    price = DealerPriceService.channel_price_for_config(
+                        channel_config=channel_config,
+                        retail_uah=price_rrp_uah,
+                        dealer_uah_val=dealer_uah,
+                        prom_threshold=VIATEC_PROM_THRESHOLD,
+                        site_threshold=VIATEC_SITE_THRESHOLD,
+                    )
                     cleaned["Ціна"]   = DealerPriceService.format_price(price)
                     cleaned["Валюта"] = "UAH"
 
@@ -381,22 +386,13 @@ class SuppliersPipeline:
                     )
                     cleaned["Оптова_ціна"] = DealerPriceService.format_price(dealer_uah)
 
-                    if channel_config.channel == "prom":
-                        price = DealerPriceService.prom_price(
-                            retail_uah=price_rrp_uah,
-                            dealer_uah_val=dealer_uah,
-                            coef_retail=channel_config.coef_retail,
-                            coef_dealer=channel_config.coef_dealer,
-                            threshold=SECUR_PROM_THRESHOLD,
-                        )
-                    else:
-                        price = DealerPriceService.site_price(
-                            retail_uah=price_rrp_uah,
-                            dealer_uah_val=dealer_uah,
-                            coef_retail=channel_config.coef_retail,
-                            coef_dealer=channel_config.coef_dealer,
-                            threshold=SECUR_SITE_THRESHOLD,
-                        )
+                    price = DealerPriceService.channel_price_for_config(
+                        channel_config=channel_config,
+                        retail_uah=price_rrp_uah,
+                        dealer_uah_val=dealer_uah,
+                        prom_threshold=SECUR_PROM_THRESHOLD,
+                        site_threshold=SECUR_SITE_THRESHOLD,
+                    )
                     cleaned["Ціна"]   = DealerPriceService.format_price(price)
                     cleaned["Валюта"] = "UAH"
                 else:
@@ -553,6 +549,11 @@ class SuppliersPipeline:
             self._spider_logger.info(
                 f"✅ YIELD [{channel}]: {product_name} | Ціна: {price_display} | Характеристик: {specs_count}"
             )
+
+    def _write_raw_row(self, output_file, row):
+        """Записує вже готовий CSV-рядок без повторної обробки pipeline."""
+        writer = csv.writer(self.files[output_file], delimiter=";", lineterminator="\n")
+        writer.writerow(row)
 
     # ------------------------------------------------------------------ #
     # CLEAN ITEM (з постпроцесами через FieldProcessor)

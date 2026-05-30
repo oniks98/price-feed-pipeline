@@ -36,7 +36,7 @@ SECUR_SITE_THRESHOLD: Decimal = Decimal("1.7")
 
 # ── Дефолти ───────────────────────────────────────────────────────────────────
 
-DEFAULT_USD_RATE: Decimal = Decimal("44.2")
+DEFAULT_USD_RATE: Decimal = Decimal("44.5")
 """Курс USD за замовчуванням — якщо парсинг не вдався (viatec)."""
 
 DEFAULT_COEF_RETAIL: Decimal = Decimal("1")
@@ -145,6 +145,30 @@ class DealerPriceService:
         """
         return DealerPriceService._channel_price(
             retail_uah, dealer_uah_val, coef_retail, coef_dealer, threshold
+        )
+
+    @staticmethod
+    def channel_price_for_config(
+        channel_config,
+        retail_uah: str | Decimal,
+        dealer_uah_val: Decimal,
+        prom_threshold: Decimal,
+        site_threshold: Decimal,
+    ) -> Decimal:
+        """
+        Обчислює ціну для рядка каналу за ChannelConfig-подібним об'єктом.
+
+        Метод спеціально не імпортує ChannelConfig, щоб dealer_price_service
+        залишався незалежним від channel_service і без циклічних імпортів.
+        """
+        is_prom = getattr(channel_config, "channel", "") == "prom"
+        threshold = prom_threshold if is_prom else site_threshold
+        return DealerPriceService._channel_price(
+            retail_uah=retail_uah,
+            dealer_uah_val=dealer_uah_val,
+            coef_retail=channel_config.coef_retail,
+            coef_dealer=channel_config.coef_dealer,
+            threshold=threshold,
         )
 
     # ------------------------------------------------------------------ #

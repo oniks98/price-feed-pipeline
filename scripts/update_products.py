@@ -9,6 +9,8 @@ r"""
 ОНОВЛЕНО:
 - Додано відстеження зміни ціни (колонка PROM: "Ціна"):
   при зміні ціни товар потрапляє у файл імпорту
+- "Оптова_ціна" переноситься з NEW у рядки імпорту, але сама по собі
+  не є причиною імпорту: вона потрібна для майбутніх *_old.csv і генераторів фідів
 - Статистика: одна строка "Змінилася ціна" (сума по всім кейсам)
 - Універсальна логіка для всіх постачальників:
   OLD файл: C:\FullStack\PriceFeedPipeline\data\{supplier}\{supplier}_old.csv
@@ -155,12 +157,13 @@ def merge_rows(
     availability_idx: int,
     quantity_idx: int,
     price_idx: int,
+    wholesale_idx: int,
     chars_start_idx: int
 ) -> List[str]:
     """
     Об'єднує рядки:
     - базові поля зі старого
-    - Наявність/Кількість/Ціна + характеристики з нового
+    - Наявність/Кількість/Ціна/Оптова_ціна + характеристики з нового
     """
     merged = ensure_row_len(old_row.copy(), len(old_headers))
 
@@ -172,6 +175,9 @@ def merge_rows(
 
     if price_idx != -1:
         merged[price_idx] = safe_get(new_row, price_idx)
+
+    if wholesale_idx != -1:
+        merged[wholesale_idx] = safe_get(new_row, wholesale_idx)
 
     # характеристики — повністю з нового
     merged = merged[:chars_start_idx]
@@ -311,6 +317,7 @@ def process_supplier(supplier: str, product_type: str) -> None:
     quantity_idx = get_field_index(old_headers, "Кількість")
     identifier_idx = get_field_index(old_headers, "Ідентифікатор_товару")
     price_idx = get_field_index(old_headers, "Ціна")
+    wholesale_idx = get_field_index(old_headers, "Оптова_ціна")
     chars_start_idx = get_characteristics_start_index(old_headers)
 
     if name_idx == -1:
@@ -324,6 +331,8 @@ def process_supplier(supplier: str, product_type: str) -> None:
         return
     if price_idx == -1:
         print("⚠️  Не знайдено колонку 'Ціна' (перевірка ціни буде пропущена).")
+    if wholesale_idx == -1:
+        print("⚠️  Не знайдено колонку 'Оптова_ціна' (перевірка оптової ціни буде пропущена).")
 
     old_products_dict, old_no_identifier, old_duplicates = build_products_dict(
         old_rows, identifier_idx, name_idx, code_idx
@@ -399,11 +408,13 @@ def process_supplier(supplier: str, product_type: str) -> None:
             availability_changed = old_availability != new_availability
             quantity_changed = old_quantity != new_quantity
 
-            price_changed = False
+            sell_price_changed = False
             if price_idx != -1:
                 old_price = normalize_price(safe_get(old_row, price_idx))
                 new_price = normalize_price(safe_get(new_row, price_idx))
-                price_changed = (old_price != new_price)
+                sell_price_changed = (old_price != new_price)
+
+            price_changed = sell_price_changed
 
             if price_changed:
                 stats["price_changed"] += 1
@@ -419,6 +430,7 @@ def process_supplier(supplier: str, product_type: str) -> None:
                 availability_idx=availability_idx,
                 quantity_idx=quantity_idx,
                 price_idx=price_idx,
+                wholesale_idx=wholesale_idx,
                 chars_start_idx=chars_start_idx,
             )
 

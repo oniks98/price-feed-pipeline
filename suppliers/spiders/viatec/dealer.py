@@ -14,6 +14,7 @@ Spider для парсингу дилерських цін з viatec.ua (USD)
 """
 import scrapy
 import csv
+import re
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urljoin
@@ -25,10 +26,50 @@ from suppliers.services.viatec_feed_service import ViatecFeedService
 from suppliers.services.dealer_price_service import (
     DealerPriceService as ViatecPriceService,
     DEFAULT_USD_RATE,
+    VIATEC_PROM_THRESHOLD,
+    VIATEC_SITE_THRESHOLD,
 )
+from suppliers.services.channel_service import ChannelService
 
 PRIORITY_PRODUCT  = 10
 PRIORITY_CATEGORY = 0
+RAW_CSV_ROWS_FIELD = "__raw_csv_rows__"
+
+
+def _base_sku(identifier: str) -> str:
+    sku = (identifier or "").strip()
+    return sku[5:] if sku.startswith("prom_") else sku
+
+
+def _compact_text(value: str | None) -> str:
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
+def _normalize_card_availability(status_raw: str | None) -> tuple[str, str] | None:
+    status = _compact_text(status_raw)
+    if not status:
+        return None
+
+    quantity_match = re.search(r"\b(\d+)\s*шт\b", status, re.IGNORECASE)
+    if quantity_match and status.startswith("В наявності"):
+        return "+", quantity_match.group(1)
+
+    if status in {"В наявності", "Закінчується"}:
+        return "+", "10000"
+
+    return None
+
+
+def _parse_card_price_usd(raw: str | None) -> str:
+    text = _compact_text(raw).replace("\xa0", " ").replace(",", ".")
+    match = re.search(r"\d+(?:\s\d{3})*(?:\.\d+)?", text)
+    if not match:
+        return ""
+    return match.group(0).replace(" ", "")
+
+
+def _parse_card_rrp_uah(raw: str | None) -> str:
+    return _parse_card_price_usd(raw)
 
 
 class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
@@ -65,6 +106,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         # USD курс: дефолт до парсингу зі сторінки
         self.usd_rate: Decimal = DEFAULT_USD_RATE
 
+        self._project_root = _project_root
         self.category_mapping = self._load_category_mapping()
         self.category_urls    = list(self.category_mapping.keys())
 
@@ -74,6 +116,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
             self.category_enricher = CategorySpecsEnricher(csv_path, self.supplier_id)
         except Exception as exc:
             raise RuntimeError(f"❌ CategorySpecsEnricher не ініціалізовано: {exc}") from exc
+        self.fast_channel_service = ChannelService(Path(csv_path), self.logger, decimal_places=0)
 
         # ── XML-фід: виробники за артикулом (пріоритет перед CSV-словариком) ──
         try:
@@ -81,23 +124,34 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         except Exception as exc:
             raise RuntimeError(f"❌ ViatecFeedService не ініціалізовано: {exc}") from exc
 
+        # OLD index: готові CSV-рядки за SKU для fast-path з категорії.
+        self.old_headers, self.old_index = self._load_old_products_index(_root)
+
         # ── RESUME: завантажуємо вже спарсені товари з попереднього запуску ──
-        already_scraped = self._load_already_scraped_urls(_root)
-        self.processed_products.update(already_scraped)
+        self.processed_skus: set[str] = set()
+        already_scraped_urls, already_scraped_skus = self._load_already_scraped_state(_root)
+        self.processed_products.update(already_scraped_urls)
+        self.processed_skus.update(already_scraped_skus)
+
+        self.fast_reused_count = 0
+        self.fast_updated_count = 0
+        self.full_parse_count = 0
+        self.skipped_not_available_count = 0
 
     # ──────────────────────────────────────────────────────────
     # RESUME
     # ──────────────────────────────────────────────────────────
 
-    def _load_already_scraped_urls(self, root: Path) -> set:
+    def _load_already_scraped_state(self, root: Path) -> tuple[set[str], set[str]]:
         """
-        Читає вже збережений viatec_new.csv і повертає set URL.
-        Якщо файл не існує — порожній set (перший запуск).
+        Читає вже збережений viatec_new.csv і повертає set URL + set SKU.
+        Якщо файл не існує — порожні set-и (перший запуск).
         """
-        urls: set = set()
+        urls: set[str] = set()
+        skus: set[str] = set()
         out_path = root / "data" / "output" / self.output_filename
         if not out_path.exists():
-            return urls
+            return urls, skus
         try:
             with open(out_path, encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
@@ -105,12 +159,66 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
                     url = row.get("Продукт_на_сайті", "").strip()
                     if url:
                         urls.add(url)
+                    sku = _base_sku(row.get("Ідентифікатор_товару", ""))
+                    if sku:
+                        skus.add(sku)
             self.logger.info(
-                f"📋 Resume: знайдено {len(urls)} вже спарсених товарів — пропускаємо"
+                f"📋 Resume: знайдено {len(urls)} URL / {len(skus)} SKU — пропускаємо"
             )
         except Exception as e:
             self.logger.warning(f"⚠️  Не вдалося завантажити resume CSV: {e}")
-        return urls
+        return urls, skus
+
+    def _load_old_products_index(self, root: Path) -> tuple[list[str], dict[str, dict]]:
+        """
+        Індексує data/viatec/viatec_old.csv за базовим SKU.
+
+        У файлі два канали на товар: SKU і prom_SKU. Для fast-path зберігаємо
+        обидва готові рядки та оновлюємо в них тільки поля, які видно в категорії.
+        """
+        path = root / "data" / "viatec" / "viatec_old.csv"
+        if not path.exists():
+            self.logger.warning(f"⚠️ OLD CSV не знайдено, fast-path вимкнено: {path}")
+            return [], {}
+
+        try:
+            with open(path, encoding="utf-8-sig", newline="") as f:
+                reader = csv.reader(f, delimiter=";")
+                headers = next(reader, [])
+                identifier_idx = self._field_index(headers, "Ідентифікатор_товару")
+                wholesale_idx = self._field_index(headers, "Оптова_ціна")
+                url_idx = self._field_index(headers, "Продукт_на_сайті")
+
+                if identifier_idx == -1 or wholesale_idx == -1:
+                    self.logger.warning(
+                        "⚠️ OLD CSV не має Ідентифікатор_товару/Оптова_ціна, fast-path вимкнено"
+                    )
+                    return headers, {}
+
+                index: dict[str, dict] = {}
+                for row in reader:
+                    row = self._ensure_row_len(row, len(headers))
+                    identifier = row[identifier_idx].strip()
+                    sku = _base_sku(identifier)
+                    if not sku:
+                        continue
+
+                    entry = index.setdefault(
+                        sku,
+                        {"rows": [], "wholesale": "", "url": ""},
+                    )
+                    entry["rows"].append(row)
+
+                    if not identifier.startswith("prom_") or not entry["wholesale"]:
+                        entry["wholesale"] = row[wholesale_idx].strip()
+                    if url_idx != -1 and row[url_idx].strip():
+                        entry["url"] = row[url_idx].strip()
+
+            self.logger.info(f"⚡ Fast-path OLD index: {len(index)} SKU з {path.name}")
+            return headers, index
+        except Exception as exc:
+            self.logger.warning(f"⚠️ Не вдалося завантажити OLD index: {exc}")
+            return [], {}
 
     # ──────────────────────────────────────────────────────────
     # CATEGORY MAPPING
@@ -225,34 +333,73 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         )
 
         product_links = response.css("a[href*='/product/']::attr(href)").getall()
-        new_count = 0
+        page_full_count = 0
+        page_fast_reused = 0
+        page_fast_updated = 0
+        page_skipped = 0
+        seen_card_urls: set[str] = set()
 
         if not product_links:
             self.logger.warning(f"⚠️ Не знайдено товарів: {response.url}")
         else:
+            category_cards = self._extract_category_cards(response)
+
+            for i, card in enumerate(category_cards):
+                normalized_url = card["url"]
+                if normalized_url:
+                    seen_card_urls.add(normalized_url)
+
+                result = self._handle_category_card(
+                    card=card,
+                    category_info=category_info,
+                    category_url=category_url,
+                    priority=PRIORITY_PRODUCT + len(product_links) - i,
+                )
+                if result is None:
+                    continue
+
+                kind, payload = result
+                if kind == "skip":
+                    page_skipped += 1
+                    self.skipped_not_available_count += 1
+                    continue
+                if kind == "fast_reused":
+                    page_fast_reused += 1
+                    self.fast_reused_count += 1
+                    yield payload
+                    continue
+                if kind == "fast_updated":
+                    page_fast_updated += 1
+                    self.fast_updated_count += 1
+                    yield payload
+                    continue
+                if kind == "request":
+                    if payload:
+                        page_full_count += 1
+                        self.full_parse_count += 1
+                        yield payload
+
             for i, link in enumerate(product_links):
                 normalized_url = response.urljoin(link).replace("/ru/", "/")
-                if normalized_url in self.processed_products:
+                if normalized_url in seen_card_urls:
                     continue
-                self.processed_products.add(normalized_url)
-                new_count += 1
-                yield scrapy.Request(
-                    url=normalized_url,
-                    callback=self.parse_product,
-                    errback=self.parse_product_error,
-                    meta={
-                        "category_url":     category_url,
-                        "category_ru":      category_info.get("category_ru", ""),
-                        "category_ua":      category_info.get("category_ua", ""),
-                        "group_number":     category_info.get("group_number", ""),
-                        "subdivision_id":   category_info.get("subdivision_id", ""),
-                        "subdivision_link": category_info.get("subdivision_link", ""),
-                    },
+                request = self._schedule_product_request(
+                    normalized_url=normalized_url,
+                    category_info=category_info,
+                    category_url=category_url,
                     priority=PRIORITY_PRODUCT + len(product_links) - i,
-                    dont_filter=True,
                 )
-            if new_count:
-                self.logger.info(f"   ➕ Додано в чергу: {new_count} товарів")
+                if request:
+                    page_full_count += 1
+                    self.full_parse_count += 1
+                    yield request
+
+            if page_full_count or page_fast_reused or page_fast_updated or page_skipped:
+                self.logger.info(
+                    "   ⚡ category fast-path: "
+                    f"old={page_fast_reused}, updated={page_fast_updated}, "
+                    f"full={page_full_count}, skipped_no_stock={page_skipped}"
+                )
 
         # Пагінація
         next_page_link = response.css("a.paggination__next::attr(href)").get()
@@ -293,6 +440,112 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
     # ──────────────────────────────────────────────────────────
     # PARSE PRODUCT
     # ──────────────────────────────────────────────────────────
+
+    def _handle_category_card(
+        self,
+        card: dict,
+        category_info: dict,
+        category_url: str,
+        priority: int,
+    ) -> tuple[str, object] | None:
+        normalized_url = card.get("url", "")
+        sku = _base_sku(card.get("sku", ""))
+
+        if not normalized_url:
+            return None
+        if normalized_url in self.processed_products or (sku and sku in self.processed_skus):
+            return None
+
+        availability_raw = card.get("availability", "")
+        availability_data = _normalize_card_availability(availability_raw)
+        if availability_data is None:
+            if not _compact_text(availability_raw):
+                return "request", self._schedule_product_request(
+                    normalized_url=normalized_url,
+                    category_info=category_info,
+                    category_url=category_url,
+                    priority=priority,
+                    sku=sku,
+                )
+            self.processed_products.add(normalized_url)
+            if sku:
+                self.processed_skus.add(sku)
+            return "skip", None
+
+        if not sku or not card.get("price"):
+            return "request", self._schedule_product_request(
+                normalized_url=normalized_url,
+                category_info=category_info,
+                category_url=category_url,
+                priority=priority,
+                sku=sku,
+            )
+
+        old_entry = self.old_index.get(sku)
+        if not old_entry:
+            return "request", self._schedule_product_request(
+                normalized_url=normalized_url,
+                category_info=category_info,
+                category_url=category_url,
+                priority=priority,
+                sku=sku,
+            )
+
+        self.processed_products.add(normalized_url)
+        self.processed_skus.add(sku)
+
+        availability, quantity = availability_data
+        wholesale = self._dealer_wholesale_uah(card["price"])
+        rows = self._build_fast_rows(
+            old_entry=old_entry,
+            category_url=category_url,
+            availability=availability,
+            quantity=quantity,
+            wholesale=wholesale,
+            price_rrp_uah=card.get("price_rrp_uah", ""),
+            product_url=normalized_url,
+        )
+
+        item = {
+            RAW_CSV_ROWS_FIELD: rows,
+            "output_file": self.output_filename,
+        }
+        kind = (
+            "fast_reused"
+            if self._prices_equal(old_entry.get("wholesale", ""), wholesale)
+            else "fast_updated"
+        )
+        return kind, item
+
+    def _schedule_product_request(
+        self,
+        normalized_url: str,
+        category_info: dict,
+        category_url: str,
+        priority: int,
+        sku: str = "",
+    ):
+        if normalized_url in self.processed_products or (sku and sku in self.processed_skus):
+            return None
+        self.processed_products.add(normalized_url)
+        if sku:
+            self.processed_skus.add(sku)
+
+        return scrapy.Request(
+            url=normalized_url,
+            callback=self.parse_product,
+            errback=self.parse_product_error,
+            meta={
+                "category_url":     category_url,
+                "category_ru":      category_info.get("category_ru", ""),
+                "category_ua":      category_info.get("category_ua", ""),
+                "group_number":     category_info.get("group_number", ""),
+                "subdivision_id":   category_info.get("subdivision_id", ""),
+                "subdivision_link": category_info.get("subdivision_link", ""),
+            },
+            priority=priority,
+            dont_filter=True,
+        )
 
     def parse_product(self, response):
         try:
@@ -409,6 +662,166 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
     # HELPERS
     # ──────────────────────────────────────────────────────────
 
+    def _extract_category_cards(self, response) -> list[dict[str, str]]:
+        cards: list[dict[str, str]] = []
+        for sku_node in response.css("p.categories__item-code"):
+            card = sku_node.xpath("./ancestor::*[.//a[contains(@href, '/product/')]][1]")
+            if not card:
+                continue
+
+            link = card.css("a[href*='/product/']::attr(href)").get()
+            if not link:
+                continue
+
+            price = ""
+            for price_block in card.css("p.categories__item-bn-price"):
+                price_text = _compact_text(" ".join(price_block.css("::text").getall()))
+                if "ціна по б/г" not in price_text:
+                    continue
+                raw_price = price_block.css("span.color-main.bold::text").get("")
+                price = _parse_card_price_usd(raw_price)
+                break
+
+            price_rrp_uah = ""
+            for rrp_node in card.css("p.color-gray-80.font-0-8, p.font-0-8"):
+                rrp_text = _compact_text(" ".join(rrp_node.css("::text").getall()))
+                if "РРЦ" not in rrp_text:
+                    continue
+                price_rrp_uah = _parse_card_rrp_uah(rrp_text)
+                break
+
+            availability = _compact_text(
+                " ".join(
+                    card.css(
+                        "div.card-header__card-status-text::text, "
+                        "div.card-header__card-status-text *::text"
+                    ).getall()
+                )
+            )
+
+            cards.append({
+                "url": response.urljoin(link).replace("/ru/", "/"),
+                "sku": _compact_text(sku_node.css("::text").get("")),
+                "price": price,
+                "price_rrp_uah": price_rrp_uah,
+                "availability": availability,
+            })
+        return cards
+
+    def _build_fast_rows(
+        self,
+        old_entry: dict,
+        category_url: str,
+        availability: str,
+        quantity: str,
+        wholesale: str,
+        price_rrp_uah: str,
+        product_url: str,
+    ) -> list[list[str]]:
+        identifier_idx = self._field_index(self.old_headers, "Ідентифікатор_товару")
+        availability_idx = self._field_index(self.old_headers, "Наявність")
+        quantity_idx = self._field_index(self.old_headers, "Кількість")
+        price_idx = self._field_index(self.old_headers, "Ціна")
+        wholesale_idx = self._field_index(self.old_headers, "Оптова_ціна")
+        url_idx = self._field_index(self.old_headers, "Продукт_на_сайті")
+
+        rows: list[list[str]] = []
+        for old_row in old_entry.get("rows", []):
+            row = self._ensure_row_len(old_row.copy(), len(self.old_headers))
+            old_wholesale = row[wholesale_idx] if wholesale_idx != -1 else ""
+            if price_idx != -1 and wholesale_idx != -1:
+                channel_config = self._channel_config_for_fast_row(row, identifier_idx, category_url)
+                adjusted_price = self._fast_channel_price(wholesale, price_rrp_uah, channel_config)
+                if not adjusted_price:
+                    adjusted_price = self._adjust_channel_price(
+                        old_price=row[price_idx],
+                        old_wholesale=old_wholesale,
+                        new_wholesale=wholesale,
+                    )
+                if adjusted_price:
+                    row[price_idx] = adjusted_price
+            if availability_idx != -1:
+                row[availability_idx] = availability
+            if quantity_idx != -1:
+                row[quantity_idx] = quantity
+            if wholesale_idx != -1:
+                row[wholesale_idx] = wholesale
+            if url_idx != -1 and product_url:
+                row[url_idx] = product_url
+            rows.append(row)
+        return rows
+
+    def _dealer_wholesale_uah(self, dealer_usd: str) -> str:
+        dealer_uah = ViatecPriceService.dealer_uah(dealer_usd, self.usd_rate)
+        return ViatecPriceService.format_price(dealer_uah)
+
+    def _channel_config_for_fast_row(self, row: list[str], identifier_idx: int, category_url: str):
+        if identifier_idx == -1:
+            return None
+
+        identifier = row[identifier_idx].strip()
+        if not identifier:
+            return None
+
+        channels = self.fast_channel_service.resolve_channels(category_url)
+        for channel_config in sorted(channels, key=lambda c: len(c.prefix or ""), reverse=True):
+            if channel_config.prefix:
+                if identifier.startswith(channel_config.prefix):
+                    return channel_config
+            elif identifier == _base_sku(identifier):
+                return channel_config
+        return None
+
+    def _fast_channel_price(self, wholesale: str, price_rrp_uah: str, channel_config) -> str:
+        if channel_config is None:
+            return ""
+
+        dealer_uah = ViatecPriceService.to_decimal(wholesale, Decimal("0"))
+        if dealer_uah <= 0:
+            return ""
+
+        price = ViatecPriceService.channel_price_for_config(
+            channel_config=channel_config,
+            retail_uah=price_rrp_uah,
+            dealer_uah_val=dealer_uah,
+            prom_threshold=VIATEC_PROM_THRESHOLD,
+            site_threshold=VIATEC_SITE_THRESHOLD,
+        )
+        return ViatecPriceService.format_price(price)
+
+    def _adjust_channel_price(self, old_price: str, old_wholesale: str, new_wholesale: str) -> str:
+        """
+        Fallback якщо для рядка не знайдено channel config: зберігає стару маржу.
+        """
+        old_price_dec = ViatecPriceService.to_decimal(old_price, Decimal("0"))
+        old_wholesale_dec = ViatecPriceService.to_decimal(old_wholesale, Decimal("0"))
+        new_wholesale_dec = ViatecPriceService.to_decimal(new_wholesale, Decimal("0"))
+        if old_price_dec <= 0 or old_wholesale_dec <= 0 or new_wholesale_dec <= 0:
+            return ""
+        return ViatecPriceService.format_price(
+            old_price_dec * new_wholesale_dec / old_wholesale_dec
+        )
+
+    def _prices_equal(self, left: str, right: str) -> bool:
+        left_dec = ViatecPriceService.to_decimal(left, Decimal("0"))
+        right_dec = ViatecPriceService.to_decimal(right, Decimal("0"))
+        return left_dec == right_dec
+
+    @staticmethod
+    def _field_index(headers: list[str], field_name: str) -> int:
+        try:
+            return headers.index(field_name)
+        except ValueError:
+            return -1
+
+    @staticmethod
+    def _ensure_row_len(row: list[str], target_len: int) -> list[str]:
+        if len(row) < target_len:
+            return row + [""] * (target_len - len(row))
+        if len(row) > target_len:
+            return row[:target_len]
+        return row
+
     def _parse_rrp_uah(self, response) -> str:
         """
         Парсить ціну РРЦ в гривнях зі сторінки товару.
@@ -433,6 +846,11 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         next_index = current_index + 1
         if next_index >= len(self.category_urls):
             self.logger.info("✅ ВСІ КАТЕГОРІЇ ОБРОБЛЕНІ")
+            self.logger.info(
+                "⚡ Fast-path summary: "
+                f"old={self.fast_reused_count}, updated={self.fast_updated_count}, "
+                f"full={self.full_parse_count}, skipped_no_stock={self.skipped_not_available_count}"
+            )
             return None
         next_url = self.category_urls[next_index]
         self.logger.info(f"🚀 НАСТУПНА КАТЕГОРІЯ [{next_index + 1}/{len(self.category_urls)}]")
