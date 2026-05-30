@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import re
 from decimal import Decimal
 from pathlib import Path
@@ -113,6 +114,63 @@ from suppliers.constants import get_start_code
 RAW_CSV_ROWS_FIELD = "__raw_csv_rows__"
 
 
+def _compute_config_hash(paths: list) -> str:
+    """
+    MD5 всіх існуючих конфіг-файлів постачальника (sorted by name).
+    Відсутні/None файли пропускаються без помилок.
+    """
+    hasher = hashlib.md5(usedforsecurity=False)
+    for path in sorted(
+        (p for p in paths if p is not None and Path(p).exists()),
+        key=lambda p: Path(p).name,
+    ):
+        hasher.update(Path(path).read_bytes())
+    return hasher.hexdigest()
+
+
+def _check_config_invalidation(
+    config: "SupplierConfig",
+    sku_service: "SkuCodeService",
+    spider,
+) -> None:
+    """
+    Порівнює MD5-хеш конфіг-файлів постачальника з попереднім run.
+    Якщо хеш змінився (будь-який з файлів) — скидає fast-path:
+    old_index та old_headers очищаються, всі товари підуть через
+    повний перепарсинг і отримають оновлені хар-ки / групи / ключові слова.
+
+    Відстежувані файли:
+        {supplier}_category.csv      → CategorySpecsEnricher, групи, канали
+        {supplier}_keywords.csv      → ProductKeywordsGenerator
+        {supplier}_manufacturers.csv → ManufacturersDB (виробники, країни)
+        {supplier}_mapping_rules.csv → AttributeMapper (маппінг хар-к)
+    """
+    current_hash = _compute_config_hash([
+        config.category_file,
+        config.keywords_file,
+        config.manufacturers_file,
+        config.mapping_rules_file,
+    ])
+    stored_hash = sku_service.get_meta("config_hash")
+
+    if stored_hash == current_hash:
+        return
+
+    if stored_hash:
+        spider.logger.info(
+            "♻️  Config-файли змінились → fast-path скинуто, "
+            "всі товари пройдуть повний перепарсинг"
+        )
+        if hasattr(spider, "old_index"):
+            spider.old_index = {}
+        if hasattr(spider, "old_headers"):
+            spider.old_headers = []
+    else:
+        spider.logger.info(f"🔑 Config hash збережено (перший run)")
+
+    sku_service.set_meta("config_hash", current_hash)
+
+
 class SuppliersPipeline:
     """
     ЄДИНИЙ pipeline для всіх постачальників з підтримкою МУЛЬТИКАНАЛЬНОСТІ.
@@ -216,7 +274,14 @@ class SuppliersPipeline:
             logger=spider.logger,
         )
 
-        # 5️⃣ Статистика
+        # 5️⃣ Перевірка config-хешу — скидає fast-path якщо змінились конфіги
+        _check_config_invalidation(
+            config,
+            self.sku_code_services[spider.name],
+            spider,
+        )
+
+        # 6️⃣ Статистика
         self.stats[output_file] = {
             "count": 0,
             "filtered_no_price": 0,

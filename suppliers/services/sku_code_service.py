@@ -20,13 +20,16 @@ class SkuCodeService:
     """Маппінг SKU постачальника → наш внутрішній Код_товару."""
 
     AUTOSAVE_EVERY = 10
+    META_PREFIX = "__meta__"
 
     def __init__(self, map_file: Path, start_code: int = 200001, logger=None):
         self._map_file = map_file
         self._logger = logger or logging.getLogger(__name__)
         self._start_code = int(start_code)  # ініціалізуємо ДО _load()
 
-        self._map: dict[str, int] = self._load()
+        self._map: dict[str, int] = {}
+        self._meta: dict[str, str] = {}
+        self._load()  # заповнює _map і _meta
         self._dirty = False
         self._new_since_save = 0
 
@@ -60,6 +63,15 @@ class SkuCodeService:
 
         return next_code
 
+    def get_meta(self, key: str) -> str:
+        """Повертає мета-значення за ключем або порожній рядок."""
+        return self._meta.get(key, "")
+
+    def set_meta(self, key: str, value: str) -> None:
+        """Зберігає мета-значення. Буде записано при наступному save()."""
+        self._meta[key] = str(value)
+        self._dirty = True
+
     def save(self) -> None:
         """
         Атомарне збереження на диск: пише в .tmp → робить replace.
@@ -71,7 +83,9 @@ class SkuCodeService:
         self._map_file.parent.mkdir(parents=True, exist_ok=True)
 
         tmp_file = self._map_file.with_suffix(self._map_file.suffix + ".tmp")
-        payload = {str(k): int(v) for k, v in self._map.items()}
+        payload: dict = {str(k): int(v) for k, v in self._map.items()}
+        for mk, mv in self._meta.items():
+            payload[f"{self.META_PREFIX}{mk}"] = mv
 
         with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
@@ -92,26 +106,33 @@ class SkuCodeService:
     # PRIVATE
     # ------------------------------------------------------------------ #
 
-    def _load(self) -> dict[str, int]:
-        """Завантажує існуючий словник або повертає порожній."""
+    def _load(self) -> None:
+        """Завантажує SKU → Код у self._map та мета-дані у self._meta."""
         if not self._map_file.exists():
             self._logger.info(
                 f"📋 sku_map не знайдено ({self._map_file.name}), починаємо новий"
             )
-            return {}
+            return
 
         try:
             with open(self._map_file, encoding="utf-8") as f:
                 data = json.load(f)
+            for k, v in data.items():
+                sk = str(k)
+                if sk.startswith(self.META_PREFIX):
+                    self._meta[sk[len(self.META_PREFIX):]] = str(v)
+                else:
+                    try:
+                        self._map[sk] = int(v)
+                    except (ValueError, TypeError):
+                        pass
             self._logger.info(
-                f"✅ sku_map завантажено: {len(data)} записів з {self._map_file.name}"
+                f"✅ sku_map завантажено: {len(self._map)} записів з {self._map_file.name}"
             )
-            return {str(k): int(v) for k, v in data.items()}
         except Exception as e:
             self._logger.error(
                 f"❌ Помилка читання sku_map ({self._map_file.name}): {e}. Починаємо новий."
             )
-            return {}
 
     def _next_free_code(self) -> int:
         """Наступний вільний код: max існуючих + 1, або start_code."""
