@@ -495,13 +495,14 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         self.processed_skus.add(sku)
 
         availability, quantity = availability_data
-        wholesale = self._dealer_wholesale_uah(card["price"])
+        wholesale, dealer_uah_raw = self._dealer_wholesale_uah(card["price"])
         rows = self._build_fast_rows(
             old_entry=old_entry,
             category_url=category_url,
             availability=availability,
             quantity=quantity,
             wholesale=wholesale,
+            dealer_uah_raw=dealer_uah_raw,
             price_rrp_uah=card.get("price_rrp_uah", ""),
             product_url=normalized_url,
         )
@@ -715,6 +716,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         availability: str,
         quantity: str,
         wholesale: str,
+        dealer_uah_raw: Decimal,
         price_rrp_uah: str,
         product_url: str,
     ) -> list[list[str]]:
@@ -731,7 +733,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
             old_wholesale = row[wholesale_idx] if wholesale_idx != -1 else ""
             if price_idx != -1 and wholesale_idx != -1:
                 channel_config = self._channel_config_for_fast_row(row, identifier_idx, category_url)
-                adjusted_price = self._fast_channel_price(wholesale, price_rrp_uah, channel_config)
+                adjusted_price = self._fast_channel_price(dealer_uah_raw, price_rrp_uah, channel_config)
                 if not adjusted_price:
                     adjusted_price = self._adjust_channel_price(
                         old_price=row[price_idx],
@@ -751,9 +753,16 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
             rows.append(row)
         return rows
 
-    def _dealer_wholesale_uah(self, dealer_usd: str) -> str:
+    def _dealer_wholesale_uah(self, dealer_usd: str) -> tuple[str, Decimal]:
+        """
+        Повертає (formatted_str, raw_decimal):
+          - formatted_str → колонка Оптова_ціна в CSV (округлено)
+          - raw_decimal   → для обчислення Ціни (без проміжного округлення)
+        Без цього поділу fast-path і full-parse давали різницю ±1 грн
+        через подвійне округлення: dealer_usd×rate → round → ×coef → round.
+        """
         dealer_uah = ViatecPriceService.dealer_uah(dealer_usd, self.usd_rate)
-        return ViatecPriceService.format_price(dealer_uah)
+        return ViatecPriceService.format_price(dealer_uah), dealer_uah
 
     def _channel_config_for_fast_row(self, row: list[str], identifier_idx: int, category_url: str):
         if identifier_idx == -1:
@@ -772,18 +781,19 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
                 return channel_config
         return None
 
-    def _fast_channel_price(self, wholesale: str, price_rrp_uah: str, channel_config) -> str:
+    def _fast_channel_price(self, dealer_uah_raw: Decimal, price_rrp_uah: str, channel_config) -> str:
+        """Обчислює Ціну для fast-path, використовуючи точний (не округлений)
+        dealer_uah_raw — так само, як це робить full-parse через pipeline.
+        Це усуває розбіжність ±1 грн між двома сценаріями."""
         if channel_config is None:
             return ""
-
-        dealer_uah = ViatecPriceService.to_decimal(wholesale, Decimal("0"))
-        if dealer_uah <= 0:
+        if dealer_uah_raw <= 0:
             return ""
 
         price = ViatecPriceService.channel_price_for_config(
             channel_config=channel_config,
             retail_uah=price_rrp_uah,
-            dealer_uah_val=dealer_uah,
+            dealer_uah_val=dealer_uah_raw,
             prom_threshold=VIATEC_PROM_THRESHOLD,
             site_threshold=VIATEC_SITE_THRESHOLD,
         )
