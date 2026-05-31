@@ -18,7 +18,9 @@ OptionMap  = dict[str, dict[str, AttrOption]]
 DefaultsMap = dict[str, dict[str, AttrOption]]
     set_code → attr_code → AttrOption (дефолтна опція для конкретного сету)
     Приклад: {"5926": {"measure": AttrOption(..., option_code="measure_pcs", option_name="шт.")}}
-    Для multiselect дефолтів option_code містить кілька кодів через кому (без пробілів):
+    Для multiselect дефолтів у xlsx default_option_code задається через «;» (крапка з комою):
+    Приклад у xlsx: "bsz6btxa ; wle9vq5zsirz1dni"
+    У зібраному AttrOption option_code — через кому (вихідний формат Epicenter XML):
     Приклад: {"5926": {"3176":  AttrOption(option_code="bsz6btxa,wle9vq5zsirz1dni", option_name="тварини, коти")}}
 
 NumericMap = dict[str, AttrMeta]
@@ -129,25 +131,28 @@ def _parse_set_codes(raw: object) -> list[str]:
 
 def _parse_default_option_codes(raw: object) -> list[str]:
     """
-    Парсить default_option_code як comma-separated список кодів опцій.
+    Парсить default_option_code як semicolon-separated список кодів опцій.
 
-    Розділювач — кома БЕЗ пробілів: option_code є технічними slug-рядками
-    (напр. "bsz6btxa"), тому кома без пробілу є однозначним роздільником.
+    Розділювач — «;» (крапка з комою), узгоджено з prom_param_name і prom_option_name.
+    Пробіли навколо «;» ігноруються.
     Порівняти з:
         _parse_prom_param_aliases  → розділювач «;»  (назви можуть містити кому)
+        _parse_prom_option_aliases → розділювач «;»  (значення можуть містити кому)
         _parse_set_codes           → розділювач «,»  (числові ID, кома безпечна)
 
     Одне значення — повертає список з одного елемента (поведінка без змін).
-    Кілька значень → merged AttrOption з combined option_code і option_name.
+    Кілька значень → _merge_options збирає combined option_code через «,» для XML.
 
-    Приклад: "bsz6btxa,wle9vq5zsirz1dni"
-             → ["bsz6btxa", "wle9vq5zsirz1dni"]
-    Приклад: "measure_pcs"
-             → ["measure_pcs"]
+    Приклад у xlsx: "bsz6btxa ; wle9vq5zsirz1dni"
+                    → ["bsz6btxa", "wle9vq5zsirz1dni"]
+    Приклад у xlsx: "measure_pcs"
+                    → ["measure_pcs"]
+    Приклад у xlsx: "0a3018e14116a9a8427677e287a3f265 ; 5eb7a105492792475511f1d900ca75b7"
+                    → ["0a3018e14116a9a8427677e287a3f265", "5eb7a105492792475511f1d900ca75b7"]
     """
     if not raw:
         return []
-    return [s.strip() for s in str(raw).split(",") if s.strip()]
+    return [s.strip() for s in str(raw).split(";") if s.strip()]
 
 
 def _load_workbook() -> openpyxl.Workbook:
