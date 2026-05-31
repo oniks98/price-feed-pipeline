@@ -48,7 +48,7 @@ from services.epicenter_attr_service import (
     get_numeric_map,
     get_option_map,
 )
-from services.epicenter_category_service import CategoryEntry, build_categories_xml, get_category
+from services.epicenter_category_service import CategoryEntry, get_category
 from services.market_pricing import apply_market_prices
 
 # ---------------------------------------------------------------------------
@@ -612,80 +612,27 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
 # ---------------------------------------------------------------------------
 
 
-_PROM_CATEGORIES_RE: Final[re.Pattern[str]] = re.compile(
-    r'<categories>.*?</categories>',
-    re.DOTALL,
-)
-
-# Shop-level теги що відсутні у форматі Epicenter
-_PROM_SHOP_FIELDS_TO_STRIP: Final[tuple[str, ...]] = (
-    "company",
-    "url",
-    "currencies",
-)
-
-# Назва магазину у вихідному фіді
-SHOP_NAME: Final[str] = "DomSys"
-
-
-def strip_prom_shop_fields(xml: str) -> str:
+def strip_prom_shop_block(xml: str) -> str:
     """
-    Видаляє shop-рівневі Prom-теги що відсутні у форматі Epicenter:
-        <company>, <url>, <currencies>.
+    Витягує <offers>...</offers> з внутрішньості <shop> і піднімає його
+    напряму в <yml_catalog>, видаляючи усе інше (<name>, <company>, <currencies>, <categories>).
+
+    Prom: <yml_catalog><shop><name/>...<offers>...</offers></shop></yml_catalog>
+    Epicenter: <yml_catalog><offers>...</offers></yml_catalog>
     """
-    removed: dict[str, int] = {}
-    for tag in _PROM_SHOP_FIELDS_TO_STRIP:
-        xml, n = re.subn(rf'[ \t]*<{tag}>.*?</{tag}>[ \t]*\n?', '', xml, flags=re.DOTALL)
-        if n:
-            removed[tag] = n
-    if removed:
-        summary = ', '.join(f'<{t}>\xd7{c}' for t, c in removed.items())
-        print(f"\U0001f5d1\ufe0f  Видалено Prom shop-тегів: {summary}")
-    return xml
+    offers_match = re.search(r'<offers>.*?</offers>', xml, flags=re.DOTALL)
+    if not offers_match:
+        _logger.error("<offers> блок не знайдено — фід не може бути збережено")
+        return xml
 
+    yml_open_match = re.search(r'<yml_catalog[^>]*>', xml)
+    if not yml_open_match:
+        _logger.error("<yml_catalog> не знайдено")
+        return xml
 
-def set_shop_name(xml: str) -> str:
-    """
-    Замінює перший <name lang="ua">…</name> (назва магазину) на SHOP_NAME.
-    Викликати ПІСЛЯ normalize_name_description_tags.
-    """
-    xml, n = re.subn(
-        r'<name lang="ua">.*?</name>',
-        f'<name lang="ua">{SHOP_NAME}</name>',
-        xml,
-        count=1,
-        flags=re.DOTALL,
-    )
-    if n:
-        print(f"\U0001f3f7\ufe0f  Назва магазину → {SHOP_NAME!r}")
-    else:
-        _logger.warning("<name lang=\"ua\"> магазину не знайдено — перевірте порядок кроків")
-    return xml
-
-
-def replace_prom_categories(xml: str, entries: list[CategoryEntry]) -> str:
-    """
-    Замінює Prom <categories>...</categories> блок на Epicenter-категорії.
-
-    Вхід entries — лише реально використані у фіді категорії,
-    зібрані під час inject_epicenter_attrs.
-
-    Epicenter використовує рядковий code (= set_code) як id у <categories>.
-
-    До:   <categories><category id="513">Подовжувачі</category>...</categories>
-    Після: <categories>
-               <category id="84863">Мережеві фільтри...</category>
-           </categories>
-    """
-    epicenter_block = build_categories_xml(entries)
-
-    # lambda уникає інтерпретації спецсимволів (\1, \g) у назвах категорій
-    cleaned, n = _PROM_CATEGORIES_RE.subn(lambda _: epicenter_block, xml)
-    if n:
-        print(f"🗂️  <categories> замінено на {len(entries)} Epicenter-категорій")
-    else:
-        _logger.warning("<categories> блок не знайдено у XML — перевірте структуру фіду")
-    return cleaned
+    result = f'{yml_open_match.group(0)}\n{offers_match.group(0)}\n</yml_catalog>'
+    print("🗑️  Видалено блок <shop> (name, company, url, currencies, categories)")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -814,6 +761,13 @@ def main() -> None:
     xml = fetch_xml(FEED_URL)
     print(f"📄 Отримано {len(xml):,} символів")
 
+    # Одразу після завантаження — витягуємо тільки <offers> з Prom-структури.
+    # Prom завжди загортає <offers> у <shop> разом з <name>, <company>, <currencies>, <categories>.
+    # Epicenter потребує лише <yml_catalog><offers>...</offers></yml_catalog>.
+    # Робимо це першим кроком щоб всі наступні трансформації працювали
+    # вже на скороченому XML без зайвих блоків.
+    xml = strip_prom_shop_block(xml)
+
     currency_rates = parse_currency_rates(xml)
     updated_xml = filter_unavailable_offers(xml)
 
@@ -823,11 +777,8 @@ def main() -> None:
     updated_xml = transform_prom_image_urls(updated_xml)
     updated_xml = fill_missing_vendor(updated_xml)
     updated_xml = add_name_ua(updated_xml)
-    updated_xml = strip_prom_shop_fields(updated_xml)                        # видаляємо <company>, <url>, <currencies>
-    updated_xml, used_entries = inject_epicenter_attrs(updated_xml)
-    updated_xml = replace_prom_categories(updated_xml, used_entries)         # Prom → Epicenter <categories>
-    updated_xml = normalize_name_description_tags(updated_xml)               # після inject: description вже оновлено
-    updated_xml = set_shop_name(updated_xml)                     # після normalize: <name lang="ua"> вже є
+    updated_xml, _used_entries = inject_epicenter_attrs(updated_xml)
+    updated_xml = normalize_name_description_tags(updated_xml)   # після inject: description вже оновлено
     updated_xml = strip_prom_offer_fields(updated_xml)           # після fill_missing_vendor
     updated_xml = sanitize_russian_chars(updated_xml)             # ы→и, ъ→' у всьому фіді
     updated_xml = strip_html_classes(updated_xml)                  # видаляємо class="..." з HTML
