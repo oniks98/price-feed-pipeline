@@ -437,36 +437,45 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap, AttrDefaultsMap
 
     # --- крок 4: резолв дефолтів (key_index та set_key_index тепер повні) ---
     #
-    # Проблема: один і той самий option_code може мати РІЗНІ option_name у різних set_codes.
+    # Проблема А: один і той самий option_code може мати РІЗНІ option_name у різних set_codes.
     # Приклад: cf442e72... = «свердління з ударом» (set 2569) і «контактний» (set 8241).
     # key_index (глобальний) пишеться першим-виграє → дефолт для set 8241 отримував
     # назву з set 2569, якщо той аркуш ішов раніше.
     #
+    # Проблема Б: multiselect атрибут має КІЛЬКА рядків з різними default_option_code
+    # для одного (set_code, attr_code). Наприклад attr_code=8142 «Режим роботи» (set 2569):
+    #   рядок 1: default_option_code=cf442e72... (свердління з ударом)
+    #   рядок 2: default_option_code=0cf8777...  (свердління)
+    #   рядок 3: default_option_code=0cf8777...  (свердління)
+    # Пряме записування defaults[set_code][attr_code] = ... перезаписує попереднє значення
+    # → виграє останній рядок.
+    #
     # Рішення:
-    #   - attr_defaults (global fallback) — як раніше, через key_index.
-    #   - defaults[set_code][attr_code]  — резолв через set_key_index → key_index (fallback).
+    #   - Групуємо всі opt_codes по (set_code, attr_code) перед мержем.
+    #   - pending_by_set: (set_code, attr_code) → list[opt_code] (зберігаємо порядок, без дублів).
+    #   - Після збору всіх рядків — один _merge_options на групу.
+    #   - attr_defaults (global fallback) — аналогічно групуємо по attr_code.
+
+    # Grouped accumulators: (set_code, attr_code) → ordered unique opt_codes
+    set_attr_codes:    dict[tuple[str, str], list[str]] = {}  # set-scoped defaults
+    global_attr_codes: dict[str, list[str]]             = {}  # global attr_defaults
+    # row_idx для логування — зберігаємо перший
+    set_attr_row:    dict[tuple[str, str], int] = {}
+    global_attr_row: dict[str, int]             = {}
+
     for row_idx, attr_code, default_code, set_codes_raw in pending_defaults:
         opt_codes = _parse_default_option_codes(default_code)
         set_codes = _parse_set_codes(set_codes_raw)
 
-        # --- attr_defaults: глобальний fallback через key_index (перший запис виграє) ---
-        if attr_code not in attr_defaults:
-            found_global = [
-                o for c in opt_codes
-                if (o := key_index.get((attr_code, c))) is not None
-            ]
-            missing_global = [c for c in opt_codes if key_index.get((attr_code, c)) is None]
-            if missing_global:
-                logger.warning(
-                    "Рядок %d: default_option_code(s) %r не знайдено в key_index "
-                    "для attr_code=%r → пропущено з attr_defaults",
-                    row_idx, missing_global, attr_code,
-                )
-            if found_global:
-                attr_defaults[attr_code] = _merge_options(found_global, attr_code, row_idx)
+        # --- накопичуємо у global_attr_codes (attr_defaults) ---
+        acc_global = global_attr_codes.setdefault(attr_code, [])
+        if attr_code not in global_attr_row:
+            global_attr_row[attr_code] = row_idx
+        for c in opt_codes:
+            if c not in acc_global:
+                acc_global.append(c)
 
         if not set_codes:
-            # Рядок без set_codes → тільки у attr_defaults (глобальний fallback).
             logger.debug(
                 "Рядок %d: attr_code=%r default_option_code=%r — set_codes порожній, "
                 "додано тільки до attr_defaults як глобальний дефолт",
@@ -474,53 +483,78 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap, AttrDefaultsMap
             )
             continue
 
-        # --- defaults: set-scoped резолв: set_key_index → key_index (fallback) ---
-        #
-        # ВАЖЛИВО: якщо default_option_code існує тільки в іншому set (наприклад,
-        # cf442e72... є опцією set 2569 але НЕ set 8241) — fallback на key_index
-        # поверне неправильну назву. Це симптом того, що в xlsx не оновлено
-        # default_option_code для рядків відповідного set_code.
-        # Виявляємо такі випадки через cross_set_fallback і логуємо WARNING.
+        # --- накопичуємо у set_attr_codes (defaults) ---
         for set_code in set_codes:
-            found_opts: list[AttrOption] = []
-            cross_set_fallback: list[str] = []   # option_code знайдено тільки в key_index (інший set)
-            missing: list[str] = []
+            key = (set_code, attr_code)
+            acc = set_attr_codes.setdefault(key, [])
+            if key not in set_attr_row:
+                set_attr_row[key] = row_idx
             for c in opt_codes:
-                set_opt = set_key_index.get((set_code, attr_code, c))
-                if set_opt is not None:
-                    found_opts.append(set_opt)
-                else:
-                    global_opt = key_index.get((attr_code, c))
-                    if global_opt is not None:
-                        # option_code існує, але НЕ в поточному set → неправильний дефолт
-                        cross_set_fallback.append(c)
-                        logger.warning(
-                            "Рядок %d: default_option_code %r знайдено в key_index "
-                            "(option_name=%r), але ВІДСУТНЄ в set_key_index для "
-                            "set_code=%r / attr_code=%r. "
-                            "Схоже, що default_option_code у xlsx не оновлено для цього set. "
-                            "Пропускаємо — не додаємо до defaults[%r]",
-                            row_idx, c, global_opt.option_name,
-                            set_code, attr_code, set_code,
-                        )
-                    else:
-                        missing.append(c)
+                if c not in acc:
+                    acc.append(c)
 
-            if missing:
-                logger.warning(
-                    "Рядок %d: default_option_code(s) %r не знайдено ні в set_key_index, "
-                    "ні в key_index для attr_code=%r set_code=%r → пропущено",
-                    row_idx, missing, attr_code, set_code,
-                )
-            if not found_opts:
-                # Якщо всі коди були cross_set_fallback або missing → не пишемо дефолт.
-                # Краще відсутній дефолт (помітно), ніж неправильний (непомітно).
-                continue
-
-            defaults.setdefault(set_code, {})[attr_code] = _merge_options(
-                found_opts, attr_code, row_idx
+    # --- резолв attr_defaults ---
+    for attr_code, acc_codes in global_attr_codes.items():
+        row_idx = global_attr_row[attr_code]
+        found_global = [
+            o for c in acc_codes
+            if (o := key_index.get((attr_code, c))) is not None
+        ]
+        missing_global = [c for c in acc_codes if key_index.get((attr_code, c)) is None]
+        if missing_global:
+            logger.warning(
+                "Рядок %d: default_option_code(s) %r не знайдено в key_index "
+                "для attr_code=%r → пропущено з attr_defaults",
+                row_idx, missing_global, attr_code,
             )
-            def_mapped += 1
+        if found_global:
+            attr_defaults[attr_code] = _merge_options(found_global, attr_code, row_idx)
+
+    # --- резолв defaults (set-scoped) ---
+    #
+    # ВАЖЛИВО: якщо default_option_code існує тільки в іншому set (наприклад,
+    # cf442e72... є опцією set 2569 але НЕ set 8241) — fallback на key_index
+    # поверне неправильну назву. Це симптом того, що в xlsx не оновлено
+    # default_option_code для рядків відповідного set_code.
+    # Виявляємо такі випадки через cross_set_fallback і логуємо WARNING.
+    for (set_code, attr_code), acc_codes in set_attr_codes.items():
+        row_idx = set_attr_row[(set_code, attr_code)]
+        found_opts: list[AttrOption] = []
+        cross_set_fallback: list[str] = []
+        missing: list[str] = []
+        for c in acc_codes:
+            set_opt = set_key_index.get((set_code, attr_code, c))
+            if set_opt is not None:
+                found_opts.append(set_opt)
+            else:
+                global_opt = key_index.get((attr_code, c))
+                if global_opt is not None:
+                    cross_set_fallback.append(c)
+                    logger.warning(
+                        "Рядок %d: default_option_code %r знайдено в key_index "
+                        "(option_name=%r), але ВІДСУТНЄ в set_key_index для "
+                        "set_code=%r / attr_code=%r. "
+                        "Схоже, що default_option_code у xlsx не оновлено для цього set. "
+                        "Пропускаємо — не додаємо до defaults[%r]",
+                        row_idx, c, global_opt.option_name,
+                        set_code, attr_code, set_code,
+                    )
+                else:
+                    missing.append(c)
+
+        if missing:
+            logger.warning(
+                "Рядок %d: default_option_code(s) %r не знайдено ні в set_key_index, "
+                "ні в key_index для attr_code=%r set_code=%r → пропущено",
+                row_idx, missing, attr_code, set_code,
+            )
+        if not found_opts:
+            continue
+
+        defaults.setdefault(set_code, {})[attr_code] = _merge_options(
+            found_opts, attr_code, row_idx
+        )
+        def_mapped += 1
 
     wb.close()
 

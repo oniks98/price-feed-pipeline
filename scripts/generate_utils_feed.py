@@ -377,7 +377,7 @@ def filter_unavailable_offers(xml: str) -> str:
     """Видаляє оффери з available='false'."""
     before = len(re.findall(r'<offer\s', xml))
     xml = re.sub(
-        r'<offer\s[^>]*available="false"[^>]*>.*?</offer>',
+        r'[ \t]*<offer\s[^>]*available="false"[^>]*>.*?</offer>[ \t]*\n?',
         "",
         xml,
         flags=re.DOTALL,

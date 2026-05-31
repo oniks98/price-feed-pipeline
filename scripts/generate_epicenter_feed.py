@@ -61,9 +61,15 @@ ROOT = Path(__file__).parents[1]
 OUTPUT_PATH = ROOT / "data" / "markets" / "epicenter_feed.xml"
 
 
-# Regex для парсингу <param> тегів Прому в тілі офера
+# Regex для парсингу <param> тегів Прому в тілі офера.
+# _PROM_PARAM_STRIP_RE: об'єднує парсинг + видалення в один прохід (використовується в _on_offer).
+# _PROM_PARAM_RE: залишено як fallback якщо потрібен тільки finditer без видалення.
 _PROM_PARAM_RE = re.compile(
     r'<param\b[^>]*\bname="([^"]+)"[^>]*>(.*?)</param>',
+    re.DOTALL,
+)
+_PROM_PARAM_STRIP_RE = re.compile(
+    r'[ \t]*<param\b[^>]*\bname="([^"]+)"[^>]*>(.*?)</param>[ \t]*\n?',
     re.DOTALL,
 )
 _CDATA_RE = re.compile(r'<!\[CDATA\[(.*?)\]\]>', re.DOTALL)
@@ -398,6 +404,24 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
         None,
     )
 
+    # Предобчислюємо AttrDefaults per cat_code — не per offer.
+    # _measure_opt залежить тільки від cat_code, float_defaults — глобальна константа.
+    # Без кешу AttrDefaults створюється заново для кожного офера.
+    _attr_defs_cache: dict[str, AttrDefaults] = {}
+
+    def _build_attr_defs(cat_code: str) -> AttrDefaults:
+        if cat_code not in _attr_defs_cache:
+            _measure_opt = (
+                defaults.get(cat_code, {}).get("measure")
+                or attr_defaults.get("measure")
+            )
+            _attr_defs_cache[cat_code] = AttrDefaults(
+                option_name_uk=float_defaults,
+                option_code={"measure": _measure_opt.option_code} if _measure_opt else {},
+                option_name={"measure": _measure_opt.option_name} if _measure_opt else {},
+            )
+        return _attr_defs_cache[cat_code]
+
     def _on_offer(m: re.Match) -> str:
         nonlocal mapped_count, skipped_no_cat, total_params, missing_measure, brand_defaults_total
 
@@ -443,8 +467,8 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
             f'<attribute_set code="{cat_code}">{cat_name}</attribute_set>',
         )
 
-        # --- 4. Видаляємо ВСІ prom <param> теги ---
-        body = re.sub(r'<param\b[^>]*>.*?</param>', '', body, flags=re.DOTALL)
+        # --- 4. Видаляємо ВСІ prom <param> теги (разом з рядком що залишається після видалення) ---
+        body = re.sub(r'[ \t]*<param\b[^>]*>.*?</param>[ \t]*\n?', '', body, flags=re.DOTALL)
 
         # --- 5. Будуємо epicenter params ---
         params: list[str] = []
@@ -611,7 +635,7 @@ def strip_prom_shop_fields(xml: str) -> str:
     """
     removed: dict[str, int] = {}
     for tag in _PROM_SHOP_FIELDS_TO_STRIP:
-        xml, n = re.subn(rf'<{tag}>.*?</{tag}>', '', xml, flags=re.DOTALL)
+        xml, n = re.subn(rf'[ \t]*<{tag}>.*?</{tag}>[ \t]*\n?', '', xml, flags=re.DOTALL)
         if n:
             removed[tag] = n
     if removed:
@@ -698,7 +722,8 @@ def strip_prom_offer_fields(xml: str) -> str:
     removed: dict[str, int] = {}
     for tag in _PROM_FIELDS_TO_STRIP:
         # [^<]* — безпечніше ніж .*? DOTALL: вміст цих тегів — плаский текст (XML не дозволяє < у значенні)
-        xml, n = re.subn(rf'<{tag}>[^<]*</{tag}>', '', xml)
+        # [ \t]* і \n? — прибирають відступи та порожній рядок що залишається після видалення тегу
+        xml, n = re.subn(rf'[ \t]*<{tag}>[^<]*</{tag}>[ \t]*\n?', '', xml)
         if n:
             removed[tag] = n
     if removed:
