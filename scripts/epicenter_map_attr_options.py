@@ -34,7 +34,7 @@ Rule 3 — select/multiselect (needs_default не впливає на алгор
      b) Пріоритетні назви: no > ні > немає > універсальний > середній >
         комбінований > стандартний > загальний
      c) Перша опція у листі для цього attr_code
-   → Записує ОДНАКОВИЙ default_option_code у ВСІ рядки attr_code
+   → Записує default_option_code у ПЕРШИЙ рядок attr_code
 
    needs_default=TRUE  → дефолт обовʼязковий (товар може не мати параметра)
    needs_default=FALSE → дефолт як fallback (параметр очікується у більшості товарів)
@@ -710,18 +710,20 @@ def process(
             )
             return False
 
-        count = 0
-        for r2 in groups[ac]:
-            if r2.set_codes == sc and not r2.default_code:
-                _write(r2.row_idx, _C_DEFAULT_CODE, code)
-                count += 1
+        # Записуємо тільки в ПЕРШИЙ рядок (attr_code, set_codes) без дефолту
+        first = next(
+            (r2 for r2 in groups[ac] if r2.set_codes == sc and not r2.default_code),
+            None,
+        )
+        if first is None:
+            return False
 
-        if count:
-            logger.info(
-                "   R%d default_option_code=%s → %d rows [attr=%s / %s / set=%s]",
-                source_rule, code, count, ac, groups[ac][0].attr_name, sc,
-            )
-        return count > 0
+        _write(first.row_idx, _C_DEFAULT_CODE, code)
+        logger.info(
+            "   R%d default_option_code=%s → row %d [attr=%s / %s / set=%s]",
+            source_rule, code, first.row_idx, ac, groups[ac][0].attr_name, sc,
+        )
+        return True
 
     # ── Main loop ──────────────────────────────────────────────────────────
     for row in rows:

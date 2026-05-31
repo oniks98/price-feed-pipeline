@@ -834,7 +834,10 @@ def main() -> None:
 
     # Гарантуємо коректну XML-декларацію незалежно від того,
     # чи Prom-фід її надсилає і в якому форматі.
+    # <!DOCTYPE ...> видаляємо: зовнішній DTD-посилання призводить до того що
+    # GitHub raw віддає файл як octet-stream (скачування) замість application/xml.
     updated_xml = re.sub(r'^\s*<\?xml[^?]*\?>\s*', '', updated_xml)
+    updated_xml = re.sub(r'^\s*<!DOCTYPE[^>]*>\s*', '', updated_xml, flags=re.DOTALL)
     updated_xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + updated_xml
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
