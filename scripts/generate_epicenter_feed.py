@@ -57,6 +57,12 @@ from services.market_pricing import apply_market_prices
 
 MARKET = "epicenter"
 
+# Prom category IDs що повністю виключаються з Epicenter фіду.
+# Всі офери з цими categoryId видаляються на етапі inject_epicenter_attrs.
+EXCLUDED_PROM_CAT_IDS: Final[frozenset[int]] = frozenset({
+    20783,
+})
+
 ROOT = Path(__file__).parents[1]
 OUTPUT_PATH = ROOT / "data" / "markets" / "epicenter_feed.xml"
 
@@ -437,6 +443,9 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
         prom_cat_id = int(cat_match.group(1))
         category = get_category(prom_cat_id)
 
+        if prom_cat_id in EXCLUDED_PROM_CAT_IDS:
+            return ""
+
         if not category:
             skipped_no_cat += 1
             skipped_cat_ids.add(prom_cat_id)
@@ -648,6 +657,7 @@ _PROM_FIELDS_TO_STRIP: Final[tuple[str, ...]] = (
     "stock_quantity",
     "currencyId",
     "url",
+    "article",
 )
 
 # Перейменування тегів: (prom_tag, epicenter_tag, lang)
