@@ -191,7 +191,7 @@ def strip_prom_shop_fields(xml: str) -> str:
     """
     removed: dict[str, int] = {}
     for tag in _ROZETKA_FIELDS_TO_STRIP:
-        xml, n = re.subn(rf'<{tag}>[^<]*</{tag}>', '', xml)
+        xml, n = re.subn(rf'[ \t]*<{tag}>[^<]*</{tag}>[ \t]*\n?', '', xml)
         if n:
             removed[tag] = n
     if removed:
@@ -249,6 +249,13 @@ def main() -> None:
 
     # Примітка: add_name_ua не викликається — Розетка використовує тег <n> напряму.
     # Примітка: normalize_name_description_tags не викликається — теги не перейменовуються.
+
+    # Гарантуємо коректну XML-декларацію з великої літери (UTF-8).
+    # <!DOCTYPE ...> видаляємо: зовнішній DTD-посилання призводить до того що
+    # GitHub raw віддає файл як octet-stream (скачування) замість application/xml.
+    updated_xml = re.sub(r'^\s*<\?xml[^?]*\?>\s*', '', updated_xml)
+    updated_xml = re.sub(r'^\s*<!DOCTYPE[^>]*>\s*', '', updated_xml, flags=re.DOTALL)
+    updated_xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + updated_xml
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(updated_xml, encoding="utf-8")
