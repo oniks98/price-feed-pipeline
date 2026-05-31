@@ -647,6 +647,7 @@ _PROM_FIELDS_TO_STRIP: Final[tuple[str, ...]] = (
     "country_of_origin",
     "stock_quantity",
     "currencyId",
+    "url",
 )
 
 # Перейменування тегів: (prom_tag, epicenter_tag, lang)
