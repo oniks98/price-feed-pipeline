@@ -48,6 +48,7 @@ from services.epicenter_attr_service import (
     get_numeric_defaults,
     get_numeric_map,
     get_option_map,
+    get_set_option_map,
 )
 from services.epicenter_category_service import CategoryEntry, get_category
 from services.market_pricing import apply_market_prices
@@ -210,9 +211,6 @@ def resolve_attr_value(
             }
 
     if raw_value is None:
-        _logger.warning(
-            "attr drop | no value and no default | attr_code=%s", cfg.attr_code
-        )
         return None
 
     # Нормалізація одиниць виміру (кг→г, см→мм) якщо задано для цього атрибута
@@ -381,6 +379,7 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
     Повертає оновлений XML.
     """
     option_map    = get_option_map()
+    set_option_map = get_set_option_map()
     defaults      = get_defaults()
     numeric_map   = get_numeric_map()
     attr_defaults  = get_attr_defaults()
@@ -396,6 +395,7 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
     missing_measure = 0
     brand_defaults_total: int = 0             # скільки офферів отримали дефолтний brand
     missed_brands: Counter[str] = Counter()   # prom-бренд → кількість (є в Prom, нема в Epicenter)
+    attr_drops: Counter[str] = Counter()      # attr_code → кількість дропів (no value and no default)
 
     # Зворотній індекс: знаходимо prom_param_name що маппиться на attr_code="brand".
     # option_map[prom_name][prom_value] тепер list[AttrOption] — перевіряємо всі елементи списків.
@@ -431,7 +431,7 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
         return _attr_defs_cache[cat_code]
 
     def _on_offer(m: re.Match) -> str:
-        nonlocal mapped_count, skipped_no_cat, total_params, missing_measure, brand_defaults_total
+        nonlocal mapped_count, skipped_no_cat, total_params, missing_measure, brand_defaults_total, attr_drops
 
         offer_id   = m.group(1)
         tail_attrs = m.group(2)
@@ -507,6 +507,8 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
             if payload is None:
                 if cfg.attr_code == "measure":
                     missing_measure += 1
+                else:
+                    attr_drops[cfg.attr_code] += 1
                 continue
             params.append(_render_attr_payload(payload))
             mapped_attr_codes.add(cfg.attr_code)
@@ -524,13 +526,18 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
                 continue
 
             # select / multiselect — маппінг через option_map
+            # Пріоритет: set_option_map[cat_code] (set-scoped, правильний option_code per set)
+            # Fallback:  option_map (глобальний)
+            # Це вирішує баг: один (prom_param, prom_value) може мати різні option_code
+            # у різних set_codes (наприклад attr_code=5684 «Роздільна здатність»).
             # prom_value може містити кілька значень через ", ":
             #   - multiselect: кілька <param> тегів з однаковим name (об'єднані у крок 2)
             #   - або одне значення без коми
             # Кожне значення маппиться окремо → окремий <param> тег.
-            # Якщо option_map має цей prom_name але конкретне значення не знайдено —
-            # логуємо debug (дефолт буде застосований у кроці 6, якщо attr_code не mapped).
-            param_opts = option_map.get(prom_name, {})
+            param_opts = (
+                set_option_map.get(cat_code, {}).get(prom_name)
+                or option_map.get(prom_name, {})
+            )
             if param_opts:
                 # option_map має маппінг для цього prom_param_name.
                 # Один (prom_param, prom_value) може маппитись на КІЛЬКА attr_code:
@@ -635,6 +642,9 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
     if skipped_cat_ids:
         ids_str = ', '.join(str(i) for i in sorted(skipped_cat_ids))
         _logger.warning('Prom categoryId без маппінгу (%d): %s', len(skipped_cat_ids), ids_str)
+    if attr_drops:
+        drops_str = ', '.join(f'{code}×{cnt}' for code, cnt in attr_drops.most_common())
+        _logger.warning('⚠️  attr drop (no value+no default): %s', drops_str)
     return xml, list(used.values())
 
 

@@ -6,10 +6,11 @@ services/epicenter_attr_service.py
 
 Аркуші читаються один раз (lru_cache) і роздаються всім споживачам.
 Доступний інтерфейс:
-    get_option_map()    → OptionMap
-    get_defaults()      → DefaultsMap
-    get_numeric_map()   → NumericMap
-    get_attr_defaults() → AttrDefaultsMap
+    get_option_map()        → OptionMap
+    get_set_option_map()    → SetOptionMap
+    get_defaults()          → DefaultsMap
+    get_numeric_map()       → NumericMap
+    get_attr_defaults()     → AttrDefaultsMap
 
 OptionMap  = dict[str, dict[str, AttrOption]]
     prom_param_name → prom_option_value → AttrOption
@@ -104,6 +105,10 @@ OptionMap       = dict[str, dict[str, list[AttrOption]]]  # prom_param → prom_
 # Примітка: один (prom_param, prom_value) може маппитись на ДЕКІЛЬКА attr_code.
 # Приклад: "Форм-фактор" / "Безконтактна картка" → [AttrOption(4626, "ключ"), AttrOption(10701, "картка")]
 # dict[str, AttrOption] (старий тип) перезаписував попередній запис → "лузер" ніколи не маппився.
+SetOptionMap    = dict[str, OptionMap]              # set_code   → prom_param → prom_value → list[AttrOption]
+# Призначення: коли один (prom_param, prom_value) має різні option_code у різних set_codes
+# (наприклад attr_code=5684 "Роздільна здатність" → option_code різний для set 2855 і set 3516).
+# Lookup у _on_offer: спочатку set_option_map[cat_code], потім fallback на option_map.
 DefaultsMap     = dict[str, dict[str, AttrOption]]  # set_code   → attr_code  → AttrOption
 NumericMap      = dict[str, AttrMeta]               # prom_param → AttrMeta
 AttrDefaultsMap = dict[str, AttrOption]             # attr_code  → AttrOption (global default)
@@ -336,6 +341,7 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap, AttrDefaultsMap
     key_index:        dict[tuple[str, str], AttrOption] = {}          # (attr_code, option_code) → global fallback
     set_key_index:    dict[tuple[str, str, str], AttrOption] = {}     # (set_code, attr_code, option_code) → set-scoped
     option_map:       OptionMap        = {}
+    set_option_map:   SetOptionMap     = {}  # set_code → prom_param → prom_value → list[AttrOption]
     defaults:         DefaultsMap      = {}
     attr_defaults:    AttrDefaultsMap  = {}
     float_defaults:   FloatDefaultsMap = {}
@@ -439,11 +445,25 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap, AttrDefaultsMap
                     row_idx, attr_code,
                 )
             else:
-                option = key_index[(attr_code, option_code)]
+                global_option = key_index[(attr_code, option_code)]
                 for param_alias in prom_aliases:
                     for option_alias in prom_option_aliases:
                         # append: один (param, value) може маппитись на кілька attr_code
-                        option_map.setdefault(param_alias, {}).setdefault(option_alias, []).append(option)
+                        option_map.setdefault(param_alias, {}).setdefault(option_alias, []).append(global_option)
+
+                # set_option_map: set-scoped lookup — коли один (prom_param, prom_value)
+                # має різні option_code для різних set_codes (наприклад attr_code=5684).
+                # Використовує set_key_index щоб отримати правильний option_code per set.
+                set_codes_for_opt = _parse_set_codes(row[_OPT_COL_SET_CODES])
+                for sc in set_codes_for_opt:
+                    sc_option = set_key_index.get((sc, attr_code, option_code))
+                    if sc_option is None:
+                        continue
+                    sc_map = set_option_map.setdefault(sc, {})
+                    for param_alias in prom_aliases:
+                        for option_alias in prom_option_aliases:
+                            sc_map.setdefault(param_alias, {}).setdefault(option_alias, []).append(sc_option)
+
                 opt_mapped += 1
 
         # defaults: відкладаємо до завершення побудови key_index.
@@ -582,17 +602,19 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap, AttrDefaultsMap
 
     logger.info(
         "📐 option_map: %d prom_params / %d (param,value) ключів / %d opt_mapped записів "
+        "| set_option_map: %d set_codes "
         "| defaults: %d set_codes | attr_defaults: %d глобальних | numeric_map: %d "
         "| numeric_defaults: %d set_codes",
         len(option_map),
         sum(len(vals) for vals in option_map.values()),
         opt_mapped,
+        len(set_option_map),
         len(defaults),
         len(attr_defaults),
         len(numeric_map),
         len(numeric_defaults),
     )
-    return option_map, defaults, numeric_map, attr_defaults, float_defaults, numeric_defaults
+    return option_map, set_option_map, defaults, numeric_map, attr_defaults, float_defaults, numeric_defaults
 
 
 # ---------------------------------------------------------------------------
@@ -601,13 +623,31 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap, AttrDefaultsMap
 
 def get_option_map() -> OptionMap:
     """
-    Маппінг select/multiselect опцій: prom_param_name → prom_value → AttrOption.
+    Глобальний маппінг select/multiselect опцій: prom_param_name → prom_value → list[AttrOption].
+
+    Використання (з fallback):
+        matched = get_set_option_map().get(cat_code, {}).get(prom_param, {}).get(prom_value)
+                  or get_option_map().get(prom_param, {}).get(prom_value, [])
+    """
+    option_map, _, _, _, _, _, _ = _load_indexes()
+    return option_map
+
+
+def get_set_option_map() -> SetOptionMap:
+    """
+    Set-scoped маппінг: set_code → prom_param_name → prom_value → list[AttrOption].
+
+    Використовується як пріоритетний lookup перед get_option_map().
+    Вирішує проблему коли один (prom_param, prom_value) має різні option_code
+    у різних set_codes (наприклад attr_code=5684 «Роздільна здатність»).
 
     Використання:
-        option = get_option_map().get(prom_param, {}).get(prom_value)
+        sc_map   = get_set_option_map().get(cat_code, {})
+        matched  = sc_map.get(prom_param, {}).get(prom_value)
+                   or get_option_map().get(prom_param, {}).get(prom_value, [])
     """
-    option_map, _, _, _, _, _ = _load_indexes()
-    return option_map
+    _, set_option_map, _, _, _, _, _ = _load_indexes()
+    return set_option_map
 
 
 def get_defaults() -> DefaultsMap:
@@ -619,7 +659,7 @@ def get_defaults() -> DefaultsMap:
             if attr_code not in already_mapped_codes:
                 params.append(default)
     """
-    _, defaults, _, _, _, _ = _load_indexes()
+    _, _, defaults, _, _, _, _ = _load_indexes()
     return defaults
 
 
@@ -634,7 +674,7 @@ def get_numeric_map() -> NumericMap:
         if meta:
             xml_param = f'<param paramcode="{meta.attr_code}" ...><![CDATA[{value}]]></param>'
     """
-    _, _, numeric_map, _, _, _ = _load_indexes()
+    _, _, _, numeric_map, _, _, _ = _load_indexes()
     return numeric_map
 
 
@@ -655,7 +695,7 @@ def get_attr_defaults() -> AttrDefaultsMap:
         if option:
             params.append(_render_select_param(option))
     """
-    _, _, _, attr_defaults, _, _ = _load_indexes()
+    _, _, _, _, attr_defaults, _, _ = _load_indexes()
     return attr_defaults
 
 
@@ -674,7 +714,7 @@ def get_float_defaults() -> FloatDefaultsMap:
         float_defs = get_float_defaults()  # {"ratio": "1", "weight": "500", ...}
         _attr_defs = AttrDefaults(option_name_uk=float_defs, ...)
     """
-    _, _, _, _, float_defaults, _ = _load_indexes()
+    _, _, _, _, _, float_defaults, _ = _load_indexes()
     return float_defaults
 
 
@@ -696,5 +736,5 @@ def get_numeric_defaults() -> NumericDefaultsMap:
             if attr_code not in already_mapped_codes:
                 params.append(_render_numeric_param(meta, value))
     """
-    _, _, _, _, _, numeric_defaults = _load_indexes()
+    _, _, _, _, _, _, numeric_defaults = _load_indexes()
     return numeric_defaults
