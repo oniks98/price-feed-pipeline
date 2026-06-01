@@ -169,6 +169,9 @@ jobs:
     permissions:
       contents: write
 
+    outputs:
+      has_merged_data: ${{ steps.merge_csv.outputs.has_merged_data }}
+
     steps:
       - name: Checkout main (код + sku_map.json)
         uses: actions/checkout@v4
@@ -266,12 +269,15 @@ jobs:
           PROJECT_ROOT: ${{ github.workspace }}
 
       - name: Merge CSVs
+        id: merge_csv
         run: |
           if python scripts/prom_merge_csv.py; then
             echo "HAS_MERGED_DATA=true" >> $GITHUB_ENV
+            echo "has_merged_data=true" >> $GITHUB_OUTPUT
             echo "✅ merged.csv створено"
           else
             echo "HAS_MERGED_DATA=false" >> $GITHUB_ENV
+            echo "has_merged_data=false" >> $GITHUB_OUTPUT
             echo "⚠️  Немає нових даних — Prom-імпорт буде пропущено"
           fi
         env:
@@ -444,6 +450,7 @@ jobs:
         run: playwright install chromium --with-deps
 
       - name: Wait for Prom import to complete
+        if: needs.process-and-publish.outputs.has_merged_data == 'true'
         run: |
           echo "⏳ Пауза 15 хвилин — чекаємо завершення імпорту в Промі..."
           sleep 900
@@ -542,6 +549,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Wait for Prom import to complete
+        if: needs.process-and-publish.outputs.has_merged_data == 'true'
         run: |
           echo "⏳ Пауза 15 хвилин — чекаємо завершення імпорту в Промі..."
           sleep 900
@@ -613,6 +621,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Wait for Prom import to complete
+        if: needs.process-and-publish.outputs.has_merged_data == 'true'
         run: |
           echo "⏳ Пауза 15 хвилин — чекаємо завершення імпорту в Промі..."
           sleep 900
@@ -684,6 +693,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Wait for Prom import to complete
+        if: needs.process-and-publish.outputs.has_merged_data == 'true'
         run: |
           echo "⏳ Пауза 15 хвилин — чекаємо завершення імпорту в Промі..."
           sleep 900
