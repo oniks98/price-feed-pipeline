@@ -56,6 +56,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   PYTHONUNBUFFERED: "1"
   FAILED_SUPPLIERS: "" # Оголошено тут для линтера; динамічно перезаписується через $GITHUB_ENV
+  HAS_MERGED_DATA: "false" # Оголошено тут для линтера; динамічно перезаписується через $GITHUB_ENV
 
 # ─────────────────────────────────────────────────────────────
 # АРХІТЕКТУРА ГІЛОК:
@@ -265,14 +266,22 @@ jobs:
           PROJECT_ROOT: ${{ github.workspace }}
 
       - name: Merge CSVs
-        run: python scripts/prom_merge_csv.py
+        run: |
+          if python scripts/prom_merge_csv.py; then
+            echo "HAS_MERGED_DATA=true" >> $GITHUB_ENV
+            echo "✅ merged.csv створено"
+          else
+            echo "HAS_MERGED_DATA=false" >> $GITHUB_ENV
+            echo "⚠️  Немає нових даних — Prom-імпорт буде пропущено"
+          fi
         env:
           PROJECT_ROOT: ${{ github.workspace }}
 
-      # Перевіряємо статус попереднього імпорту Prom.
+      # Запускається тільки якщо є нові дані для імпорту.
       # Якщо попередній run завершився з failed — об'єднуємо merged_prev.csv
       # з новим merged.csv щоб Prom отримав повну актуальну картину.
       - name: Merge pending Prom data (retry logic)
+        if: env.HAS_MERGED_DATA == 'true'
         run: python scripts/prom_merge_pending.py
         env:
           PROJECT_ROOT: ${{ github.workspace }}
@@ -280,6 +289,7 @@ jobs:
       # Пушимо всі великі файли в data-latest через --amend.
       # prom_import_status.json також потрапляє в amend через `git add .`
       - name: Push large files to data-latest (amend)
+        if: env.HAS_MERGED_DATA == 'true'
         run: |
           BOT_NAME="github-actions[bot]"
           BOT_EMAIL="github-actions[bot]@users.noreply.github.com"
@@ -339,6 +349,7 @@ jobs:
       # Тригер записує результат (success/failed) в data/prom_import_status.json.
       # Файл потрапляє в data-latest через amend наступного run.
       - name: Trigger Prom API import
+        if: env.HAS_MERGED_DATA == 'true'
         run: python scripts/prom_api_trigger.py
         env:
           PROM_API_TOKEN: ${{ secrets.PROM_API_TOKEN }}
