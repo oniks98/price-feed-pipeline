@@ -26,8 +26,11 @@ services/epicenter_params_to_description_service.py
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Final
+
+_logger = logging.getLogger(__name__)
 
 # Параметри, які вже йдуть як атрибути Epicenter — в описі дублювати не треба.
 # Розширюй список якщо додаєш нові системні атрибути.
@@ -44,6 +47,10 @@ _SKIP_PARAMS: Final[frozenset[str]] = frozenset({
 
 # Заголовок блоку особливостей (тільки UA)
 _BLOCK_HEADER: Final[str] = "Особливості"
+
+# Максимальна довжина опису в Epicenter (символів).
+# Блок «Особливості» урізається якщо його додавання перевищує ліміт.
+_DESCRIPTION_MAX_CHARS: Final[int] = 12_100
 
 # Regex для закриваючого тегу <description> (Prom UK-only фід, до rename).
 _DESC_CLOSE_RE: Final[re.Pattern[str]] = re.compile(
@@ -81,6 +88,56 @@ def build_params_block(prom_params: dict[str, str]) -> str:
     )
 
 
+def _trim_block_to_limit(existing: str, block: str, limit: int) -> str:
+    """
+    Повертає block, урізаний так щоб len(existing) + len(block) <= limit.
+
+    Якщо навіть заголовок не вміщується — повертає порожній рядок.
+    Урізає по цілих рядках (<li>…</li>) щоб не ламати HTML.
+    """
+    budget = limit - len(existing)
+    if budget <= 0:
+        return ""
+
+    if len(block) <= budget:
+        return block
+
+    # Шукаємо рядки <li> та беремо стільки, скільки влазить
+    header = (
+        "\n<div>"
+        f"\n  <p><strong>{_BLOCK_HEADER}:</strong></p>"
+        "\n  <ul>\n        "
+    )
+    footer = "\n  </ul>\n</div>"
+    overhead = len(header) + len(footer)
+
+    if overhead >= budget:
+        _logger.debug("params_block trim | budget too small for header (%d chars)", budget)
+        return ""
+
+    li_budget = budget - overhead
+    li_items: list[str] = re.findall(r'<li>.*?</li>', block, flags=re.DOTALL)
+    kept: list[str] = []
+    used = 0
+    for item in li_items:
+        # +len("\n        ") — роздільник між елементами
+        cost = len(item) + (len("\n        ") if kept else 0)
+        if used + cost > li_budget:
+            break
+        kept.append(item)
+        used += cost
+
+    if not kept:
+        return ""
+
+    dropped = len(li_items) - len(kept)
+    if dropped:
+        _logger.debug("params_block trim | dropped %d li items to fit %d-char limit", dropped, limit)
+
+    rows = "\n        ".join(kept)
+    return header + rows + footer
+
+
 def _inject_before_close(body: str, pattern: re.Pattern[str], block: str) -> str:
     """Вставляє block перед першим входженням pattern. Якщо тег відсутній — body без змін."""
     if not pattern.search(body):
@@ -95,6 +152,9 @@ def inject_params_into_description(
     """
     Вставляє блок «Особливості» перед закриваючим тегом </description>.
 
+    Блок урізається по цілих <li>-рядках якщо додавання перевищує
+    _DESCRIPTION_MAX_CHARS (12 100 символів — ліміт Epicenter).
+
     Якщо тег відсутній або параметрів немає — повертає body без змін.
 
     Args:
@@ -107,4 +167,13 @@ def inject_params_into_description(
     block = build_params_block(prom_params)
     if not block:
         return body
+
+    # Визначаємо поточну довжину вмісту <description>
+    desc_match = re.search(r'<description(?:\s[^>]*)?>(.*?)</description>', body, flags=re.DOTALL)
+    existing_content = desc_match.group(1) if desc_match else ""
+
+    block = _trim_block_to_limit(existing_content, block, _DESCRIPTION_MAX_CHARS)
+    if not block:
+        return body
+
     return _inject_before_close(body, _DESC_CLOSE_RE, block)

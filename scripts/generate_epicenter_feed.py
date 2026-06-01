@@ -561,15 +561,27 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
                 mapped_attr_codes.add(meta.attr_code)
 
         # --- 6. Дефолти для атрибутів без маппінгу ---
+        # Застосовуємо set-специфічні дефолти (defaults[cat_code]).
         for attr_code, default in defaults.get(cat_code, {}).items():
             if attr_code not in mapped_attr_codes:
                 params.append(_render_select_param(default))
                 mapped_attr_codes.add(attr_code)
                 if attr_code == "brand":
                     brand_defaults_total += 1
-                    # brand відсутній у Prom-параметрах взагалі (не просто не знайдений у option_map)
                     if _brand_prom_param and _brand_prom_param not in prom_params:
                         missed_brands["(відсутній у Prom)"] += 1
+
+        # --- 6b. Fallback: глобальний дефолт brand якщо не замаплено ---
+        # attr_defaults містить атрибути без set_codes (наприклад brand=Anker).
+        # Застосовуємо ТІЛЬКИ brand — не всі attr_defaults, щоб не смітити чужими атрибутами.
+        if "brand" not in mapped_attr_codes:
+            _brand_default = attr_defaults.get("brand")
+            if _brand_default:
+                params.append(_render_select_param(_brand_default))
+                mapped_attr_codes.add("brand")
+                brand_defaults_total += 1
+                if _brand_prom_param and _brand_prom_param not in prom_params:
+                    missed_brands["(відсутній у Prom)"] += 1
 
         # --- 7. Вставляємо блок «Параметри» в description_ua ---
         body = inject_params_into_description(body, prom_params)
