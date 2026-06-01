@@ -45,6 +45,7 @@ from services.epicenter_attr_service import (
     get_attr_defaults,
     get_defaults,
     get_float_defaults,
+    get_numeric_defaults,
     get_numeric_map,
     get_option_map,
 )
@@ -384,6 +385,7 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
     numeric_map   = get_numeric_map()
     attr_defaults  = get_attr_defaults()
     float_defaults = get_float_defaults()
+    numeric_defaults = get_numeric_defaults()
 
     mapped_count    = 0
     skipped_no_cat  = 0
@@ -582,6 +584,14 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
                 brand_defaults_total += 1
                 if _brand_prom_param and _brand_prom_param not in prom_params:
                     missed_brands["(відсутній у Prom)"] += 1
+
+        # --- 6c. Numeric (array/float/text) категорійні дефолти ---
+        # Атрибути без option_code (не select), що мають задане значення за замовчуванням
+        # і немають маппінгу з Prom (напр. «Максимальний перетин дроту» для set 2793).
+        for attr_code, (meta, value) in numeric_defaults.get(cat_code, {}).items():
+            if attr_code not in mapped_attr_codes:
+                params.append(_render_numeric_param(meta, value))
+                mapped_attr_codes.add(attr_code)
 
         # --- 7. Вставляємо блок «Параметри» в description_ua ---
         body = inject_params_into_description(body, prom_params)

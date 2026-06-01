@@ -108,6 +108,7 @@ DefaultsMap     = dict[str, dict[str, AttrOption]]  # set_code   → attr_code  
 NumericMap      = dict[str, AttrMeta]               # prom_param → AttrMeta
 AttrDefaultsMap = dict[str, AttrOption]             # attr_code  → AttrOption (global default)
 FloatDefaultsMap = dict[str, str]                   # attr_code  → default value string (for float/int/text/string)
+NumericDefaultsMap = dict[str, dict[str, tuple[AttrMeta, str]]]  # set_code → attr_code → (AttrMeta, default_value)
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +339,7 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap, AttrDefaultsMap
     defaults:         DefaultsMap      = {}
     attr_defaults:    AttrDefaultsMap  = {}
     float_defaults:   FloatDefaultsMap = {}
+    numeric_defaults: NumericDefaultsMap = {}  # set_code → attr_code → (AttrMeta, value)
     # (row_idx, attr_code, default_code, set_codes_raw)
     pending_defaults: list[tuple[int, str, str, object]] = []
     opt_mapped = 0
@@ -353,15 +355,35 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap, AttrDefaultsMap
         prom_value   = _clean(row[_OPT_COL_PROM_VALUE])
 
         # Float/numeric defaults: рядки без option_code, де option_name_uk = дефолтне значення.
-        # Перший зустрічний запис для кожного attr_code — глобальний дефолт.
+        # Два шляхи:
+        #   A) без set_codes  → float_defaults (глобальний fallback, для _ATTRS)
+        #   B) з set_codes   → numeric_defaults[set_code][attr_code] (категорійні дефолти)
         if attr_code and not option_code and attr_type_raw in _NON_OPTION_TYPES:
             default_value = _clean(row[_OPT_COL_OPTION_NAME])
-            if default_value and attr_code not in float_defaults:
-                float_defaults[attr_code] = default_value
-                logger.debug(
-                    "Рядок %d: float default | attr_code=%r value=%r",
-                    row_idx, attr_code, default_value,
+            set_codes_raw = row[_OPT_COL_SET_CODES]
+            set_codes = _parse_set_codes(set_codes_raw)
+            if set_codes and default_value:
+                # B: категорійний дефолт — потрібен AttrMeta для рендерингу
+                attr_name_val = _clean(row[_OPT_COL_ATTR_NAME])
+                meta = AttrMeta(
+                    attr_code=attr_code,
+                    attr_name=attr_name_val,
+                    attr_type=attr_type_raw,
                 )
+                for sc in set_codes:
+                    numeric_defaults.setdefault(sc, {}).setdefault(attr_code, (meta, default_value))
+                logger.debug(
+                    "Рядок %d: numeric default (set-scoped) | attr_code=%r value=%r set_codes=%r",
+                    row_idx, attr_code, default_value, set_codes,
+                )
+            else:
+                # A: глобальний float default (для _ATTRS)
+                if default_value and attr_code not in float_defaults:
+                    float_defaults[attr_code] = default_value
+                    logger.debug(
+                        "Рядок %d: float default | attr_code=%r value=%r",
+                        row_idx, attr_code, default_value,
+                    )
             continue  # ці рядки не є опціями — решту полів не обробляємо
 
         if not attr_code:
@@ -560,15 +582,17 @@ def _load_indexes() -> tuple[OptionMap, DefaultsMap, NumericMap, AttrDefaultsMap
 
     logger.info(
         "📐 option_map: %d prom_params / %d (param,value) ключів / %d opt_mapped записів "
-        "| defaults: %d set_codes | attr_defaults: %d глобальних | numeric_map: %d",
+        "| defaults: %d set_codes | attr_defaults: %d глобальних | numeric_map: %d "
+        "| numeric_defaults: %d set_codes",
         len(option_map),
         sum(len(vals) for vals in option_map.values()),
         opt_mapped,
         len(defaults),
         len(attr_defaults),
         len(numeric_map),
+        len(numeric_defaults),
     )
-    return option_map, defaults, numeric_map, attr_defaults, float_defaults
+    return option_map, defaults, numeric_map, attr_defaults, float_defaults, numeric_defaults
 
 
 # ---------------------------------------------------------------------------
@@ -582,7 +606,7 @@ def get_option_map() -> OptionMap:
     Використання:
         option = get_option_map().get(prom_param, {}).get(prom_value)
     """
-    option_map, _, _, _, _ = _load_indexes()
+    option_map, _, _, _, _, _ = _load_indexes()
     return option_map
 
 
@@ -595,7 +619,7 @@ def get_defaults() -> DefaultsMap:
             if attr_code not in already_mapped_codes:
                 params.append(default)
     """
-    _, defaults, _, _, _ = _load_indexes()
+    _, defaults, _, _, _, _ = _load_indexes()
     return defaults
 
 
@@ -610,7 +634,7 @@ def get_numeric_map() -> NumericMap:
         if meta:
             xml_param = f'<param paramcode="{meta.attr_code}" ...><![CDATA[{value}]]></param>'
     """
-    _, _, numeric_map, _, _ = _load_indexes()
+    _, _, numeric_map, _, _, _ = _load_indexes()
     return numeric_map
 
 
@@ -631,7 +655,7 @@ def get_attr_defaults() -> AttrDefaultsMap:
         if option:
             params.append(_render_select_param(option))
     """
-    _, _, _, attr_defaults, _ = _load_indexes()
+    _, _, _, attr_defaults, _, _ = _load_indexes()
     return attr_defaults
 
 
@@ -639,7 +663,7 @@ def get_float_defaults() -> FloatDefaultsMap:
     """
     Глобальні дефолти для float/int/text/string атрибутів: attr_code → value string.
 
-    Читається з колонки option_name_uk для рядків без option_code в аркуші «Опції атрибутів».
+    Читається з колонки option_name_uk для рядків без option_code і без set_codes в аркуші «Опції атрибутів».
     Перший зустрічний запис для кожного attr_code.
 
     Призначення:
@@ -650,5 +674,27 @@ def get_float_defaults() -> FloatDefaultsMap:
         float_defs = get_float_defaults()  # {"ratio": "1", "weight": "500", ...}
         _attr_defs = AttrDefaults(option_name_uk=float_defs, ...)
     """
-    _, _, _, _, float_defaults = _load_indexes()
+    _, _, _, _, float_defaults, _ = _load_indexes()
     return float_defaults
+
+
+def get_numeric_defaults() -> NumericDefaultsMap:
+    """
+    Категорійні дефолти для float/int/text/string/array атрибутів з set_codes:
+        set_code → attr_code → (AttrMeta, default_value)
+
+    Будуються з рядків без option_code, але з set_codes і дефолтним значенням (option_name_uk).
+    Перший зустрічний запис для кожного (set_code, attr_code) виграє.
+
+    Призначення:
+        - атрибути в категорії мають задане значення за замовчуванням,
+          але немають маппінгу з Prom-параметрами (напр. «Максимальний перетин дроту»)
+        - застосовується в кроці 6c генератора після select-дефолтів
+
+    Використання:
+        for attr_code, (meta, value) in get_numeric_defaults().get(set_code, {}).items():
+            if attr_code not in already_mapped_codes:
+                params.append(_render_numeric_param(meta, value))
+    """
+    _, _, _, _, _, numeric_defaults = _load_indexes()
+    return numeric_defaults
