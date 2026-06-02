@@ -25,7 +25,9 @@ epicenter_export_attr_options.py
   Якщо «Опції атрибутів» вже існує — дописує тільки нові set_codes,
   існуючі рядки не чіпає.
 
-  Для GLOBAL attrs — оновлює set_codes in-place, нових рядків не створює.
+  Для GLOBAL attrs — оновлює set_codes in-place І перевіряє нові option_codes.
+    При повторному запуску завжди фетчить опції з API і дописує нові рядки
+    (наприклад, якщо Epicenter додав нові бренди в attr_code=brand).
   Для scoped attrs — перевіряє пару (set_code, attr_code); якщо вже є — пропускає.
 
 Наступний крок (КРОК 6):
@@ -400,6 +402,48 @@ def load_existing_scoped_sc_ac_pairs() -> set[tuple[str, str]]:
         return set()
 
 
+def load_existing_option_codes_by_attr() -> dict[str, set[str]]:
+    """
+    Повертає {attr_code: {option_code, ...}} для всіх рядків у «Опції атрибутів».
+
+    Використовується щоб не дублювати option_code при повторному запуску:
+    наприклад, Epicenter додав нові бренди в attr_code=brand — скрипт
+    завантажить всі опції бренду з API і запише тільки ті, яких ще немає.
+    """
+    if not OUTPUT_PATH.exists():
+        return {}
+    try:
+        import openpyxl as _xl
+        wb = _xl.load_workbook(OUTPUT_PATH, read_only=True, data_only=True)
+        if "Опції атрибутів" not in wb.sheetnames:
+            wb.close()
+            return {}
+        rows = list(wb["Опції атрибутів"].iter_rows(values_only=True))
+        wb.close()
+        if len(rows) < 2:
+            return {}
+        headers = [str(c).strip() if c else "" for c in rows[0]]
+        try:
+            ac_col = headers.index("attr_code")
+            oc_col = headers.index("option_code")
+        except ValueError:
+            return {}
+        result: dict[str, set[str]] = {}
+        for row in rows[1:]:
+            if len(row) <= max(ac_col, oc_col):
+                continue
+            ac = str(row[ac_col] or "").strip()
+            oc = str(row[oc_col] or "").strip()
+            if ac and oc:
+                result.setdefault(ac, set()).add(oc)
+        total = sum(len(v) for v in result.values())
+        print(f"   Існуючих option_codes у «Опції атрибутів»: {total} шт. по {len(result)} attr_codes")
+        return result
+    except Exception as e:
+        print(f"⚠️  Не вдалося прочитати option_codes: {e}")
+        return {}
+
+
 # ─── Attr aggregation ─────────────────────────────────────────────────────────
 
 class _AttrAgg:
@@ -626,6 +670,7 @@ def _fetch_and_write_parallel(
     start_row: int,
     label: str,
     sort_by_set_code: bool = False,
+    existing_options: dict[str, set[str]] | None = None,
 ) -> int:
     """
     Загальна функція паралельного завантаження + запису для будь-якого набору агрегатів.
@@ -739,15 +784,28 @@ def _fetch_and_write_parallel(
                         elapsed_s = "err"
                         print(f"   ⚠️  ERROR attr={agg.attr_code}: {e}")
 
-                    rows_for_attr = opts or [None]
+                    # Фільтруємо вже відомі option_codes (повторний запуск із новими опціями)
+                    known_codes = (existing_options or {}).get(agg.attr_code)
+                    if known_codes is not None:
+                        pre_count = len(opts)
+                        opts = [o for o in opts if o.get("code", "") not in known_codes]
+                        if pre_count != len(opts):
+                            print(f"       Відфільтровано {pre_count - len(opts)} вже існуючих option_codes для {agg.attr_code}")
+                    # known_codes is None = вперше → fallback [None]; інакше → пишемо тільки нові
+                    rows_for_attr = (opts or [None]) if known_codes is None else opts
                     with lock:
+                        if not rows_for_attr:
+                            done[0] += 1
+                            sc_label = f"sc={agg.set_codes[0]}" if len(agg.set_codes) == 1 else f"sc×{len(agg.set_codes)}"
+                            print(f"   [{done[0]}/{total}] attr={agg.attr_code} {sc_label} → немає нових опцій ({elapsed_s})")
+                            continue
                         for opt in rows_for_attr:
                             _write_row_to_ws(ws, current_row, _row_vals(agg, opt))
                             current_row += 1
                         done[0] += 1
                         total_written += len(rows_for_attr)
                         sc_label = f"sc={agg.set_codes[0]}" if len(agg.set_codes) == 1 else f"sc×{len(agg.set_codes)}"
-                        print(f"   [{done[0]}/{total}] attr={agg.attr_code} {sc_label} → {len(opts)} опцій ({elapsed_s})")
+                        print(f"   [{done[0]}/{total}] attr={agg.attr_code} {sc_label} → {len(rows_for_attr)} нових опцій ({elapsed_s})")
 
     print(f"   [{label}] ⏱️  {time.monotonic() - fetch_start:.1f}s | рядків: {total_written}")
     return current_row
@@ -759,13 +817,16 @@ def append_option_rows(
     pair_meta: dict[tuple[str, str], dict],
     existing_global_ac: set[str],
     existing_scoped_pairs: set[tuple[str, str]],
+    existing_options: dict[str, set[str]] | None = None,
 ) -> bool:
     """
     Відкриває xlsx, оновлює/дописує рядки за стратегією агрегації, зберігає.
 
     Global attrs (GLOBAL_ATTR_CODES):
-      • вже є в листі → in-place: дописуємо set_codes до існуючих рядків
-      • новий          → API + нові рядки
+      • select/multiselect — завжди фетчаться з API (і нові, і існуючі);
+        existing_options фільтрує вже відомі option_codes → дописуються тільки нові рядки.
+        Так ловляться нові option_codes доданих Epicenter (наприклад, нові бренди).
+      • in-place оновлення set_codes для вже існуючих рядків (нові категорії).
 
     Scoped attrs (решта):
       • (set_code, attr_code) вже є → пропускаємо (не дублюємо)
@@ -782,24 +843,30 @@ def append_option_rows(
     # --- Global: розбиваємо на update і new ---
     global_update_agg   = {ac: agg for ac, agg in {**global_ac_agg, **global_nopt_agg}.items()
                            if ac in existing_global_ac}
-    new_global_ac_agg   = {ac: agg for ac, agg in global_ac_agg.items()   if ac not in existing_global_ac}
+    # select/multiselect: фетчимо ЗАВЖДИ (і нові, і існуючі) —
+    # _fetch_and_write_parallel відфільтрує вже відомі option_codes через existing_options.
+    # Це дозволяє виявити нові option_codes (напр. нові бренди) при повторному запуску.
+    fetch_global_ac_agg = global_ac_agg
     new_global_nopt_agg = {ac: agg for ac, agg in global_nopt_agg.items() if ac not in existing_global_ac}
 
     # --- Scoped: фільтруємо вже існуючі (sc, ac) пари ---
     new_scoped_ac_agg   = {k: agg for k, agg in scoped_ac_agg.items()   if k not in existing_scoped_pairs}
     new_scoped_nopt_agg = {k: agg for k, agg in scoped_nopt_agg.items() if k not in existing_scoped_pairs}
 
+    _n_global_first   = sum(1 for ac in fetch_global_ac_agg if ac not in existing_global_ac)
+    _n_global_recheck = sum(1 for ac in fetch_global_ac_agg if ac in existing_global_ac)
     print(
         f"\n📋 Розподіл:\n"
         f"   Global attrs ({len(GLOBAL_ATTR_CODES)} кодів):\n"
-        f"     • in-place оновлення (вже є в листі):  {len(global_update_agg)}"
+        f"     • in-place оновлення set_codes (вже є): {len(global_update_agg)}"
         + (f" {sorted(global_update_agg)}" if global_update_agg else "") + "\n"
-        f"     • нові select/multiselect (API):        {len(new_global_ac_agg)}\n"
-        f"     • нові числові/текстові (без API):      {len(new_global_nopt_agg)}\n"
+        f"     • fetch опцій select/multiselect (всі): {len(fetch_global_ac_agg)}"
+        f" (вперше: {_n_global_first}, перевірка нових option_codes: {_n_global_recheck})\n"
+        f"     • нові числові/текстові (без API):       {len(new_global_nopt_agg)}\n"
         f"   Scoped attrs (по одному рядку на set_code):\n"
-        f"     • нові select/multiselect (API):        {len(new_scoped_ac_agg)}\n"
-        f"     • нові числові/текстові (без API):      {len(new_scoped_nopt_agg)}\n"
-        f"     • пропущено (вже є в листі):            "
+        f"     • нові select/multiselect (API):         {len(new_scoped_ac_agg)}\n"
+        f"     • нові числові/текстові (без API):       {len(new_scoped_nopt_agg)}\n"
+        f"     • пропущено (вже є в листі):             "
         f"{len(scoped_ac_agg) + len(scoped_nopt_agg) - len(new_scoped_ac_agg) - len(new_scoped_nopt_agg)}"
     )
 
@@ -809,11 +876,12 @@ def append_option_rows(
     # Нові рядки: спочатку global, потім scoped
     current_row = fetch_and_write_parallel = start_row
 
-    if new_global_ac_agg or new_global_nopt_agg:
+    if fetch_global_ac_agg or new_global_nopt_agg:
         current_row = _fetch_and_write_parallel(
-            list(new_global_ac_agg.items()),
+            list(fetch_global_ac_agg.items()),
             list(new_global_nopt_agg.items()),
             ws, current_row, "global",
+            existing_options=existing_options,
         )
 
     if new_scoped_ac_agg or new_scoped_nopt_agg:
@@ -859,16 +927,17 @@ def main() -> None:
         return
 
     existing_with_options = load_set_codes_with_options()
+    existing_option_codes  = load_existing_option_codes_by_attr()
     new_set_codes = mapped_set_codes - existing_with_options
 
     if not new_set_codes:
-        print("   ✅ Опції вже завантажено для всіх категорій.")
-        print("   КРОК 6: Заповни prom_option_name (колонка H) у «Опції атрибутів».")
-        return
+        print("   ✅ Нових set_codes немає — перевіряємо нові option_codes для глобальних атрибутів.")
+    else:
+        print(f"   Нових set_codes для завантаження: {len(new_set_codes)} шт.")
 
-    print(f"   Нових set_codes для завантаження: {len(new_set_codes)} шт.")
-
-    pair_meta = load_attr_set_meta(new_set_codes)
+    # pair_meta для ВСІХ mapped_set_codes (не тільки нових):
+    # global attrs завжди фетчаться, щоб знайти нові option_codes (напр. нові бренди)
+    pair_meta = load_attr_set_meta(mapped_set_codes)
     if not pair_meta:
         print(
             "\n⏭️  Немає атрибутів з isRequired=TRUE для нових категорій.\n"
@@ -879,9 +948,15 @@ def main() -> None:
     existing_global_ac     = load_existing_global_attr_codes()
     existing_scoped_pairs  = load_existing_scoped_sc_ac_pairs()
 
-    written = append_option_rows(pair_meta, existing_global_ac, existing_scoped_pairs)
+    written = append_option_rows(
+        pair_meta, existing_global_ac, existing_scoped_pairs, existing_option_codes
+    )
     if not written:
-        print("⚠️  Опцій не записано.")
+        if new_set_codes:
+            print("⚠️  Опцій не записано (перевір пари set_code/attr_code у «Сети атрибутів»).")
+        else:
+            print("   ✅ Нових опцій не знайдено — дані актуальні.")
+        print("   КРОК 6: Заповни prom_option_name (колонка H) у «Опції атрибутів».")
         return
 
     total_elapsed = time.monotonic() - main_start

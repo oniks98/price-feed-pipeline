@@ -47,6 +47,7 @@ from services.epicenter_attr_service import (
     get_float_defaults,
     get_numeric_defaults,
     get_numeric_map,
+    get_set_numeric_map,
     get_option_map,
     get_set_option_map,
 )
@@ -378,12 +379,13 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
 
     Повертає оновлений XML.
     """
-    option_map    = get_option_map()
-    set_option_map = get_set_option_map()
-    defaults      = get_defaults()
-    numeric_map   = get_numeric_map()
-    attr_defaults  = get_attr_defaults()
-    float_defaults = get_float_defaults()
+    option_map       = get_option_map()
+    set_option_map   = get_set_option_map()
+    defaults         = get_defaults()
+    numeric_map      = get_numeric_map()
+    set_numeric_map  = get_set_numeric_map()
+    attr_defaults    = get_attr_defaults()
+    float_defaults   = get_float_defaults()
     numeric_defaults = get_numeric_defaults()
 
     mapped_count    = 0
@@ -561,13 +563,20 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
                             "— значення відсутнє у маппінгу, дефолт буде застосовано",
                             offer_id, prom_name, single_value,
                         )
-                continue
 
             # float / int / text / string — значення напряму
-            meta = numeric_map.get(prom_name)
-            if meta and meta.attr_code not in mapped_attr_codes:
-                params.append(_render_numeric_param(meta, prom_value))
-                mapped_attr_codes.add(meta.attr_code)
+            # Пріоритет: set_numeric_map[cat_code] (set-scoped) → numeric_map (global).
+            # Це запобігає «протіканню»: attr_code=12137 «Фокусна відстань, max»
+            # (set_codes=376) більше не потрапляє у set 3516.
+            numeric_metas = (
+                set_numeric_map.get(cat_code, {}).get(prom_name)
+                or numeric_map.get(prom_name)
+                or []
+            )
+            for meta in numeric_metas:
+                if meta.attr_code not in mapped_attr_codes:
+                    params.append(_render_numeric_param(meta, prom_value))
+                    mapped_attr_codes.add(meta.attr_code)
 
         # --- 6. Дефолти для атрибутів без маппінгу ---
         # Застосовуємо set-специфічні дефолти (defaults[cat_code]).

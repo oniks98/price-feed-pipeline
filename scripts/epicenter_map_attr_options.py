@@ -40,7 +40,11 @@ Rule 3 — select/multiselect (needs_default не впливає на алгор
    needs_default=FALSE → дефолт як fallback (параметр очікується у більшості товарів)
 
 ══════════════════════════════════════════════════════════════════════
-Ідемпотентність: вже заповнені клітинки НЕ перезаписуються.
+Ідемпотентність:
+  • Вже заповнені клітинки НЕ перезаписуються.
+  • default_option_code: зберігається ТІЛЬКИ у 1-му рядку групи (attr_code, set_codes).
+    Якщо 1-й рядок уже заповнений → нічого не записується; всі інші рядки групи
+    у колонці default_option_code очищаються.
 
 Запуск:
     python scripts/epicenter_map_attr_options.py            # prod
@@ -286,12 +290,13 @@ class OptionRow:
 
 @dataclass
 class RunStats:
-    rule1         : int = 0     # numeric + needs_default=TRUE → option_name_uk (hardcode)
-    rule2         : int = 0     # numeric + needs_default=FALSE → option_name_uk (feed median)
-    rule3_match   : int = 0     # select → prom_option_name matched (fuzzy)
-    rule3_default : int = 0     # select → default_option_code written
-    skipped       : int = 0     # already filled → not overwritten
-    no_match      : int = 0     # select → fuzzy match not found (prom_option залишено порожнім)
+    rule1           : int = 0     # numeric + needs_default=TRUE → option_name_uk (hardcode)
+    rule2           : int = 0     # numeric + needs_default=FALSE → option_name_uk (feed median)
+    rule3_match     : int = 0     # select → prom_option_name matched (fuzzy)
+    rule3_default   : int = 0     # select → default_option_code written
+    skipped         : int = 0     # already filled → not overwritten
+    no_match        : int = 0     # select → fuzzy match not found (prom_option залишено порожнім)
+    defaults_cleared: int = 0     # default_option_code очищено у не-першому рядку групи
 
     def report(self) -> str:
         lines = [
@@ -304,6 +309,7 @@ class RunStats:
             f"║  Rule 3  select default_option_code    : {self.rule3_default:>6}",
             f"║  Rule 3  select no match (порожньо)    : {self.no_match:>6}",
             f"║  Пропущено (вже заповнено)             : {self.skipped:>6}",
+            f"║  default_option_code очищено (дублі)   : {self.defaults_cleared:>6}",
             "╚══════════════════════════════════════════════════",
         ]
         return "\n".join(lines)
@@ -690,32 +696,53 @@ def process(
 
     def _write_default_for_attr(ac: str, sc: str, source_rule: int) -> bool:
         """
-        Write default_option_code to all rows of (attr_code, set_codes) that
-        don't have it yet.  Each (attr_code, set_codes) pair gets its own
-        independently resolved default — rows belonging to different set_codes
-        within the same attr_code are never mixed.
-        Returns True if anything was written.
+        Записує default_option_code ТІЛЬКИ в 1-й рядок групи (attr_code, set_codes).
+
+        Алгоритм:
+          1. Перевіряємо, чи вже оброблена ця група (written_defaults).
+          2. Беремо фактично перший рядок групи за порядком листа.
+          3. Очищаємо default_option_code у всіх інших рядках групи (рядки 2+).
+          4. Якщо 1-й рядок вже має default_option_code → пропускаємо запис (ідемпотент).
+          5. Інакше — резолвимо код і записуємо в 1-й рядок.
+
+        Повертає True якщо щось записано (новий дефолт).
         """
         key = (ac, sc)
         if key in written_defaults:
             return False
-
         written_defaults.add(key)
-        code = defaults.get(key)
 
+        # Всі рядки цієї групи у порядку листа
+        group_rows = [r for r in groups[ac] if r.set_codes == sc]
+        if not group_rows:
+            return False
+
+        first = group_rows[0]  # Завжди 1-й рядок за порядком — не перший-порожній
+
+        # ── Очищаємо дублі: default_option_code тільки в 1-му рядку ────────
+        cleared = 0
+        for extra in group_rows[1:]:
+            if extra.default_code:
+                _write(extra.row_idx, _C_DEFAULT_CODE, None)
+                cleared += 1
+        if cleared:
+            stats.defaults_cleared += cleared
+
+        # ── Ідемпотент: 1-й рядок вже заповнений → нічого не пишемо ────────
+        if first.default_code:
+            logger.debug(
+                "   Skip default (already=%s) attr=%s set=%s row %d",
+                first.default_code, ac, sc, first.row_idx,
+            )
+            return False
+
+        # ── Резолвимо та записуємо в 1-й рядок ─────────────────────────────
+        code = defaults.get(key)
         if not code:
             logger.warning(
                 "   ⚠️  Не знайдено default_option_code для attr_code=%s set_codes=%s (%s)",
                 ac, sc, groups[ac][0].attr_name if groups.get(ac) else "?",
             )
-            return False
-
-        # Записуємо тільки в ПЕРШИЙ рядок (attr_code, set_codes) без дефолту
-        first = next(
-            (r2 for r2 in groups[ac] if r2.set_codes == sc and not r2.default_code),
-            None,
-        )
-        if first is None:
             return False
 
         _write(first.row_idx, _C_DEFAULT_CODE, code)
@@ -828,6 +855,12 @@ def process(
             logger.debug("   skip [row %d] unknown attr_type=%r", ri, at)
             stats.skipped += 1
 
+    if stats.defaults_cleared:
+        logger.info(
+            "   🧹 Очищено дублів default_option_code: %d рядків (залишено тільки 1-й рядок групи)",
+            stats.defaults_cleared,
+        )
+
     return stats
 
 
@@ -907,7 +940,7 @@ def main() -> None:
 
     _log_sheet_stats(rows)
 
-    # ── 3. Fetch Prom feed ──────────────────────────────────────────────────
+    # ── 3. Fetch Prom feed ──────────────────────────────────────────════════
     prom_vals: dict[str, list[str]] = {}
     if not args.no_feed:
         try:
