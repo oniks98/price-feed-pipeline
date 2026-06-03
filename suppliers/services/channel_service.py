@@ -7,11 +7,9 @@ from pathlib import Path
 from typing import List, Dict, Optional
 from decimal import Decimal
 
-from suppliers.services.dealer_price_service import DEFAULT_COEF_RETAIL, DEFAULT_COEF_DEALER
-
 
 class ChannelConfig:
-    """Конфігурація одного каналу продажу"""
+    """Конфігурація одного каналу продажу."""
 
     def __init__(
         self,
@@ -19,8 +17,8 @@ class ChannelConfig:
         prefix: str,
         coefficient: Decimal,
         coefficient_feed: Decimal,
-        coef_retail: Decimal,
-        coef_dealer: Decimal,
+        coef: Decimal,
+        threshold: Decimal,
         group_number: str,
         group_name: str,
         subdivision_id: str,
@@ -33,9 +31,9 @@ class ChannelConfig:
         self.prefix = prefix
         self.coefficient = coefficient
         self.coefficient_feed = coefficient_feed
-        # Нові коефіцієнти для viatec dealer pricing
-        self.coef_retail = coef_retail
-        self.coef_dealer = coef_dealer
+        # Dealer pricing: coef і threshold з CSV (рядок каналу)
+        self.coef = coef           # множник до retail  (напр. 0.95)
+        self.threshold = threshold  # мін. наценка на dealer (напр. 1.3)
         self.group_number = group_number
         self.group_name = group_name
         self.subdivision_id = subdivision_id
@@ -47,8 +45,8 @@ class ChannelConfig:
     def __repr__(self):
         return (
             f"ChannelConfig(channel={self.channel}, "
-            f"coef_retail={self.coef_retail}, coef_dealer={self.coef_dealer}, "
-            f"coef={self.coefficient}, coef_feed={self.coefficient_feed}, "
+            f"coef={self.coef}, threshold={self.threshold}, "
+            f"coef_legacy={self.coefficient}, coef_feed={self.coefficient_feed}, "
             f"prefix={self.prefix})"
         )
 
@@ -70,7 +68,6 @@ class ChannelService:
         self.category_channels: Dict[str, List[ChannelConfig]] = {}
 
         # Додатковий індекс для фідів: category id → [ChannelConfig, ...]
-        # Використовується коли URL категорії порожній (є тільки в фіді, не на сайті)
         self.category_id_channels: Dict[str, List[ChannelConfig]] = {}
 
         self.is_multi_channel = False
@@ -106,12 +103,15 @@ class ChannelService:
                         continue
 
                     channel_config = self._build_channel_config(row)
+                    if channel_config is None:
+                        # Помилка вже залогована в _build_channel_config
+                        continue
 
                     # Індекс за URL (для retail-пауків)
                     if category_url:
                         self.category_channels.setdefault(category_url, []).append(channel_config)
 
-                    # Індекс за category id (для feed-пауків, в т.ч. категорій без URL)
+                    # Індекс за category id (для feed-пауків)
                     if category_id:
                         self.category_id_channels.setdefault(category_id, []).append(channel_config)
 
@@ -129,27 +129,49 @@ class ChannelService:
             if self.logger:
                 self.logger.error(f"❌ Помилка завантаження каналів: {e}")
 
-    def _build_channel_config(self, row: dict) -> "ChannelConfig":
-        """Будує ChannelConfig з рядка CSV."""
-        # Зворотня сумісність: legacy coefficient/coefficient_feed
-        coefficient = self._parse_decimal(row.get("coefficient", "1.0"), row)
-        coefficient_feed = self._parse_decimal(row.get("coefficient_feed", "1.0"), row)
+    def _build_channel_config(self, row: dict) -> "ChannelConfig | None":
+        """
+        Будує ChannelConfig з рядка CSV.
 
-        # Нові коефіцієнти для dealer-пайплайну
-        coef_retail = self._parse_decimal(
-            row.get("coef_retail", ""), row, fallback=DEFAULT_COEF_RETAIL
-        )
-        coef_dealer = self._parse_decimal(
-            row.get("coef_dealer", ""), row, fallback=DEFAULT_COEF_DEALER
-        )
+        Повертає None якщо coef або threshold відсутні або некоректні
+        (рядок буде пропущено при завантаженні).
+        """
+        channel = row.get("channel", "?").strip()
+        url_short = row.get("Линк категории поставщика", "")[:60]
+
+        # Строки-маркери з subdivision_id="delete" — спеціальні рядки для фільтрації
+        # категорій (використовуються пауком безпосередньо). Цінова конфігурація ім не потрібна.
+        if row.get("Ідентифікатор_підрозділу", "").strip().lower() == "delete":
+            return None
+
+        # ── Обов'язкові поля для dealer pricing ────────────────────────
+        coef_raw = row.get("coef", "").strip().strip('"')
+        threshold_raw = row.get("threshold", "").strip().strip('"')
+
+        if not coef_raw or not threshold_raw:
+            if self.logger:
+                self.logger.error(
+                    f"❌ CSV: відсутній coef або threshold | "
+                    f"channel={channel!r} url={url_short!r} — рядок пропущено"
+                )
+            return None
+
+        coef = self._parse_decimal_strict(coef_raw, "coef", channel, url_short)
+        threshold = self._parse_decimal_strict(threshold_raw, "threshold", channel, url_short)
+        if coef is None or threshold is None:
+            return None
+
+        # ── Legacy коефіцієнти (зворотна сумісність) ───────────────────
+        coefficient = self._parse_decimal_safe(row.get("coefficient", "1.0"))
+        coefficient_feed = self._parse_decimal_safe(row.get("coefficient_feed", "1.0"))
 
         return ChannelConfig(
-            channel=row.get("channel", "").strip(),
+            channel=channel,
             prefix=row.get("prefix", "").strip(),
             coefficient=coefficient,
             coefficient_feed=coefficient_feed,
-            coef_retail=coef_retail,
-            coef_dealer=coef_dealer,
+            coef=coef,
+            threshold=threshold,
             group_number=row.get("Номер_групи", "").strip(),
             group_name=row.get("Назва_групи", "").strip(),
             subdivision_id=row.get("Ідентифікатор_підрозділу", "").strip(),
@@ -159,22 +181,46 @@ class ChannelService:
             feed=row.get("feed", "").strip(),
         )
 
+    def _parse_decimal_strict(
+        self,
+        raw: str,
+        field_name: str,
+        channel: str,
+        url_short: str,
+    ) -> Decimal | None:
+        """
+        Парсинг Decimal з CSV; повертає None і логує error при помилці.
+        Використовується для обов'язкових полів (coef, threshold).
+        """
+        clean = raw.strip().strip('"').replace(",", ".")
+        try:
+            return Decimal(clean) if clean else None
+        except Exception:
+            if self.logger:
+                self.logger.error(
+                    f"❌ CSV: некоректний {field_name}={raw!r} | "
+                    f"channel={channel!r} url={url_short!r} — рядок пропущено"
+                )
+            return None
+
+    def _parse_decimal_safe(self, raw: str, fallback: Decimal = Decimal("1.0")) -> Decimal:
+        """Безпечний парсинг Decimal з CSV; повертає fallback при помилці."""
+        clean = raw.strip().strip('"').replace(",", ".")
+        try:
+            return Decimal(clean) if clean else fallback
+        except Exception:
+            return fallback
+
     def _parse_decimal(
         self,
         raw: str,
         row: dict,
         fallback: Decimal | None = None,
     ) -> Decimal:
-        """Безпечний парсинг Decimal з CSV рядка."""
+        """Legacy-метод для зворотної сумісності."""
         if fallback is None:
             fallback = Decimal("1.0")
-        clean = raw.strip().strip('"').replace(",", ".")
-        try:
-            return Decimal(clean) if clean else fallback
-        except Exception:
-            if self.logger:
-                self.logger.warning(f"⚠️ Некоректний коефіцієнт {raw!r} у рядку: {row}")
-            return fallback
+        return self._parse_decimal_safe(raw, fallback)
 
     # ------------------------------------------------------------------
     # LOOKUPS
@@ -185,12 +231,7 @@ class ChannelService:
         return self.category_channels.get(category_url, [])
 
     def get_channels_by_id(self, category_id: str, feed_id: str = "") -> List[ChannelConfig]:
-        """Повертає канали за category id, з фільтрацією по feed_id.
-
-        Якщо feed_id порожній — повертаються всі канали (legacy).
-        Якщо feed_id задано — повертаються канали де channel.feed == feed_id
-        або channel.feed == "" (універсальні, не прив'язані до фіду).
-        """
+        """Повертає канали за category id, з фільтрацією по feed_id."""
         all_channels = self.category_id_channels.get(str(category_id).strip(), [])
         if not feed_id:
             return all_channels
@@ -199,10 +240,6 @@ class ChannelService:
     def resolve_channels(self, category_url: str, category_id: str = "", feed_id: str = "") -> List[ChannelConfig]:
         """
         Повертає канали: спочатку шукає за URL, потім за category id.
-
-        feed_id фільтрує канали для категорій в декількох фідах
-        (напр. 25, 13, 621 у фідах 50 і 52): повертаються тільки
-        канали поточного фіду, а не обох.
         """
         channels = self.get_channels(category_url) if category_url else []
         if not channels and category_id:
@@ -210,19 +247,12 @@ class ChannelService:
         return channels
 
     # ------------------------------------------------------------------
-    # PRICE
+    # PRICE (legacy coefficient mode)
     # ------------------------------------------------------------------
 
     def apply_price_coefficient(self, base_price: str, coefficient: Decimal) -> str:
         """
-        Застосовує коефіцієнт до ціни.
-
-        Args:
-            base_price: Базова ціна (може містити коми, пробіли).
-            coefficient: Коефіцієнт для множення.
-
-        Returns:
-            Ціна після множення та округлення.
+        Застосовує коефіцієнт до ціни (legacy-режим для non-dealer пауків).
         """
         try:
             clean_price = str(base_price).replace(",", ".").replace(" ", "").strip()

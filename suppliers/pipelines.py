@@ -92,13 +92,7 @@ from keywords.core.generator import ProductKeywordsGenerator
 
 # Імпортуємо сервіси
 from suppliers.services.supplier_config import SupplierConfig
-from suppliers.services.dealer_price_service import (
-    DealerPriceService,
-    VIATEC_PROM_THRESHOLD,
-    VIATEC_SITE_THRESHOLD,
-    SECUR_PROM_THRESHOLD,
-    SECUR_SITE_THRESHOLD,
-)
+from suppliers.services.dealer_price_service import DealerPriceService
 from suppliers.services.channel_service import ChannelService
 from suppliers.services.availability_service import AvailabilityService
 from suppliers.services.specs_utils import merge_all_specs
@@ -198,6 +192,9 @@ class SuppliersPipeline:
         self.stats: dict[str, dict] = {}
         self.stats_logged = False
 
+        # Anomaly price log (ціна > роздріб постачальника)
+        self._anomaly_log = None
+
         # Конфігурації
         self.configs: dict[str, SupplierConfig] = {}
         
@@ -217,6 +214,8 @@ class SuppliersPipeline:
 
         import os as _os
         self.output_dir = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline")) / "data" / "output"
+        _anomaly_path = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline")) / "anomal_price.log"
+        self._anomaly_log = open(_anomaly_path, "a", encoding="utf-8", buffering=1)
 
     # ------------------------------------------------------------------ #
     # OPEN SPIDER
@@ -418,48 +417,52 @@ class SuppliersPipeline:
                 # ── ЦІНА + ВАЛЮТА + ОПТОВА_ЦІНА ────────────────────────────
                 # Viatec dealer (usd_rate є в item):
                 #   dealer_uah = dealer_usd × usd_rate  → Оптова_ціна
-                #   prom: retail/dealer >= 1.35 → retail × coef_retail
-                #         retail/dealer <  1.35 → dealer × coef_dealer
-                #   site: retail/dealer >= 1.7 → retail × coef_retail
-                #         retail/dealer <  1.7 → dealer × coef_dealer
+                #   X = retail / dealer * coef
+                #   Ціна = max(retail * coef, dealer * threshold)
+
+
                 # Secur dealer (dealer_price_uah є в item, вже в UAH):
-                #   prom: поріг 1.30, site: поріг 1.7
+                #   та сама формула, coef/threshold з CSV
                 # Legacy / інші пауки (без жодного з вище): коефіцієнтний режим
                 usd_rate_raw         = adapter.get("usd_rate", "")
                 dealer_price_uah_raw = adapter.get("dealer_price_uah", "")
                 price_rrp_uah        = adapter.get("price_rrp_uah", "")
 
+                # Трекінг для anomaly-логу
+                _price_decimal: Decimal = Decimal("0")
+                _retail_for_anomaly: Decimal = Decimal("0")
+
                 if usd_rate_raw:
                     # ── Viatec: USD → UAH конвертація ──
                     dealer_uah = DealerPriceService.dealer_uah(base_price, usd_rate_raw)
                     cleaned["Оптова_ціна"] = DealerPriceService.format_price(dealer_uah)
-
-                    price = DealerPriceService.channel_price_for_config(
+                    _price_decimal = DealerPriceService.channel_price_for_config(
                         channel_config=channel_config,
                         retail_uah=price_rrp_uah,
                         dealer_uah_val=dealer_uah,
-                        prom_threshold=VIATEC_PROM_THRESHOLD,
-                        site_threshold=VIATEC_SITE_THRESHOLD,
+                        logger=spider.logger,
+                        product_name=adapter.get("Назва_позиції", ""),
                     )
-                    cleaned["Ціна"]   = DealerPriceService.format_price(price)
+                    cleaned["Ціна"]   = DealerPriceService.format_price(_price_decimal)
                     cleaned["Валюта"] = "UAH"
+                    _retail_for_anomaly = DealerPriceService.to_decimal(price_rrp_uah, Decimal("0"))
 
                 elif dealer_price_uah_raw:
-                    # ── Secur: вже в UAH, конвертація не потрібна ──
+                    # ── Secur: вже в UAH ──
                     dealer_uah = DealerPriceService.to_decimal(
                         dealer_price_uah_raw, Decimal("0")
                     )
                     cleaned["Оптова_ціна"] = DealerPriceService.format_price(dealer_uah)
-
-                    price = DealerPriceService.channel_price_for_config(
+                    _price_decimal = DealerPriceService.channel_price_for_config(
                         channel_config=channel_config,
                         retail_uah=price_rrp_uah,
                         dealer_uah_val=dealer_uah,
-                        prom_threshold=SECUR_PROM_THRESHOLD,
-                        site_threshold=SECUR_SITE_THRESHOLD,
+                        logger=spider.logger,
+                        product_name=adapter.get("Назва_позиції", ""),
                     )
-                    cleaned["Ціна"]   = DealerPriceService.format_price(price)
+                    cleaned["Ціна"]   = DealerPriceService.format_price(_price_decimal)
                     cleaned["Валюта"] = "UAH"
+                    _retail_for_anomaly = DealerPriceService.to_decimal(price_rrp_uah, Decimal("0"))
                 else:
                     # ── Legacy: коефіцієнтний режим (не-dealer або інші постачальники) ──
                     coef = (
@@ -494,6 +497,14 @@ class SuppliersPipeline:
                     self._inc(output_file, "filtered_no_sku")
                     raise DropItem("EMPTY SKU")
                 cleaned["Код_товару"] = product_code
+
+                # ── Аномальна ціна: розрахована > роздріб постачальника ──
+                if _retail_for_anomaly > 0 and _price_decimal > _retail_for_anomaly:
+                    self._log_anomaly(
+                        product_code=product_code,
+                        retail=_retail_for_anomaly,
+                        price=_price_decimal,
+                    )
                 
                 # Ідентифікатор товару - з префіксом
                 if channel_config.prefix:
@@ -567,6 +578,28 @@ class SuppliersPipeline:
             raise DropItem("NO MULTI-CHANNEL")
 
         return item
+
+    # ------------------------------------------------------------------ #
+    # ANOMALY LOG
+    # ------------------------------------------------------------------ #
+
+    def _log_anomaly(self, product_code: str, retail: Decimal, price: Decimal) -> None:
+        """
+        Записує в anomal_price.log товари, де розрахована ціна перевищує роздріб постачальника.
+        Формат: код товара = N; retail (від постачальника) = N; price (Ціна) = N
+        """
+        if not self._anomaly_log:
+            return
+        try:
+            line = (
+                f"код товара = {product_code}; "
+                f"ретайл (від постачальника) = {int(retail)}; "
+                f"price (Ціна) = {int(price)}\n"
+            )
+            self._anomaly_log.write(line)
+        except Exception as e:
+            if hasattr(self, "_spider_logger"):
+                self._spider_logger.warning(f"⚠️ anomal_price.log: помилка запису: {e}")
 
     # ------------------------------------------------------------------ #
     # CSV
@@ -724,6 +757,10 @@ class SuppliersPipeline:
 
         for f in self.files.values():
             f.close()
+
+        if self._anomaly_log:
+            self._anomaly_log.close()
+            self._anomaly_log = None
 
         # Зберігаємо sku_map на диск
         for sku_service in self.sku_code_services.values():

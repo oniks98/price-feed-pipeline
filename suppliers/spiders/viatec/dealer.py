@@ -26,8 +26,6 @@ from suppliers.services.viatec_feed_service import ViatecFeedService
 from suppliers.services.dealer_price_service import (
     DealerPriceService as ViatecPriceService,
     DEFAULT_USD_RATE,
-    VIATEC_PROM_THRESHOLD,
-    VIATEC_SITE_THRESHOLD,
 )
 from suppliers.services.channel_service import ChannelService
 
@@ -794,8 +792,6 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
             channel_config=channel_config,
             retail_uah=price_rrp_uah,
             dealer_uah_val=dealer_uah_raw,
-            prom_threshold=VIATEC_PROM_THRESHOLD,
-            site_threshold=VIATEC_SITE_THRESHOLD,
         )
         return ViatecPriceService.format_price(price)
 

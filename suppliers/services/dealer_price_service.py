@@ -2,45 +2,29 @@
 Загальний сервіс ціноутворення для дилерських пауків.
 
 Відповідальність: ТІЛЬКИ обчислення цін.
-- Конвертація dealer USD → UAH (для viatec)
-- Вибір ціни для каналу prom (retail vs dealer залежно від порогу)
-- Вибір ціни для каналу site (retail vs dealer залежно від порогу)
 
-Не знає нічого про Scrapy, CSV, пайплайн.
+Формула (канали site і prom):
+    X    = retail / dealer * coef
+    Ціна = dealer * X          якщо X > threshold  (= retail * coef)
+    Ціна = dealer * threshold  якщо X <= threshold
 
-Пороги по постачальниках:
-  VIATEC_PROM_THRESHOLD = 1.35
-  VIATEC_SITE_THRESHOLD = 1.7
-  SECUR_PROM_THRESHOLD  = 1.3
-  SECUR_SITE_THRESHOLD  = 1.7
+    Еквівалентно: Ціна = max(retail * coef, dealer * threshold)
+
+Параметри coef і threshold — у category.csv (рядок каналу).
+Жодних hardcoded порогів у сервісі.
+
+Особливий випадок:
+    retail < dealer (помилка постачальника) → swap + warning у лог.
 """
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 
 
-# ── Пороги ────────────────────────────────────────────────────────────────────
-
-VIATEC_PROM_THRESHOLD: Decimal = Decimal("1.35")
-"""retail / dealer >= 1.35 → prom отримує роздрібну × coef_retail (viatec)."""
-
-VIATEC_SITE_THRESHOLD: Decimal = Decimal("1.7")
-"""retail / dealer >= 1.7 → site отримує роздрібну × coef_retail (viatec)."""
-
-SECUR_PROM_THRESHOLD: Decimal = Decimal("1.3")
-"""retail / dealer >= 1.30 → prom отримує роздрібну × coef_retail (secur)."""
-
-SECUR_SITE_THRESHOLD: Decimal = Decimal("1.7")
-"""retail / dealer >= 1.7 → site отримує роздрібну × coef_retail (secur)."""
-
-
 # ── Дефолти ───────────────────────────────────────────────────────────────────
 
 DEFAULT_USD_RATE: Decimal = Decimal("44.5")
-"""Курс USD за замовчуванням — якщо парсинг не вдався (viatec)."""
-
-DEFAULT_COEF_RETAIL: Decimal = Decimal("1")
-DEFAULT_COEF_DEALER: Decimal = Decimal("1.2")
+"""Курс USD за замовчуванням — якщо парсинг курсу не вдався (viatec)."""
 
 
 # ── Сервіс ────────────────────────────────────────────────────────────────────
@@ -50,7 +34,7 @@ class DealerPriceService:
     Обчислення цін для каналів prom / site по дилерській ціні.
 
     Всі методи — staticmethod (відсутній стан, детермінізм).
-    threshold передається явно — кожен постачальник і канал мають свій поріг.
+    coef і threshold передаються явно з ChannelConfig (завантажені з CSV).
     """
 
     # ------------------------------------------------------------------ #
@@ -85,90 +69,73 @@ class DealerPriceService:
         return price * rate
 
     # ------------------------------------------------------------------ #
-    # ЦІНИ ДЛЯ КАНАЛІВ
+    # ЦІНА КАНАЛУ
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _channel_price(
+    def channel_price(
         retail_uah: str | Decimal,
         dealer_uah_val: Decimal,
-        coef_retail: Decimal,
-        coef_dealer: Decimal,
+        coef: Decimal,
         threshold: Decimal,
+        *,
+        logger=None,
+        product_name: str = "",
     ) -> Decimal:
         """
-        Внутрішня логіка вибору ціни за порогом (спільна для prom і site).
+        Обчислює ціну для каналу (prom або site) за формулою:
 
-        retail / dealer >= threshold → retail × coef_retail
-        retail / dealer <  threshold → dealer × coef_dealer
-        Fallback (retail = 0 або dealer = 0) → dealer × coef_dealer
+            X    = retail / dealer * coef
+            Ціна = dealer * X          якщо X > threshold  (= retail * coef)
+            Ціна = dealer * threshold  якщо X <= threshold
+
+        Еквівалентно: Ціна = max(retail * coef, dealer * threshold)
+
+        Особливий випадок (помилка постачальника):
+            retail < dealer → swap(retail, dealer) + warning у лог.
+
+        Fallback:
+            retail = 0 або dealer = 0 → Ціна = dealer * threshold
         """
         retail = DealerPriceService.to_decimal(retail_uah, Decimal("0"))
+        dealer = dealer_uah_val
 
-        if retail > 0 and dealer_uah_val > 0:
-            if retail / dealer_uah_val >= threshold:
-                return retail * coef_retail
+        if retail <= 0 or dealer <= 0:
+            return dealer * threshold
 
-        return dealer_uah_val * coef_dealer
+        # Swap if supplier gave dealer > retail (error in their feed)
+        if retail < dealer:
+            if logger:
+                logger.warning(
+                    f"⚠️ retail < dealer — постачальник переплутав ціни: "
+                    f"retail={retail}, dealer={dealer} | {product_name}"
+                )
+            retail, dealer = dealer, retail
 
-    @staticmethod
-    def prom_price(
-        retail_uah: str | Decimal,
-        dealer_uah_val: Decimal,
-        coef_retail: Decimal,
-        coef_dealer: Decimal,
-        threshold: Decimal = VIATEC_PROM_THRESHOLD,
-    ) -> Decimal:
-        """
-        Ціна для каналу prom.
-
-        retail / dealer >= threshold → retail × coef_retail
-        retail / dealer <  threshold → dealer × coef_dealer
-        """
-        return DealerPriceService._channel_price(
-            retail_uah, dealer_uah_val, coef_retail, coef_dealer, threshold
-        )
-
-    @staticmethod
-    def site_price(
-        retail_uah: str | Decimal,
-        dealer_uah_val: Decimal,
-        coef_retail: Decimal,
-        coef_dealer: Decimal,
-        threshold: Decimal = VIATEC_SITE_THRESHOLD,
-    ) -> Decimal:
-        """
-        Ціна для каналу site.
-
-        retail / dealer >= threshold → retail × coef_retail
-        retail / dealer <  threshold → dealer × coef_dealer
-        """
-        return DealerPriceService._channel_price(
-            retail_uah, dealer_uah_val, coef_retail, coef_dealer, threshold
-        )
+        return max(retail * coef, dealer * threshold)
 
     @staticmethod
     def channel_price_for_config(
         channel_config,
         retail_uah: str | Decimal,
         dealer_uah_val: Decimal,
-        prom_threshold: Decimal,
-        site_threshold: Decimal,
+        *,
+        logger=None,
+        product_name: str = "",
     ) -> Decimal:
         """
         Обчислює ціну для рядка каналу за ChannelConfig-подібним об'єктом.
 
-        Метод спеціально не імпортує ChannelConfig, щоб dealer_price_service
-        залишався незалежним від channel_service і без циклічних імпортів.
+        coef і threshold беруться з channel_config (завантажені з CSV).
+        Не знає нічого про Scrapy чи pipeline — немає циклічних імпортів.
         """
-        is_prom = getattr(channel_config, "channel", "") == "prom"
-        threshold = prom_threshold if is_prom else site_threshold
-        return DealerPriceService._channel_price(
+        return DealerPriceService.channel_price(
             retail_uah=retail_uah,
             dealer_uah_val=dealer_uah_val,
-            coef_retail=channel_config.coef_retail,
-            coef_dealer=channel_config.coef_dealer,
-            threshold=threshold,
+            coef=channel_config.coef,
+            threshold=channel_config.threshold,
+            logger=logger,
+            product_name=product_name,
         )
 
     # ------------------------------------------------------------------ #
@@ -207,9 +174,6 @@ class DealerPriceService:
                 <span class="lk-nav__admin-bottom-dollar-usd-name">USD б/г</span>
                 <span class="lk-nav__admin-bottom-dollar-usd-value ...">44.00</span>
             </p>
-
-        CSS .get() повертає перший збіг (43.90) — потрібен другий.
-        XPath вибирає <p> що містить текст 'б/г' і читає валюту з нього.
 
         Повертає Decimal або None якщо тег не знайдено / некоректне значення.
         """
