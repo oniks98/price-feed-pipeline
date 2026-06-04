@@ -1,15 +1,15 @@
 ﻿"""
-rule_merchant_center.py
------------------------
+merchant_rule.py
+----------------
 Крок 1 пайплайну: генерує CSV-правила для generate_merchant_feed.py.
 
 Парсить google_merchant_center.xml (Prom.ua експорт) та оновлює:
-  data/markets/rule_merchant_center.csv — нові категорії → theme + schedule=day
+  data/markets/merchant_rule.csv — нові категорії → theme + schedule=day
 
 Збагачення XML-фіду — виключно в generate_merchant_feed.py.
 
-CSV-схема (rule_merchant_center.csv):
-  keyword   — точний рядок g:product_type з фіду
+CSV-схема (merchant_rule.csv):
+  product_type — точний рядок g:product_type з фіду
   theme     — тема для custom_label_0
   schedule  — day/night для custom_label_3 (вручну змінювати у CSV)
   notes     — довільні нотатки
@@ -30,17 +30,17 @@ CSV-схема (rule_merchant_center.csv):
     (schedule НЕ чіпає).
 
 Запуск:
-    python scripts/rule_merchant_center.py
+    python scripts/merchant_rule.py
         Стандартний режим: парсить XML, дописує нові категорії.
 
-    python scripts/rule_merchant_center.py --dry-run
+    python scripts/merchant_rule.py --dry-run
         Виводить у лог що БУДЕ додано — БЕЗ запису в файли.
 
-    python scripts/rule_merchant_center.py --reclassify
+    python scripts/merchant_rule.py --reclassify
         Перекласифікує theme == 'other' у існуючих рядках.
         schedule залишається незмінним.
 
-    python scripts/rule_merchant_center.py --reclassify-all
+    python scripts/merchant_rule.py --reclassify-all
         Перекласифікує всі існуючі рядки за поточною semantic theme-мапою.
         schedule залишається незмінним.
 """
@@ -62,7 +62,7 @@ from constants_feed_url import FEED_URL_MERCHANT
 
 BASE_DIR:    Final[Path] = Path(__file__).parent.parent
 MARKETS_DIR: Final[Path] = BASE_DIR / "data" / "markets"
-RULES_CSV:   Final[Path] = MARKETS_DIR / "rule_merchant_center.csv"
+RULES_CSV:   Final[Path] = MARKETS_DIR / "merchant_rule.csv"
 
 # ---------------------------------------------------------------------------
 # Config
@@ -79,7 +79,7 @@ DEFAULT_SCHEDULE: Final[str] = "day"   # нові рядки → day; вручн
 # ---------------------------------------------------------------------------
 
 RULES_FIELDNAMES: Final[list[str]] = [
-    "keyword", "theme", "schedule", "google_cat_id", "google_cat_hint", "notes",
+    "product_type", "theme", "schedule", "google_cat_id", "google_cat_hint", "notes",
 ]
 
 # ---------------------------------------------------------------------------
@@ -538,7 +538,7 @@ def parse_xml(url: str) -> list[dict[str, str]]:
 
 
 # ---------------------------------------------------------------------------
-# rule_merchant_center.csv
+# merchant_rule.csv
 # ---------------------------------------------------------------------------
 
 def load_rules(path: Path) -> tuple[list[dict[str, str]], set[str]]:
@@ -546,7 +546,7 @@ def load_rules(path: Path) -> tuple[list[dict[str, str]], set[str]]:
         return [], set()
     with path.open(encoding=ENCODING, newline="") as f:
         rows = list(csv.DictReader(f, delimiter=";"))
-    return rows, {row["keyword"] for row in rows}
+    return rows, {row["product_type"] for row in rows}
 
 
 def update_rules_csv(
@@ -571,14 +571,14 @@ def update_rules_csv(
             if not reclassify_all and current_theme != FALLBACK_THEME:
                 continue
 
-            theme = classify_theme(row["keyword"])
+            theme = classify_theme(row["product_type"])
             if theme == FALLBACK_THEME or theme == current_theme:
                 continue
 
             row["theme"] = theme
             log.info(
                 "RULE RECLASSIFY  theme=%-20s  old=%-20s  kw=%s",
-                theme, current_theme, row["keyword"][:70],
+                theme, current_theme, row["product_type"][:70],
             )
             reclassified += 1
 
@@ -590,7 +590,7 @@ def update_rules_csv(
     for kw in new_keywords:
         theme = classify_theme(kw)
         new_rows.append({
-            "keyword":         kw,
+            "product_type":    kw,
             "theme":           theme,
             "schedule":        DEFAULT_SCHEDULE,
             "google_cat_id":   "",

@@ -4,7 +4,7 @@ generate_merchant_feed.py
 Крок 2 пайплайну: обогащает Google Merchant Center XML-фид метками.
 
 Читает:
-  data/markets/rule_merchant_center.csv   → custom_label_0 (theme), custom_label_3 (schedule),
+  data/markets/merchant_rule.csv          → custom_label_0 (theme), custom_label_3 (schedule),
                                             google_product_category (google_cat_id)
 
 Добавляет к каждому <item>:
@@ -56,7 +56,7 @@ from constants_feed_url import FEED_URL_MERCHANT as FEED_URL
 BASE_DIR:    Final[Path] = Path(__file__).parent.parent
 MARKETS_DIR: Final[Path] = BASE_DIR / "data" / "markets"
 
-RULES_CSV:   Final[Path] = MARKETS_DIR / "rule_merchant_center.csv"
+RULES_CSV:   Final[Path] = MARKETS_DIR / "merchant_rule.csv"
 OUTPUT_PATH: Final[Path] = MARKETS_DIR / "merchant_feed.xml"
 
 # ---------------------------------------------------------------------------
@@ -126,7 +126,7 @@ def _normalize_text(raw: str) -> str:
 
 def load_rules(path: Path) -> dict[str, RuleEntry]:
     """
-    Читает rule_merchant_center.csv.
+    Читает merchant_rule.csv.
     Колонки: product_type, theme, schedule, google_cat_id.
     Колонки google_cat_hint и notes — справочные, игнорируются.
     Возвращает {product_type: RuleEntry(theme, schedule, google_cat_id)}.
