@@ -419,4 +419,15 @@ def apply_prices(
     if stats.converted_prices:
         print(f"Rozetka currency conversions: {stats.converted_prices}")
 
+    if stats.no_category_rules:
+        # Prom автоматично перемістив товари у нові категорії без правил.
+        # Фід згенеровано з coef_uncategorized — ціни некоректні.
+        # Потрібно додати правила у rozetka_coefficients.csv.
+        # Деталі у rozetka_default_id.log
+        raise SystemExit(
+            f"❌ Rozetka: {stats.no_category_rules} товарів без правил категорії "
+            f"(no_category_rules). Додайте правила у rozetka_coefficients.csv. "
+            f"Деталі: rozetka_default_id.log"
+        )
+
     return updated_xml

@@ -248,4 +248,15 @@ def apply_prices(
     if stats.converted_prices:
         print(f"Kasta currency conversions: {stats.converted_prices}")
 
+    if stats.no_category_rules:
+        # Prom автоматично перемістив товари у нові категорії без правил.
+        # Фід згенеровано з coef_uncategorized — ціни некоректні.
+        # Потрібно додати правила у kasta_coefficients.csv.
+        # Деталі у kasta_default_id.log
+        raise SystemExit(
+            f"❌ Kasta: {stats.no_category_rules} товарів без правил категорії "
+            f"(no_category_rules). Додайте правила у kasta_coefficients.csv. "
+            f"Деталі: kasta_default_id.log"
+        )
+
     return updated_xml
