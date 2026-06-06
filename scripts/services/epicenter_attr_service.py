@@ -106,6 +106,7 @@ SetOptionMap     = dict[str, OptionMap]
 DefaultsMap      = dict[str, dict[str, AttrOption]]
 NumericMap       = dict[str, list[AttrMeta]]
 SetNumericMap    = dict[str, NumericMap]
+SetOptionParamNamesMap = dict[str, frozenset[str]]
 # set_code → prom_param → list[AttrMeta]
 # Вирішує «протікання»: attr з set_codes=376 не потрапляє у set 3516.
 # Lookup: set_numeric_map.get(cat_code, {}).get(prom_param) or numeric_map.get(prom_param)
@@ -258,6 +259,7 @@ def _load_indexes() -> tuple[
     OptionMap, SetOptionMap, DefaultsMap,
     NumericMap, SetNumericMap,
     AttrDefaultsMap, FloatDefaultsMap, NumericDefaultsMap,
+    SetOptionParamNamesMap,
 ]:
     """Єдине читання обох аркушів. Результат кешується через lru_cache."""
     wb = _load_workbook()
@@ -276,6 +278,7 @@ def _load_indexes() -> tuple[
     option_map:       OptionMap         = {}
     set_option_map:   SetOptionMap      = {}
     set_numeric_map:  SetNumericMap     = {}
+    set_option_param_names: dict[str, set[str]] = {}
     defaults:         DefaultsMap       = {}
     attr_defaults:    AttrDefaultsMap   = {}
     float_defaults:   FloatDefaultsMap  = {}
@@ -361,6 +364,7 @@ def _load_indexes() -> tuple[
             continue
 
         # --- key_index / set_key_index ---
+        set_codes_for_opt = _parse_set_codes(row[_OPT_COL_SET_CODES])
         if option_code:
             option = AttrOption(
                 attr_code=attr_code,
@@ -370,8 +374,15 @@ def _load_indexes() -> tuple[
             )
             if (attr_code, option_code) not in key_index:
                 key_index[(attr_code, option_code)] = option
-            for sc in _parse_set_codes(row[_OPT_COL_SET_CODES]):
+            for sc in set_codes_for_opt:
                 set_key_index[(sc, attr_code, option_code)] = option
+
+            prom_aliases_for_set = _parse_prom_param_aliases(row[_OPT_COL_PROM_PARAMS])
+            if not prom_aliases_for_set:
+                prom_aliases_for_set = attr_to_prom.get(attr_code, [])
+            if prom_aliases_for_set:
+                for sc in set_codes_for_opt:
+                    set_option_param_names.setdefault(sc, set()).update(prom_aliases_for_set)
 
         # --- option_map / set_option_map ---
         if prom_value and option_code:
@@ -400,7 +411,6 @@ def _load_indexes() -> tuple[
                     for option_alias in prom_option_aliases:
                         option_map.setdefault(param_alias, {}).setdefault(option_alias, []).append(global_option)
 
-                set_codes_for_opt = _parse_set_codes(row[_OPT_COL_SET_CODES])
                 for sc in set_codes_for_opt:
                     sc_option = set_key_index.get((sc, attr_code, option_code))
                     if sc_option is None:
@@ -521,6 +531,7 @@ def _load_indexes() -> tuple[
         option_map, set_option_map, defaults,
         numeric_map, set_numeric_map,
         attr_defaults, float_defaults, numeric_defaults,
+        {sc: frozenset(names) for sc, names in set_option_param_names.items()},
     )
 
 
@@ -530,20 +541,22 @@ def _load_indexes() -> tuple[
 
 def get_option_map() -> OptionMap:
     """prom_param_name → prom_value → list[AttrOption] (глобальний)."""
-    option_map, _, _, _, _, _, _, _ = _load_indexes()
-    return option_map
+    return _load_indexes()[0]
 
 
 def get_set_option_map() -> SetOptionMap:
     """set_code → prom_param_name → prom_value → list[AttrOption] (set-scoped)."""
-    _, set_option_map, _, _, _, _, _, _ = _load_indexes()
-    return set_option_map
+    return _load_indexes()[1]
+
+
+def get_set_option_param_names() -> SetOptionParamNamesMap:
+    """set_code -> Prom param aliases declared by option rows for this set."""
+    return _load_indexes()[8]
 
 
 def get_defaults() -> DefaultsMap:
     """set_code → attr_code → AttrOption (дефолтна опція для категорії)."""
-    _, _, defaults, _, _, _, _, _ = _load_indexes()
-    return defaults
+    return _load_indexes()[2]
 
 
 def get_numeric_map() -> NumericMap:
@@ -555,8 +568,7 @@ def get_numeric_map() -> NumericMap:
                 or get_numeric_map().get(prom_param)
                 or []
     """
-    _, _, _, numeric_map, _, _, _, _ = _load_indexes()
-    return numeric_map
+    return _load_indexes()[3]
 
 
 def get_set_numeric_map() -> SetNumericMap:
@@ -567,20 +579,17 @@ def get_set_numeric_map() -> SetNumericMap:
     Запобігає «протіканню»: attr_code=12137 «Фокусна відстань, max» (set=376)
     більше не потрапляє у set 3516.
     """
-    _, _, _, _, set_numeric_map, _, _, _ = _load_indexes()
-    return set_numeric_map
+    return _load_indexes()[4]
 
 
 def get_attr_defaults() -> AttrDefaultsMap:
     """attr_code → AttrOption (глобальний дефолт, незалежно від set_code)."""
-    _, _, _, _, _, attr_defaults, _, _ = _load_indexes()
-    return attr_defaults
+    return _load_indexes()[5]
 
 
 def get_float_defaults() -> FloatDefaultsMap:
     """attr_code → default value string (для float/int/text/string без set_codes)."""
-    _, _, _, _, _, _, float_defaults, _ = _load_indexes()
-    return float_defaults
+    return _load_indexes()[6]
 
 
 def get_numeric_defaults() -> NumericDefaultsMap:
@@ -589,5 +598,4 @@ def get_numeric_defaults() -> NumericDefaultsMap:
     Категорійні дефолти для NON_OPTION_TYPES атрибутів з set_codes.
     Застосовується у кроці 6c генератора.
     """
-    _, _, _, _, _, _, _, numeric_defaults = _load_indexes()
-    return numeric_defaults
+    return _load_indexes()[7]

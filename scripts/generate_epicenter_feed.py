@@ -50,6 +50,7 @@ from services.epicenter_attr_service import (
     get_set_numeric_map,
     get_option_map,
     get_set_option_map,
+    get_set_option_param_names,
 )
 from services.epicenter_category_service import CategoryEntry, get_category
 from services.market_pricing import apply_market_prices
@@ -381,6 +382,7 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
     """
     option_map       = get_option_map()
     set_option_map   = get_set_option_map()
+    set_option_param_names = get_set_option_param_names()
     defaults         = get_defaults()
     numeric_map      = get_numeric_map()
     set_numeric_map  = get_set_numeric_map()
@@ -536,10 +538,13 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
             #   - multiselect: кілька <param> тегів з однаковим name (об'єднані у крок 2)
             #   - або одне значення без коми
             # Кожне значення маппиться окремо → окремий <param> тег.
-            param_opts = (
-                set_option_map.get(cat_code, {}).get(prom_name)
-                or option_map.get(prom_name, {})
-            )
+            scoped_param_opts = set_option_map.get(cat_code, {}).get(prom_name)
+            if scoped_param_opts is not None:
+                param_opts = scoped_param_opts
+            elif prom_name in set_option_param_names.get(cat_code, frozenset()):
+                param_opts = {}
+            else:
+                param_opts = option_map.get(prom_name, {})
             if param_opts:
                 # option_map має маппінг для цього prom_param_name.
                 # Один (prom_param, prom_value) може маппитись на КІЛЬКА attr_code:
