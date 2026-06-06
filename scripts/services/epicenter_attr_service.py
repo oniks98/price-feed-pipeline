@@ -6,14 +6,7 @@ services/epicenter_attr_service.py
 
 Аркуші читаються один раз (lru_cache) і роздаються всім споживачам.
 Доступний інтерфейс:
-    get_option_map()        → OptionMap
-    get_set_option_map()    → SetOptionMap
-    get_defaults()          → DefaultsMap
-    get_numeric_map()       → NumericMap         (global, без set_codes)
-    get_set_numeric_map()   → SetNumericMap       (set-scoped, з set_codes)
-    get_attr_defaults()     → AttrDefaultsMap
-    get_float_defaults()    → FloatDefaultsMap
-    get_numeric_defaults()  → NumericDefaultsMap
+    get_category_attr_rules(set_code) → CategoryAttrRules
 
 OptionMap  = dict[str, dict[str, list[AttrOption]]]
     prom_param_name → prom_option_value → list[AttrOption]
@@ -113,6 +106,64 @@ SetOptionParamNamesMap = dict[str, frozenset[str]]
 AttrDefaultsMap  = dict[str, AttrOption]
 FloatDefaultsMap = dict[str, str]
 NumericDefaultsMap = dict[str, dict[str, tuple[AttrMeta, str]]]
+
+
+@dataclass(frozen=True)
+class CategoryAttrRules:
+    """
+    Готові правила атрибутів для одного set_code.
+
+    Генератор фіда працює саме з цим об'єктом: категорія Prom вже
+    перетворена в set_code, а всі подальші lookup-и виконуються в межах
+    цього сету. Глобальні fallback-и залишаються доступними тільки явно.
+    """
+
+    set_code: str
+    option_map: OptionMap
+    numeric_map: NumericMap
+    select_defaults: dict[str, AttrOption]
+    numeric_defaults: dict[str, tuple[AttrMeta, str]]
+    global_select_defaults: AttrDefaultsMap
+    global_non_option_defaults: FloatDefaultsMap
+
+    def system_select_default(self, attr_code: str) -> AttrOption | None:
+        """Set-specific select default first, then explicit global fallback."""
+        return self.select_defaults.get(attr_code) or self.global_select_defaults.get(attr_code)
+
+    def global_select_default(self, attr_code: str) -> AttrOption | None:
+        """Explicit global fallback for rare attrs such as brand."""
+        return self.global_select_defaults.get(attr_code)
+
+    def option_param_targets_attr(self, prom_param_name: str, attr_code: str) -> bool:
+        """True when this Prom param can map to the given Epicenter attr_code."""
+        return any(
+            option.attr_code == attr_code
+            for options in self.option_map.get(prom_param_name, {}).values()
+            for option in options
+        )
+
+    def prom_names_for_attr(self, attr_code: str) -> frozenset[str]:
+        """All Prom param names that can map to the given Epicenter attr_code."""
+        return frozenset(
+            prom_name
+            for prom_name in self.option_map
+            if self.option_param_targets_attr(prom_name, attr_code)
+        )
+
+
+@dataclass(frozen=True)
+class AttrIndexes:
+    """Raw cached workbook indexes used to build CategoryAttrRules."""
+
+    option_map: OptionMap
+    set_option_map: SetOptionMap
+    defaults: DefaultsMap
+    numeric_map: NumericMap
+    set_numeric_map: SetNumericMap
+    attr_defaults: AttrDefaultsMap
+    float_defaults: FloatDefaultsMap
+    numeric_defaults: NumericDefaultsMap
+    set_option_param_names: SetOptionParamNamesMap
 
 
 # ---------------------------------------------------------------------------
@@ -255,12 +306,7 @@ def _merge_options(opts: list[AttrOption], attr_code: str, row_idx: int) -> Attr
 # ---------------------------------------------------------------------------
 
 @lru_cache(maxsize=1)
-def _load_indexes() -> tuple[
-    OptionMap, SetOptionMap, DefaultsMap,
-    NumericMap, SetNumericMap,
-    AttrDefaultsMap, FloatDefaultsMap, NumericDefaultsMap,
-    SetOptionParamNamesMap,
-]:
+def _load_indexes() -> AttrIndexes:
     """Єдине читання обох аркушів. Результат кешується через lru_cache."""
     wb = _load_workbook()
 
@@ -527,11 +573,18 @@ def _load_indexes() -> tuple[
         len(set_numeric_map),
         len(numeric_defaults),
     )
-    return (
-        option_map, set_option_map, defaults,
-        numeric_map, set_numeric_map,
-        attr_defaults, float_defaults, numeric_defaults,
-        {sc: frozenset(names) for sc, names in set_option_param_names.items()},
+    return AttrIndexes(
+        option_map=option_map,
+        set_option_map=set_option_map,
+        defaults=defaults,
+        numeric_map=numeric_map,
+        set_numeric_map=set_numeric_map,
+        attr_defaults=attr_defaults,
+        float_defaults=float_defaults,
+        numeric_defaults=numeric_defaults,
+        set_option_param_names={
+            sc: frozenset(names) for sc, names in set_option_param_names.items()
+        },
     )
 
 
@@ -539,63 +592,38 @@ def _load_indexes() -> tuple[
 # Public API
 # ---------------------------------------------------------------------------
 
-def get_option_map() -> OptionMap:
-    """prom_param_name → prom_value → list[AttrOption] (глобальний)."""
-    return _load_indexes()[0]
-
-
-def get_set_option_map() -> SetOptionMap:
-    """set_code → prom_param_name → prom_value → list[AttrOption] (set-scoped)."""
-    return _load_indexes()[1]
-
-
-def get_set_option_param_names() -> SetOptionParamNamesMap:
-    """set_code -> Prom param aliases declared by option rows for this set."""
-    return _load_indexes()[8]
-
-
-def get_defaults() -> DefaultsMap:
-    """set_code → attr_code → AttrOption (дефолтна опція для категорії)."""
-    return _load_indexes()[2]
-
-
-def get_numeric_map() -> NumericMap:
+@lru_cache(maxsize=None)
+def get_category_attr_rules(set_code: str) -> CategoryAttrRules:
     """
-    prom_param_name → list[AttrMeta] (global, для атрибутів БЕЗ set_codes).
+    Повертає готові правила для одного set_code.
 
-    Lookup у генераторі (крок 5c):
-        metas = get_set_numeric_map().get(cat_code, {}).get(prom_param)
-                or get_numeric_map().get(prom_param)
-                or []
+    select/multiselect:
+        set-scoped маппінги мають пріоритет. Якщо set явно оголошує
+        prom_param_name, глобальний fallback для цього prom_param_name
+        блокується, щоб не підтягнути option_code з чужого сету.
+
+    float/int/text/string/array:
+        set-scoped маппінги перекривають глобальні.
     """
-    return _load_indexes()[3]
+    indexes = _load_indexes()
 
+    blocked_option_params = indexes.set_option_param_names.get(set_code, frozenset())
+    option_rules: OptionMap = {
+        prom_name: values
+        for prom_name, values in indexes.option_map.items()
+        if prom_name not in blocked_option_params
+    }
+    option_rules.update(indexes.set_option_map.get(set_code, {}))
 
-def get_set_numeric_map() -> SetNumericMap:
-    """
-    set_code → prom_param_name → list[AttrMeta] (set-scoped, для атрибутів З set_codes).
+    numeric_rules: NumericMap = dict(indexes.numeric_map)
+    numeric_rules.update(indexes.set_numeric_map.get(set_code, {}))
 
-    Пріоритетний lookup перед get_numeric_map().
-    Запобігає «протіканню»: attr_code=12137 «Фокусна відстань, max» (set=376)
-    більше не потрапляє у set 3516.
-    """
-    return _load_indexes()[4]
-
-
-def get_attr_defaults() -> AttrDefaultsMap:
-    """attr_code → AttrOption (глобальний дефолт, незалежно від set_code)."""
-    return _load_indexes()[5]
-
-
-def get_float_defaults() -> FloatDefaultsMap:
-    """attr_code → default value string (для float/int/text/string без set_codes)."""
-    return _load_indexes()[6]
-
-
-def get_numeric_defaults() -> NumericDefaultsMap:
-    """
-    set_code → attr_code → (AttrMeta, default_value).
-    Категорійні дефолти для NON_OPTION_TYPES атрибутів з set_codes.
-    Застосовується у кроці 6c генератора.
-    """
-    return _load_indexes()[7]
+    return CategoryAttrRules(
+        set_code=set_code,
+        option_map=option_rules,
+        numeric_map=numeric_rules,
+        select_defaults=indexes.defaults.get(set_code, {}),
+        numeric_defaults=indexes.numeric_defaults.get(set_code, {}),
+        global_select_defaults=indexes.attr_defaults,
+        global_non_option_defaults=indexes.float_defaults,
+    )

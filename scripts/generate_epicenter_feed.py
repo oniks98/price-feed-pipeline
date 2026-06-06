@@ -20,7 +20,7 @@ import re
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Final, Literal
 
 _logger = logging.getLogger(__name__)
@@ -36,21 +36,14 @@ from generate_utils_feed import (
     transform_prom_image_urls,
 )
 from services.epicenter_params_to_description_service import inject_params_into_description
+from services.epicenter_stop_brand_service import filter_stop_brand_offers
 from services.epicenter_text_sanitizer_service import sanitize_russian_chars, strip_html_classes
 from services.epicenter_attr_service import (
-    AttrDefaultsMap,
+    CategoryAttrRules,
     AttrMeta,
     AttrOption,
     NON_OPTION_TYPES,
-    get_attr_defaults,
-    get_defaults,
-    get_float_defaults,
-    get_numeric_defaults,
-    get_numeric_map,
-    get_set_numeric_map,
-    get_option_map,
-    get_set_option_map,
-    get_set_option_param_names,
+    get_category_attr_rules,
 )
 from services.epicenter_category_service import CategoryEntry, get_category
 from services.market_pricing import apply_market_prices
@@ -158,25 +151,10 @@ class AttrConfig:
     normalize: Callable[[str], str] | None = None  # опціональна нормалізація значення (одиниці виміру)
 
 
-@dataclass(frozen=True)
-class AttrDefaults:
-    """
-    Дефолтні значення для системних атрибутів.
-
-    float / text / array → option_name_uk (текстове значення)
-    select / multiselect → option_code   (код опції з xlsx)
-                           option_name   (відображуваний текст всередині тегу, напр. "шт.")
-    """
-
-    option_name_uk: dict[str, str] = field(default_factory=dict)  # attr_code → значення
-    option_code: dict[str, str] = field(default_factory=dict)      # attr_code → code
-    option_name: dict[str, str] = field(default_factory=dict)      # attr_code → display text
-
-
 def resolve_attr_value(
     cfg: AttrConfig,
     prom_params: dict[str, str],
-    defaults: AttrDefaults,
+    rules: CategoryAttrRules,
 ) -> dict[str, str] | None:
     """
     Повертає payload для <param> або None (→ drop).
@@ -196,11 +174,11 @@ def resolve_attr_value(
     # 2. Fallback залежно від attr_type
     if raw_value is None:
         if cfg.attr_type in NON_OPTION_TYPES:
-            raw_value = defaults.option_name_uk.get(cfg.attr_code)
+            raw_value = rules.global_non_option_defaults.get(cfg.attr_code)
         else:
             # select / multiselect — дефолт через option_code, не option_name_uk
-            option_code = defaults.option_code.get(cfg.attr_code)
-            if option_code is None:
+            default = rules.system_select_default(cfg.attr_code)
+            if default is None:
                 _logger.warning(
                     "attr drop | no default_option_code | attr_code=%s", cfg.attr_code
                 )
@@ -208,8 +186,8 @@ def resolve_attr_value(
             return {
                 "paramcode": cfg.attr_code,
                 "name": cfg.attr_name_uk,
-                "valuecode": option_code,
-                "text": defaults.option_name.get(cfg.attr_code, ""),
+                "valuecode": default.option_code,
+                "text": default.option_name,
             }
 
     if raw_value is None:
@@ -228,7 +206,7 @@ def resolve_attr_value(
 
 # Системні атрибути Epicenter, спільні для всіх категорій.
 # float  → значення береться з Prom-параму або option_name_uk дефолту
-# select → valuecode береться з default_option_code у xlsx (через AttrDefaults)
+# select → valuecode береться з default_option_code у xlsx через CategoryAttrRules
 #
 # country_of_origin та brand — НЕ тут:
 #   вони є select-атрибутами категорійного рівня → обробляються через option_map (крок 5c).
@@ -380,16 +358,6 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
 
     Повертає оновлений XML.
     """
-    option_map       = get_option_map()
-    set_option_map   = get_set_option_map()
-    set_option_param_names = get_set_option_param_names()
-    defaults         = get_defaults()
-    numeric_map      = get_numeric_map()
-    set_numeric_map  = get_set_numeric_map()
-    attr_defaults    = get_attr_defaults()
-    float_defaults   = get_float_defaults()
-    numeric_defaults = get_numeric_defaults()
-
     mapped_count    = 0
     skipped_no_cat  = 0
     skipped_cat_ids: set[int] = set()
@@ -401,38 +369,12 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
     missed_brands: Counter[str] = Counter()   # prom-бренд → кількість (є в Prom, нема в Epicenter)
     attr_drops: Counter[str] = Counter()      # attr_code → кількість дропів (no value and no default)
 
-    # Зворотній індекс: знаходимо prom_param_name що маппиться на attr_code="brand".
-    # option_map[prom_name][prom_value] тепер list[AttrOption] — перевіряємо всі елементи списків.
-    _brand_prom_param: str | None = next(
-        (
-            prom_name
-            for prom_name, opts in option_map.items()
-            if any(
-                o.attr_code == "brand"
-                for options_list in opts.values()
-                for o in options_list
-            )
-        ),
-        None,
-    )
+    brand_prom_names_by_set: dict[str, frozenset[str]] = {}
 
-    # Предобчислюємо AttrDefaults per cat_code — не per offer.
-    # _measure_opt залежить тільки від cat_code, float_defaults — глобальна константа.
-    # Без кешу AttrDefaults створюється заново для кожного офера.
-    _attr_defs_cache: dict[str, AttrDefaults] = {}
-
-    def _build_attr_defs(cat_code: str) -> AttrDefaults:
-        if cat_code not in _attr_defs_cache:
-            _measure_opt = (
-                defaults.get(cat_code, {}).get("measure")
-                or attr_defaults.get("measure")
-            )
-            _attr_defs_cache[cat_code] = AttrDefaults(
-                option_name_uk=float_defaults,
-                option_code={"measure": _measure_opt.option_code} if _measure_opt else {},
-                option_name={"measure": _measure_opt.option_name} if _measure_opt else {},
-            )
-        return _attr_defs_cache[cat_code]
+    def _brand_prom_names(rules: CategoryAttrRules) -> frozenset[str]:
+        if rules.set_code not in brand_prom_names_by_set:
+            brand_prom_names_by_set[rules.set_code] = rules.prom_names_for_attr("brand")
+        return brand_prom_names_by_set[rules.set_code]
 
     def _on_offer(m: re.Match) -> str:
         nonlocal mapped_count, skipped_no_cat, total_params, missing_measure, brand_defaults_total, attr_drops
@@ -460,6 +402,7 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
         cat_code = category['code']
         cat_name = category['name']
         used.setdefault(cat_code, category)
+        rules = get_category_attr_rules(cat_code)
 
         # --- 2. Парсимо prom params до видалення ---
         # Prom може передавати кілька <param> тегів з однаковим name (multiselect).
@@ -489,25 +432,14 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
         params: list[str] = []
         mapped_attr_codes: set[str] = set()
 
-        # ── 5a+5b. Системні атрибути (_ATTRS) через resolve_attr_value ─────
-        # AttrDefaults будується per-offer: option_code для select з xlsx.
-        # Пріоритет measure: defaults[cat_code]["measure"] → attr_defaults["measure"].
-        _measure_opt = (
-            defaults.get(cat_code, {}).get("measure")
-            or attr_defaults.get("measure")
-        )
-        _attr_defs = AttrDefaults(
-            # float дефолти з xlsx (option_name_uk без option_code):
-            # ratio=1, weight=500, height/length/width=150 тощо
-            option_name_uk=float_defaults,
-            option_code={"measure": _measure_opt.option_code} if _measure_opt else {},
-            option_name={"measure": _measure_opt.option_name} if _measure_opt else {},
-        )
-
+        # ── 5a+5b. Системні атрибути (_ATTRS) ───────────────────────────────
+        # Для select-системних атрибутів (measure) пріоритет:
+        # rules.select_defaults → rules.global_select_defaults.
+        # Для float-системних атрибутів дефолт береться з global_non_option_defaults.
         for cfg in _ATTRS:
             if cfg.attr_code in mapped_attr_codes:
                 continue
-            payload = resolve_attr_value(cfg, prom_params, _attr_defs)
+            payload = resolve_attr_value(cfg, prom_params, rules)
             if payload is None:
                 if cfg.attr_code == "measure":
                     missing_measure += 1
@@ -529,27 +461,20 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
             if prom_name in _ATTRS_PROM_NAMES:
                 continue
 
-            # select / multiselect — маппінг через option_map
-            # Пріоритет: set_option_map[cat_code] (set-scoped, правильний option_code per set)
-            # Fallback:  option_map (глобальний)
-            # Це вирішує баг: один (prom_param, prom_value) може мати різні option_code
-            # у різних set_codes (наприклад attr_code=5684 «Роздільна здатність»).
+            # select / multiselect — маппінг через правила поточного set_code.
+            # rules.option_map вже містить правильний set-scoped option_code
+            # або дозволений глобальний fallback.
             # prom_value може містити кілька значень через ", ":
             #   - multiselect: кілька <param> тегів з однаковим name (об'єднані у крок 2)
             #   - або одне значення без коми
             # Кожне значення маппиться окремо → окремий <param> тег.
-            scoped_param_opts = set_option_map.get(cat_code, {}).get(prom_name)
-            if scoped_param_opts is not None:
-                param_opts = scoped_param_opts
-            elif prom_name in set_option_param_names.get(cat_code, frozenset()):
-                param_opts = {}
-            else:
-                param_opts = option_map.get(prom_name, {})
+            param_opts = rules.option_map.get(prom_name, {})
             if param_opts:
                 # option_map має маппінг для цього prom_param_name.
                 # Один (prom_param, prom_value) може маппитись на КІЛЬКА attr_code:
                 #   "Форм-фактор" / "Безконтактна картка" → [4626 "ключ", 10701 "картка"]
                 # param_opts[value] — list[AttrOption], ітеруємо всі.
+                is_brand_param = rules.option_param_targets_attr(prom_name, "brand")
                 for single_value in (v.strip() for v in prom_value.split(",")):
                     if not single_value:
                         continue
@@ -561,7 +486,7 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
                                 mapped_attr_codes.add(option.attr_code)
                     else:
                         # Значення відсутнє в option_map → піде дефолт у кроці 6.
-                        if prom_name == _brand_prom_param and "brand" not in mapped_attr_codes:
+                        if is_brand_param and "brand" not in mapped_attr_codes:
                             missed_brands[single_value] += 1
                         _logger.debug(
                             "offer %s | option_map miss | prom_param=%r value=%r "
@@ -570,46 +495,42 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
                         )
 
             # float / int / text / string — значення напряму
-            # Пріоритет: set_numeric_map[cat_code] (set-scoped) → numeric_map (global).
-            # Це запобігає «протіканню»: attr_code=12137 «Фокусна відстань, max»
-            # (set_codes=376) більше не потрапляє у set 3516.
-            numeric_metas = (
-                set_numeric_map.get(cat_code, {}).get(prom_name)
-                or numeric_map.get(prom_name)
-                or []
-            )
+            # rules.numeric_map вже має пріоритет set-scoped над global.
+            numeric_metas = rules.numeric_map.get(prom_name, [])
             for meta in numeric_metas:
                 if meta.attr_code not in mapped_attr_codes:
                     params.append(_render_numeric_param(meta, prom_value))
                     mapped_attr_codes.add(meta.attr_code)
 
         # --- 6. Дефолти для атрибутів без маппінгу ---
-        # Застосовуємо set-специфічні дефолти (defaults[cat_code]).
-        for attr_code, default in defaults.get(cat_code, {}).items():
+        # Застосовуємо set-специфічні дефолти.
+        for attr_code, default in rules.select_defaults.items():
             if attr_code not in mapped_attr_codes:
                 params.append(_render_select_param(default))
                 mapped_attr_codes.add(attr_code)
                 if attr_code == "brand":
                     brand_defaults_total += 1
-                    if _brand_prom_param and _brand_prom_param not in prom_params:
+                    brand_names = _brand_prom_names(rules)
+                    if brand_names and not any(name in prom_params for name in brand_names):
                         missed_brands["(відсутній у Prom)"] += 1
 
         # --- 6b. Fallback: глобальний дефолт brand якщо не замаплено ---
-        # attr_defaults містить атрибути без set_codes (наприклад brand=Anker).
-        # Застосовуємо ТІЛЬКИ brand — не всі attr_defaults, щоб не смітити чужими атрибутами.
+        # Застосовуємо ТІЛЬКИ brand — не всі global_select_defaults,
+        # щоб не смітити чужими атрибутами.
         if "brand" not in mapped_attr_codes:
-            _brand_default = attr_defaults.get("brand")
+            _brand_default = rules.global_select_default("brand")
             if _brand_default:
                 params.append(_render_select_param(_brand_default))
                 mapped_attr_codes.add("brand")
                 brand_defaults_total += 1
-                if _brand_prom_param and _brand_prom_param not in prom_params:
+                brand_names = _brand_prom_names(rules)
+                if brand_names and not any(name in prom_params for name in brand_names):
                     missed_brands["(відсутній у Prom)"] += 1
 
         # --- 6c. Numeric (array/float/text) категорійні дефолти ---
         # Атрибути без option_code (не select), що мають задане значення за замовчуванням
         # і немають маппінгу з Prom (напр. «Максимальний перетин дроту» для set 2793).
-        for attr_code, (meta, value) in numeric_defaults.get(cat_code, {}).items():
+        for attr_code, (meta, value) in rules.numeric_defaults.items():
             if attr_code not in mapped_attr_codes:
                 params.append(_render_numeric_param(meta, value))
                 mapped_attr_codes.add(attr_code)
@@ -833,6 +754,7 @@ def main() -> None:
     updated_xml = apply_market_prices(MARKET, updated_xml, wholesale_index, currency_rates)
     updated_xml = transform_prom_image_urls(updated_xml)
     updated_xml = fill_missing_vendor(updated_xml)
+    updated_xml = filter_stop_brand_offers(updated_xml)
     updated_xml = add_name_ua(updated_xml)
     updated_xml, _used_entries = inject_epicenter_attrs(updated_xml)
     updated_xml = normalize_name_description_tags(updated_xml)   # після inject: description вже оновлено
