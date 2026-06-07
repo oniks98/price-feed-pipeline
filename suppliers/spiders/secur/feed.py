@@ -1,4 +1,6 @@
 """
+python scripts/ultra_clean_run.py secur_feed
+
 Spider: Feed-only (Ajax + Імпорт) — без Playwright
 
 ЛОГІКА:

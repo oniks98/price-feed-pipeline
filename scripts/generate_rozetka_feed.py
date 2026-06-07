@@ -38,6 +38,7 @@ from generate_utils_feed import (
     transform_prom_image_urls,
 )
 from services.market_pricing import apply_market_prices
+from services.rozetka_stop_brand_service import filter_stop_brand_offers
 from services.rozetka_category_service import (
     CategoryEntry,
     build_categories_xml,
@@ -238,6 +239,7 @@ def main() -> None:
     updated_xml = apply_market_prices(MARKET, updated_xml, wholesale_index, currency_rates)
     updated_xml = transform_prom_image_urls(updated_xml)
     updated_xml = fill_missing_vendor(updated_xml)
+    updated_xml = filter_stop_brand_offers(updated_xml)
 
     # --- Розетка-специфічне очищення та трансформація XML ---
     # replace_category_ids повертає (xml, used_entries) — entries потрібні для <categories> блоку
