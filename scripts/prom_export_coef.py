@@ -1,7 +1,7 @@
 """
 prom_export_coef.py
 ───────────────────
-Заполняет три файла на основе данных из Google Sheets (gid=688167001).
+Заполняет четыре файла на основе данных из Google Sheets (gid=688167001).
 
 Таблица открыта по ссылке без авторизации — используем CSV export.
 
@@ -18,6 +18,8 @@ prom_export_coef.py
   4. viatec_category.csv  (только строки channel == "prom"):
        ключ: Ідентифікатор_підрозділу  →  заполняем: threshold
   5. secur_category.csv   (только строки channel == "prom"):
+       ключ: Ідентифікатор_підрозділу  →  заполняем: threshold
+  6. lp_category.csv      (только строки channel == "prom"):
        ключ: Ідентифікатор_підрозділу  →  заполняем: threshold
 
   Если category_id не найден в Google Sheets → fallback coef_transition.
@@ -48,6 +50,7 @@ MARKET_DIR  = BASE_DIR / "markets"
 PROM_COEF_CSV  = MARKET_DIR / "prom_coefficients.csv"
 VIATEC_CAT_CSV = BASE_DIR / "viatec" / "viatec_category.csv"
 SECUR_CAT_CSV  = BASE_DIR / "secur"  / "secur_category.csv"
+LP_CAT_CSV     = BASE_DIR / "lp"     / "lp_category.csv"
 
 SPREADSHEET_ID    = "1mQ86nxmPTsEj23MAAu4bGn4iKtaX-yEIiKefu4SqvkA"
 SHEET_GID         = "688167001"
@@ -372,7 +375,7 @@ def process_category_csv(
 def main() -> None:
     log.info("=== prom_export_coef старт ===")
 
-    missing = [p for p in (PROM_COEF_CSV, VIATEC_CAT_CSV, SECUR_CAT_CSV) if not p.exists()]
+    missing = [p for p in (PROM_COEF_CSV, VIATEC_CAT_CSV, SECUR_CAT_CSV, LP_CAT_CSV) if not p.exists()]
     if missing:
         for p in missing:
             log.error("Файл не найден: %s", p)
@@ -409,6 +412,11 @@ def main() -> None:
     log.info("--- %s ---", SECUR_CAT_CSV.name)
     upd, fb, skip = process_category_csv(SECUR_CAT_CSV, commissions, fallback_coef, "secur")
     log.info("[secur]      обновлено=%d  fallback=%d  пропущено=%d", upd, fb, skip)
+
+    # lp_category.csv → threshold (channel==prom)
+    log.info("--- %s ---", LP_CAT_CSV.name)
+    upd, fb, skip = process_category_csv(LP_CAT_CSV, commissions, fallback_coef, "lp")
+    log.info("[lp]         обновлено=%d  fallback=%d  пропущено=%d", upd, fb, skip)
 
     log.info("=== prom_export_coef завершён ===")
 
