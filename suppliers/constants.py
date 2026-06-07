@@ -46,6 +46,7 @@ PRICE_DECIMALS: Final[Mapping[str, int]] = {
     # USD постачальники (ціни з копійками)
     "viatec_dealer": 2,     # USD з копійками
     "viatec_feed_full": 2,  # USD з копійками (фід-driven варіант dealer)
+    "lp_api": 2,            # USD з копійками (personal price)
     # UAH постачальники (ціни цілі)
     "viatec_retail": 0,  # UAH цілі
     "eserver": 0,
@@ -67,6 +68,7 @@ SUPPLIER_CODE_RANGES: Final[Mapping[str, int]] = {
     "eserver":  600000,
     "neolight": 500000,
     "lun":      401001,
+    "lp":       700000,
 }
 
 DEFAULT_START_CODE: Final[int] = 200000
@@ -83,6 +85,7 @@ DEFAULT_CURRENCY: Final[str] = "UAH"
 SUPPLIER_CURRENCIES: Final[Mapping[str, str]] = {
     "viatec_dealer": "USD",
     "viatec_feed_full": "USD",  # фід-driven варіант dealer
+    "lp_api": "USD",            # personal price в USD
     "viatec_retail": "UAH",
     "eserver": "UAH",
     "secur": "UAH",
