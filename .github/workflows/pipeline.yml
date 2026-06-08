@@ -819,3 +819,46 @@ jobs:
           echo "🔗 Epicenter: https://raw.githubusercontent.com/${{ github.repository }}/data-latest/data/markets/epicenter_feed.xml"
           echo "🔗 Rozetka:   https://raw.githubusercontent.com/${{ github.repository }}/data-latest/data/markets/rozetka_feed.xml"
           echo "════════════════════════════════════════════════════"
+
+  # ═══════════════════════════════════════════════════════════
+  # STAGE 8 — EPICENTER IMPORT
+  # ═══════════════════════════════════════════════════════════
+  epicenter-import-feed:
+    name: Epicenter Import Feed
+    runs-on: ubuntu-latest
+    needs: [epicenter-feed, publish-feeds]
+    # Запускаємо тільки якщо фід згенеровано І опублікований у data-latest.
+    # epicenter-feed перевіряємо явно — без нього в data-latest лежить старий файл.
+    # publish-feeds перевіряємо щоб URL був доступний до кліку «Імпортувати».
+    if: |
+      needs.epicenter-feed.result == 'success' &&
+      needs.publish-feeds.result == 'success'
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}
+
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
+      - name: Run Epicenter import
+        run: python scripts/epicenter_import_feed.py
+        env:
+          EPICENTER_EMAIL: ${{ secrets.EPICENTER_EMAIL }}
+          EPICENTER_PASSWORD: ${{ secrets.EPICENTER_PASSWORD }}
