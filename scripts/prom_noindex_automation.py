@@ -1,5 +1,6 @@
 # prom_noindex_automation.py
 # Python 3.10+ | Playwright sync
+# v2.8: fix wait_list — замінено text= на [data-qaid="header_panel_title"] (Prom змінив структуру)
 # v2.7: Новий UI фільтрів Prom (двопанельний попап #js-filters-popup)
 #
 # Масово виставляє noindex на товари в Prom.ua через браузер.
@@ -249,12 +250,14 @@ def login_with_credentials(page: Page, login: str, password: str) -> None:
 
 
 def wait_list(page: Page) -> None:
-    page.wait_for_selector("text=Перелік позицій", timeout=30_000)
+    # v2.8: Prom змінив структуру — текст тепер у <span data-qaid="header_panel_title">
+    # Використовуємо data-qaid як надійніший селектор замість text=
+    page.wait_for_selector('[data-qaid="header_panel_title"]', timeout=30_000)
 
 
 def wait_list_short(page: Page, timeout_ms: int) -> None:
-    """v2.6.2: Короткое ожидание списка — для обнаружения блокировки валидации."""
-    page.wait_for_selector("text=Перелік позицій", timeout=timeout_ms)
+    """v2.8: Короткое ожидание списка — для обнаружения блокировки валидации."""
+    page.wait_for_selector('[data-qaid="header_panel_title"]', timeout=timeout_ms)
 
 
 def wait_edit(page: Page) -> None:
