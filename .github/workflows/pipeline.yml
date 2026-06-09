@@ -826,13 +826,12 @@ jobs:
   epicenter-import-feed:
     name: Epicenter Import Feed
     runs-on: ubuntu-latest
-    needs: [epicenter-feed, publish-feeds]
-    # Запускаємо тільки якщо фід згенеровано І опублікований у data-latest.
-    # epicenter-feed перевіряємо явно — без нього в data-latest лежить старий файл.
-    # publish-feeds перевіряємо щоб URL був доступний до кліку «Імпортувати».
-    if: |
-      needs.epicenter-feed.result == 'success' &&
-      needs.publish-feeds.result == 'success'
+    needs: [publish-feeds]
+    # publish-feeds транзитивно залежить від epicenter-feed —
+    # окрема пряма залежність не потрібна і ламає UI (job виноситься в окрему колонку).
+    # Якщо epicenter-feed failed → артефакт відсутній → publish-feeds не оновив файл
+    # → імпорт не запускається (publish-feeds у такому разі теж failed або skipped).
+    if: needs.publish-feeds.result == 'success'
     timeout-minutes: 15
 
     steps:
