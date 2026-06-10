@@ -270,6 +270,36 @@ _ATTRS_PROM_NAMES: Final[frozenset[str]] = frozenset(
 )
 
 
+# Атрибути, що повинні бути присутні у кожному офері незалежно від наявності даних.
+# Після кроків 5–6c будь-який незамаплений отримує last-resort fallback:
+#   float/text  → "0"  (або значення з float_defaults якщо є у xlsx)
+#   select      → global_select_default з xlsx  (warning якщо відсутній у xlsx)
+# tuple (не frozenset) — детермінований порядок додавання в params.
+_ALWAYS_PRESENT_ATTR_CODES: Final[tuple[str, ...]] = (
+    "height",
+    "length",
+    "width",
+    "weight",
+    "ratio",
+    "measure",
+    "country_of_origin",
+    "brand",
+)
+
+# Швидкий доступ до AttrConfig за attr_code (тільки для системних float-атрибутів з _ATTRS).
+_ATTR_CONFIG_BY_CODE: Final[dict[str, AttrConfig]] = {
+    cfg.attr_code: cfg for cfg in _ATTRS
+}
+
+# Підмножина _ALWAYS_PRESENT_ATTR_CODES з типом float/text/array (NON_OPTION_TYPES).
+# Кроки 5a+5b НЕ лічать їх у attr_drops — крок 7 ЗАВЖДИ підставить "0".
+_ALWAYS_PRESENT_FLOAT_CODES: Final[frozenset[str]] = frozenset(
+    code for code in _ALWAYS_PRESENT_ATTR_CODES
+    if code in _ATTR_CONFIG_BY_CODE
+    and _ATTR_CONFIG_BY_CODE[code].attr_type in NON_OPTION_TYPES
+)
+
+
 # ---------------------------------------------------------------------------
 # Epicenter XML helpers
 # ---------------------------------------------------------------------------
@@ -369,6 +399,8 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
     missed_brands: Counter[str] = Counter()   # prom-бренд → кількість (є в Prom, нема в Epicenter)
     attr_drops: Counter[str] = Counter()      # attr_code → кількість дропів (no value and no default)
 
+    always_absent_drops: Counter[str] = Counter()  # attr_code → к-ть офферів без global default у xlsx
+    always_present_fallbacks: Counter[str] = Counter()  # step 7: float/text "0" fallback per attr_code
     brand_prom_names_by_set: dict[str, frozenset[str]] = {}
 
     def _brand_prom_names(rules: CategoryAttrRules) -> frozenset[str]:
@@ -443,7 +475,8 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
             if payload is None:
                 if cfg.attr_code == "measure":
                     missing_measure += 1
-                else:
+                elif cfg.attr_code not in _ALWAYS_PRESENT_FLOAT_CODES:
+                    # Тільки справжні дропи — always-present float-атрибути врятує крок 7
                     attr_drops[cfg.attr_code] += 1
                 continue
             params.append(_render_attr_payload(payload))
@@ -535,10 +568,45 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
                 params.append(_render_numeric_param(meta, value))
                 mapped_attr_codes.add(attr_code)
 
-        # --- 7. Вставляємо блок «Параметри» в description_ua ---
+        # --- 7. Гарантовані always-present атрибути ---
+        # Після всіх кроків 5–6c переконуємось що кожен з 8 обов'язкових атрибутів
+        # присутній у params. Last-resort fallback:
+        #   float/text → "0" (або global_non_option_defaults якщо задано у xlsx)
+        #   select     → global_select_default з xlsx (warning якщо відсутній)
+        _always_absent: list[str] = []
+        for _ap_code in _ALWAYS_PRESENT_ATTR_CODES:
+            if _ap_code in mapped_attr_codes:
+                continue
+            _ap_cfg = _ATTR_CONFIG_BY_CODE.get(_ap_code)
+            if _ap_cfg is not None and _ap_cfg.attr_type in NON_OPTION_TYPES:
+                # float/text/array — last-resort "0"
+                _ap_raw = rules.global_non_option_defaults.get(_ap_code, "0")
+                if _ap_cfg.normalize is not None:
+                    _ap_raw = _ap_cfg.normalize(_ap_raw)
+                _ap_meta = AttrMeta(
+                    attr_code=_ap_cfg.attr_code,
+                    attr_name=_ap_cfg.attr_name_uk,
+                    attr_type=_ap_cfg.attr_type,
+                )
+                params.append(_render_numeric_param(_ap_meta, _ap_raw))
+                mapped_attr_codes.add(_ap_code)
+                always_present_fallbacks[_ap_code] += 1
+            else:
+                # select/multiselect (measure, country_of_origin, brand)
+                _ap_opt = rules.global_select_default(_ap_code)
+                if _ap_opt is not None:
+                    params.append(_render_select_param(_ap_opt))
+                    mapped_attr_codes.add(_ap_code)
+                else:
+                    _always_absent.append(_ap_code)
+        if _always_absent:
+            for _code in _always_absent:
+                always_absent_drops[_code] += 1
+
+        # --- 8. Вставляємо блок «Параметри» в description_ua ---
         body = inject_params_into_description(body, prom_params)
 
-        # --- 8. Вставляємо params у кінець body ---
+        # --- 9. Вставляємо params у кінець body ---
         if params:
             params_block = '\n'.join(params)
             body = body.rstrip() + f'\n{params_block}\n'
@@ -577,9 +645,15 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
     if skipped_cat_ids:
         ids_str = ', '.join(str(i) for i in sorted(skipped_cat_ids))
         _logger.warning('Prom categoryId без маппінгу (%d): %s', len(skipped_cat_ids), ids_str)
+    if always_present_fallbacks:
+        fb_str = ', '.join(f'{code}×{cnt}' for code, cnt in always_present_fallbacks.most_common())
+        _logger.info('attr float fallback→"0" (step 7): %s', fb_str)
     if attr_drops:
         drops_str = ', '.join(f'{code}×{cnt}' for code, cnt in attr_drops.most_common())
         _logger.warning('⚠️  attr drop (no value+no default): %s', drops_str)
+    if always_absent_drops:
+        absent_str = ', '.join(f'{code}×{cnt}' for code, cnt in always_absent_drops.most_common())
+        _logger.warning('⚠️  always-present attr без global default у xlsx: %s', absent_str)
     return xml, list(used.values())
 
 

@@ -356,6 +356,7 @@ def _load_indexes() -> AttrIndexes:
             default_value = _clean(row[_OPT_COL_OPTION_NAME])
             set_codes     = _parse_set_codes(row[_OPT_COL_SET_CODES])
             attr_name_val = _clean(row[_OPT_COL_ATTR_NAME])
+            needs_default = str(row[_OPT_COL_NEEDS_DEFAULT] or "").strip().upper() == "TRUE"
 
             prom_aliases = _parse_prom_param_aliases(row[_OPT_COL_PROM_PARAMS])
             if not prom_aliases:
@@ -398,6 +399,15 @@ def _load_indexes() -> AttrIndexes:
                     "Рядок %d: numeric default (set-scoped) | attr_code=%r value=%r set_codes=%r",
                     row_idx, attr_code, default_value, set_codes,
                 )
+                # needs_default=TRUE: глобальний fallback навіть при наявності set_codes.
+                # Без цього resolve_attr_value / step 7 повертають "0"
+                # для будь-якого set_code, якого немає у set_codes (set_codes не покривають всі категорії).
+                if needs_default and attr_code not in float_defaults:
+                    float_defaults[attr_code] = default_value
+                    logger.debug(
+                        "Рядок %d: float default (needs_default, set-scoped→global) | attr_code=%r value=%r",
+                        row_idx, attr_code, default_value,
+                    )
             elif default_value and attr_code not in float_defaults:
                 float_defaults[attr_code] = default_value
                 logger.debug(
