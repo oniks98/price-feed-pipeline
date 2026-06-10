@@ -47,6 +47,12 @@ from suppliers.spiders.base import BaseDealerSpider
 # ─────────────────────────────────────────────────────────────────────
 PAGE_SIZE = 500
 
+# Виробники, яких обробляємо (case-insensitive)
+TARGET_MANUFACTURERS: frozenset[str] = frozenset({
+    "logicpower",
+    "greenvision",
+})
+
 # Символ наявності → орієнтовна кількість
 AVAILABILITY_QTY: dict[str | None, str] = {
     "+/-": "3",
@@ -109,10 +115,11 @@ class LpApiSpider(BaseDealerSpider):
         # Статистика
         self._stats: dict[str, int] = {
             "yielded":              0,
-            "skip_not_instock":     0,
-            "skip_resume":          0,
-            "skip_no_category":     0,
-            "skip_no_price":        0,
+            "skip_not_target_mfr": 0,
+            "skip_not_instock":    0,
+            "skip_resume":         0,
+            "skip_no_category":    0,
+            "skip_no_price":       0,
         }
 
     # ──────────────────────────────────────────────────────────────────
@@ -255,6 +262,12 @@ class LpApiSpider(BaseDealerSpider):
     def _build_item(self, product: dict) -> dict | None:
         code   = str(product.get("code", "")).strip()
         status = product.get("status", "")
+
+        # 0. Тільки цільові виробники
+        mfr = ((product.get("manufacturer") or {}).get("name") or "").strip().lower()
+        if mfr not in TARGET_MANUFACTURERS:
+            self._stats["skip_not_target_mfr"] += 1
+            return None
 
         # 1. Тільки inStock
         if status != "inStock":
@@ -484,6 +497,7 @@ class LpApiSpider(BaseDealerSpider):
         self.logger.info(
             f"🎉 lp_api завершено ({reason})\n"
             f"   yielded={s['yielded']}  "
+            f"skip_not_target_mfr={s['skip_not_target_mfr']}  "
             f"skip_not_instock={s['skip_not_instock']}  "
             f"skip_resume={s['skip_resume']}  "
             f"skip_no_category={s['skip_no_category']}  "
