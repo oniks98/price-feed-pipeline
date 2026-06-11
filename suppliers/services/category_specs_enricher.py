@@ -91,9 +91,18 @@ class CategorySpecsEnricher:
                 start_after = idx_spec_val_retail + 1
             else:
                 start_after = 0
-            idx_spec_name_feed = col("Назва_Характеристики", start_after)
-            idx_spec_unit_feed = col("Одиниця_виміру_Характеристики", start_after)
-            idx_spec_val_feed = col("Значення_Характеристики", start_after)
+            # Динамічно знаходимо ВСІ трійки характеристик після start_after —
+            # незалежно від їх кількості (2-а, 3-я, 4-а і т.д.)
+            feed_triplets: list[tuple[int, int, int]] = []
+            _pos = start_after
+            while True:
+                _idx_name = col("Назва_Характеристики", _pos)
+                if _idx_name < 0:
+                    break
+                _idx_unit = col("Одиниця_виміру_Характеристики", _idx_name)
+                _idx_val  = col("Значення_Характеристики", _idx_name)
+                feed_triplets.append((_idx_name, _idx_unit, _idx_val))
+                _pos = _idx_name + 1
 
             def safe_get(row: list, idx: int) -> str:
                 if idx < 0 or idx >= len(row):
@@ -125,16 +134,16 @@ class CategorySpecsEnricher:
                             {"name": spec_name, "unit": spec_unit, "value": spec_value}
                         )
 
-                    # ✅ Другий набір (cols 18-20): Тип та інші —
+                    # Усі feed-трійки (2-а, 3-я, … N-а) — Тип, Колір та інші —
                     # додаємо і по URL (retail), не тільки по category id (feed).
-                    spec_name_2 = safe_get(row, idx_spec_name_feed)
-                    spec_unit_2 = safe_get(row, idx_spec_unit_feed)
-                    spec_value_2 = safe_get(row, idx_spec_val_feed)
-
-                    if spec_name_2 and spec_value_2:
-                        self.category_specs_mapping.setdefault(category_url, []).append(
-                            {"name": spec_name_2, "unit": spec_unit_2, "value": spec_value_2}
-                        )
+                    for _idx_name, _idx_unit, _idx_val in feed_triplets:
+                        spec_name_f = safe_get(row, _idx_name)
+                        spec_unit_f = safe_get(row, _idx_unit)
+                        spec_value_f = safe_get(row, _idx_val)
+                        if spec_name_f and spec_value_f:
+                            self.category_specs_mapping.setdefault(category_url, []).append(
+                                {"name": spec_name_f, "unit": spec_unit_f, "value": spec_value_f}
+                            )
 
                 # --- Feed specs (за category id) ---
                 if category_id:
@@ -142,14 +151,14 @@ class CategorySpecsEnricher:
                     row_feed = safe_get(row, col("feed")) if "feed" in headers else ""
                     key = (row_feed, category_id)
                     if key not in self.category_id_specs_mapping:
-                        spec_name = safe_get(row, idx_spec_name_feed)
-                        spec_unit = safe_get(row, idx_spec_unit_feed)
-                        spec_value = safe_get(row, idx_spec_val_feed)
-
-                        if spec_name and spec_value:
-                            self.category_id_specs_mapping.setdefault(key, []).append(
-                                {"name": spec_name, "unit": spec_unit, "value": spec_value}
-                            )
+                        for _idx_name, _idx_unit, _idx_val in feed_triplets:
+                            spec_name = safe_get(row, _idx_name)
+                            spec_unit = safe_get(row, _idx_unit)
+                            spec_value = safe_get(row, _idx_val)
+                            if spec_name and spec_value:
+                                self.category_id_specs_mapping.setdefault(key, []).append(
+                                    {"name": spec_name, "unit": spec_unit, "value": spec_value}
+                                )
 
             total_url = len(self.category_specs_mapping)
             total_id = len(self.category_id_specs_mapping)
