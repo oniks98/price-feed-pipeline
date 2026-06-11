@@ -37,7 +37,7 @@ from generate_utils_feed import (
 )
 from services.epicenter_params_to_description_service import inject_params_into_description
 from services.epicenter_stop_brand_service import filter_stop_brand_offers
-from services.epicenter_text_sanitizer_service import sanitize_russian_chars, strip_html_classes
+from services.epicenter_text_sanitizer_service import sanitize_russian_chars, strip_html_classes, strip_external_links
 from services.epicenter_attr_service import (
     CategoryAttrRules,
     AttrMeta,
@@ -45,7 +45,7 @@ from services.epicenter_attr_service import (
     NON_OPTION_TYPES,
     get_category_attr_rules,
 )
-from services.epicenter_category_service import CategoryEntry, get_category
+from services.epicenter_category_service import CategoryEntry, resolve_category, flush_fallback_warnings
 from services.market_pricing import apply_market_prices
 
 # ---------------------------------------------------------------------------
@@ -209,7 +209,7 @@ def resolve_attr_value(
 # select → valuecode береться з default_option_code у xlsx через CategoryAttrRules
 #
 # country_of_origin та brand — НЕ тут:
-#   вони є select-атрибутами категорійного рівня → обробляються через option_map (крок 5c).
+#   вони є select-атрибутами категорійного рівня → обробляються через option_map (крок 6c).
 # Для коректної роботи country_of_origin повинен бути у xlsx:
 #   «Сети атрибутів»  → prom_param_name = "Країна-виробник", attr_type = select
 #   «Опції атрибутів» → рядки: prom_option_name = "Китай" → option_code = "chn" і т.д.
@@ -271,7 +271,7 @@ _ATTRS_PROM_NAMES: Final[frozenset[str]] = frozenset(
 
 
 # Атрибути, що повинні бути присутні у кожному офері незалежно від наявності даних.
-# Після кроків 5–6c будь-який незамаплений отримує last-resort fallback:
+# Після кроків 6–7c будь-який незамаплений отримує last-resort fallback:
 #   float/text  → "0"  (або значення з float_defaults якщо є у xlsx)
 #   select      → global_select_default з xlsx  (warning якщо відсутній у xlsx)
 # tuple (не frozenset) — детермінований порядок додавання в params.
@@ -292,7 +292,7 @@ _ATTR_CONFIG_BY_CODE: Final[dict[str, AttrConfig]] = {
 }
 
 # Підмножина _ALWAYS_PRESENT_ATTR_CODES з типом float/text/array (NON_OPTION_TYPES).
-# Кроки 5a+5b НЕ лічать їх у attr_drops — крок 7 ЗАВЖДИ підставить "0".
+# Кроки 6a+6b НЕ лічать їх у attr_drops — крок 8 ЗАВЖДИ підставить "0".
 _ALWAYS_PRESENT_FLOAT_CODES: Final[frozenset[str]] = frozenset(
     code for code in _ALWAYS_PRESENT_ATTR_CODES
     if code in _ATTR_CONFIG_BY_CODE
@@ -421,10 +421,26 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
             return m.group(0)
 
         prom_cat_id = int(cat_match.group(1))
-        category = get_category(prom_cat_id)
 
         if prom_cat_id in EXCLUDED_PROM_CAT_IDS:
             return ""
+
+        # --- 2. Парсимо prom params (до визначення категорії —
+        #        потрібні для param-based routing Epicenter).
+        #        Prom може передавати кілька <param> тегів з однаковим name (multiselect).
+        #        Дублікати об'єднуються через ", " →
+        #        step 6c розіб'є по ", " і знайде кожне значення в option_map окремо.
+        prom_params: dict[str, str] = {}
+        for _pm in _PROM_PARAM_RE.finditer(body):
+            _name  = _pm.group(1).strip()
+            _value = _strip_cdata(_pm.group(2))
+            if _name in prom_params:
+                prom_params[_name] = f"{prom_params[_name]}, {_value}"
+            else:
+                prom_params[_name] = _value
+
+        # --- 3. Визначаємо категорію Epicenter (може залежати від prom_params) ---
+        category = resolve_category(prom_cat_id, prom_params)
 
         if not category:
             skipped_no_cat += 1
@@ -436,35 +452,21 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
         used.setdefault(cat_code, category)
         rules = get_category_attr_rules(cat_code)
 
-        # --- 2. Парсимо prom params до видалення ---
-        # Prom може передавати кілька <param> тегів з однаковим name (multiselect).
-        # dict comprehension залишав би тільки останній → втрата значень.
-        # Замість цього: дублікати об'єднуються через ", " →
-        # step 5c розіб'є по ", " і знайде кожне значення в option_map окремо.
-        prom_params: dict[str, str] = {}
-        for _pm in _PROM_PARAM_RE.finditer(body):
-            _name  = _pm.group(1).strip()
-            _value = _strip_cdata(_pm.group(2))
-            if _name in prom_params:
-                prom_params[_name] = f"{prom_params[_name]}, {_value}"
-            else:
-                prom_params[_name] = _value
-
-        # --- 3. Замінюємо <categoryId> на <category> + <attribute_set> ---
+        # --- 4. Замінюємо <categoryId> на <category> + <attribute_set> ---
         body = body.replace(
             cat_match.group(0),
             f'<category code="{cat_code}">{cat_name}</category>\n'
             f'<attribute_set code="{cat_code}">{cat_name}</attribute_set>',
         )
 
-        # --- 4. Видаляємо ВСІ prom <param> теги (разом з рядком що залишається після видалення) ---
+        # --- 5. Видаляємо ВСІ prom <param> теги (разом з рядком що залишається після видалення) ---
         body = re.sub(r'[ \t]*<param\b[^>]*>.*?</param>[ \t]*\n?', '', body, flags=re.DOTALL)
 
-        # --- 5. Будуємо epicenter params ---
+        # --- 6. Будуємо epicenter params ---
         params: list[str] = []
         mapped_attr_codes: set[str] = set()
 
-        # ── 5a+5b. Системні атрибути (_ATTRS) ───────────────────────────────
+        # ── 6a+6b. Системні атрибути (_ATTRS) ───────────────────────────────
         # Для select-системних атрибутів (measure) пріоритет:
         # rules.select_defaults → rules.global_select_defaults.
         # Для float-системних атрибутів дефолт береться з global_non_option_defaults.
@@ -482,7 +484,7 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
             params.append(_render_attr_payload(payload))
             mapped_attr_codes.add(cfg.attr_code)
 
-        # ── 5c. Категорійні атрибути з xlsx ──────────────────────────────────
+        # ── 6c. Категорійні атрибути з xlsx ──────────────────────────────────
         # Сюди потрапляють: select/multiselect (option_map) та float/int/text/string (numeric_map).
         # Включно з country_of_origin ("Країна-виробник") та brand ("Бренд") — через option_map.
 
@@ -535,7 +537,7 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
                     params.append(_render_numeric_param(meta, prom_value))
                     mapped_attr_codes.add(meta.attr_code)
 
-        # --- 6. Дефолти для атрибутів без маппінгу ---
+        # --- 7. Дефолти для атрибутів без маппінгу ---
         # Застосовуємо set-специфічні дефолти.
         for attr_code, default in rules.select_defaults.items():
             if attr_code not in mapped_attr_codes:
@@ -547,7 +549,7 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
                     if brand_names and not any(name in prom_params for name in brand_names):
                         missed_brands["(відсутній у Prom)"] += 1
 
-        # --- 6b. Fallback: глобальний дефолт brand якщо не замаплено ---
+        # --- 7b. Fallback: глобальний дефолт brand якщо не замаплено ---
         # Застосовуємо ТІЛЬКИ brand — не всі global_select_defaults,
         # щоб не смітити чужими атрибутами.
         if "brand" not in mapped_attr_codes:
@@ -560,7 +562,7 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
                 if brand_names and not any(name in prom_params for name in brand_names):
                     missed_brands["(відсутній у Prom)"] += 1
 
-        # --- 6c. Numeric (array/float/text) категорійні дефолти ---
+        # --- 7c. Numeric (array/float/text) категорійні дефолти ---
         # Атрибути без option_code (не select), що мають задане значення за замовчуванням
         # і немають маппінгу з Prom (напр. «Максимальний перетин дроту» для set 2793).
         for attr_code, (meta, value) in rules.numeric_defaults.items():
@@ -568,7 +570,7 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
                 params.append(_render_numeric_param(meta, value))
                 mapped_attr_codes.add(attr_code)
 
-        # --- 7. Гарантовані always-present атрибути ---
+        # --- 8. Гарантовані always-present атрибути ---
         # Після всіх кроків 5–6c переконуємось що кожен з 8 обов'язкових атрибутів
         # присутній у params. Last-resort fallback:
         #   float/text → "0" (або global_non_option_defaults якщо задано у xlsx)
@@ -603,10 +605,10 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
             for _code in _always_absent:
                 always_absent_drops[_code] += 1
 
-        # --- 8. Вставляємо блок «Параметри» в description_ua ---
+        # --- 9. Вставляємо блок «Параметри» в description_ua ---
         body = inject_params_into_description(body, prom_params)
 
-        # --- 9. Вставляємо params у кінець body ---
+        # --- 10. Вставляємо params у кінець body ---
         if params:
             params_block = '\n'.join(params)
             body = body.rstrip() + f'\n{params_block}\n'
@@ -831,10 +833,12 @@ def main() -> None:
     updated_xml = filter_stop_brand_offers(updated_xml)
     updated_xml = add_name_ua(updated_xml)
     updated_xml, _used_entries = inject_epicenter_attrs(updated_xml)
+    flush_fallback_warnings()  # зведений лог fallback-промахів категорій
     updated_xml = normalize_name_description_tags(updated_xml)   # після inject: description вже оновлено
     updated_xml = strip_prom_offer_fields(updated_xml)           # після fill_missing_vendor
     updated_xml = sanitize_russian_chars(updated_xml)             # ы→и, ъ→' у всьому фіді
     updated_xml = strip_html_classes(updated_xml)                  # видаляємо class="..." з HTML
+    updated_xml = strip_external_links(updated_xml)               # видаляємо "Детальніше:" та bare URLs з описів
 
     # Гарантуємо коректну XML-декларацію незалежно від того,
     # чи Prom-фід її надсилає і в якому форматі.

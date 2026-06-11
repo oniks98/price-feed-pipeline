@@ -4,24 +4,36 @@ services/epicenter_category_service.py
 Єдина точка читання листа «Маппінг» з epicenter_mappings.xlsx.
 
 Аркуш читається один раз (lru_cache) і роздається всім споживачам.
-Доступний інтерфейс:
-    get_category_map()             → dict[int, CategoryEntry]
-    get_category(prom_category_id) → CategoryEntry | None
-    build_categories_xml(entries)  → str
 
-CategoryEntry = {"code": str, "name": str}
-  code — epicenter_category_id (рядком, відповідає set_code у Сетах атрибутів)
-  name — назва категорії Епіцентру
+Публічний інтерфейс:
+    resolve_category(prom_category_id, prom_params)  -> CategoryEntry | None
+    get_category(prom_category_id)                   -> CategoryEntry | None  (compat)
+    get_category_map()                               -> dict[int, CategoryEntry]
+    build_categories_xml(entries)                    -> str
+
+CategoryEntry      = {"code": str, "name": str}
+CategoryMappingRule — внутрішня модель одного рядка «Маппінгу».
+
+Логіка resolve_category (в порядку пріоритету):
+  1. Правила з param_names: шукаємо в prom_params за іменем аліасу;
+     кожне sub-value (розбиття по ",") порівнюємо з option_names.
+     Перше збіжне правило виграє.
+  2. Plain-правила (param_names порожні): перше таке правило — fallback.
+  3. Якщо всі правила мають param-фільтр, але жодне не збіглося →
+     fallback на rules[0] + warning у лог.
 
 Файл даних: data/markets/epicenter_mappings.xlsx
 Аркуш:      Маппінг
-Колонки:    prom_category_id (col 0) | epicenter_category_id (col 2) | Назва (col 3)
+Колонки:    prom_category_id (col 0) | epicenter_category_id (col 2)
+            Назва (col 3) | prom_param_name (col 5) | prom_option_name (col 6)
 """
 
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from collections.abc import Iterable
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Final, TypedDict
@@ -37,9 +49,16 @@ _XLSX_PATH: Final[Path] = (
 _SHEET_NAME: Final[str] = "Маппінг"
 
 # Column indices (0-based) in «Маппінг»
-_COL_PROM_CAT_ID: Final[int] = 0    # prom_category_id
-_COL_EPI_CAT_ID: Final[int] = 2     # epicenter_category_id  (= set_code)
-_COL_EPI_NAME: Final[int] = 3       # Назва категорії Епіцентру
+_COL_PROM_CAT_ID:  Final[int] = 0   # prom_category_id
+_COL_EPI_CAT_ID:   Final[int] = 2   # epicenter_category_id  (= set_code)
+_COL_EPI_NAME:     Final[int] = 3   # Назва категорії Епіцентру
+_COL_PARAM_NAME:   Final[int] = 5   # prom_param_name  (аліаси, ";" separated)
+_COL_OPTION_NAME:  Final[int] = 6   # prom_option_name (значення, ";" separated)
+
+_ALIAS_SEP: Final[str] = ";"        # роздільник всередині xlsx-рядків
+
+# Лічильник fallback-промахів: (prom_cat_id, epi_code) → кількість товарів
+_fallback_miss_counts: Counter[tuple[int, str]] = Counter()
 
 
 # ---------------------------------------------------------------------------
@@ -51,15 +70,38 @@ class CategoryEntry(TypedDict):
     name: str   # Назва категорії Епіцентру
 
 
+@dataclass(frozen=True)
+class CategoryMappingRule:
+    """Один рядок аркуша «Маппінг» з розпарсеними param-фільтрами."""
+    code: str                     # epicenter_category_id
+    name: str                     # Назва категорії Епіцентру
+    param_names: frozenset[str]   # prom_param_name аліаси (порожньо → no filter)
+    option_names: frozenset[str]  # prom_option_name значення (порожньо → no filter)
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _parse_aliases(raw: str | None) -> frozenset[str]:
+    """Розбиває "A; B; C" → frozenset{"A", "B", "C"}. None → порожня множина."""
+    if not raw:
+        return frozenset()
+    return frozenset(s.strip() for s in raw.split(_ALIAS_SEP) if s.strip())
+
+
 # ---------------------------------------------------------------------------
 # Cached loader — xlsx читається рівно один раз на процес
 # ---------------------------------------------------------------------------
 
 @lru_cache(maxsize=1)
-def _load_category_map() -> dict[int, CategoryEntry]:
+def _load_mapping_rules() -> dict[int, list[CategoryMappingRule]]:
     """
-    Повертає повний індекс {prom_category_id: CategoryEntry}.
-    Пропускає рядки без prom_category_id або epicenter_category_id.
+    Повертає повний індекс {prom_category_id: [CategoryMappingRule, ...]}.
+
+    Один prom_category_id може мати кілька правил (param-based routing):
+    порядок у списку відповідає порядку рядків у xlsx → визначає пріоритет.
+    Рядки без prom_category_id або epicenter_category_id пропускаються.
     """
     if not _XLSX_PATH.exists():
         raise FileNotFoundError(
@@ -72,7 +114,7 @@ def _load_category_map() -> dict[int, CategoryEntry]:
     except KeyError:
         raise KeyError(f"Аркуш «{_SHEET_NAME}» не знайдено у {_XLSX_PATH}")
 
-    result: dict[int, CategoryEntry] = {}
+    result: dict[int, list[CategoryMappingRule]] = {}
     skipped = 0
 
     for row_idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
@@ -100,13 +142,25 @@ def _load_category_map() -> dict[int, CategoryEntry]:
 
         epi_name = str(epi_name_raw).strip() if epi_name_raw else ""
 
-        result[prom_id] = CategoryEntry(code=epi_code, name=epi_name)
+        # Cols 5/6 можуть бути відсутні у старих xlsx (захист від IndexError)
+        raw_param  = row[_COL_PARAM_NAME]  if len(row) > _COL_PARAM_NAME  else None
+        raw_option = row[_COL_OPTION_NAME] if len(row) > _COL_OPTION_NAME else None
+
+        rule = CategoryMappingRule(
+            code=epi_code,
+            name=epi_name,
+            param_names=_parse_aliases(raw_param),
+            option_names=_parse_aliases(raw_option),
+        )
+        result.setdefault(prom_id, []).append(rule)
 
     wb.close()
 
+    param_rows = sum(1 for rules in result.values() for r in rules if r.param_names)
+    plain_rows = sum(1 for rules in result.values() for r in rules if not r.param_names)
     logger.info(
-        "📋 Завантажено %d категорій Маппінгу (пропущено: %d)",
-        len(result), skipped,
+        "Завантажено %d категорій Маппінгу (%d plain, %d param-based, пропущено: %d)",
+        len(result), plain_rows, param_rows, skipped,
     )
     return result
 
@@ -115,17 +169,87 @@ def _load_category_map() -> dict[int, CategoryEntry]:
 # Public API
 # ---------------------------------------------------------------------------
 
-def get_category_map() -> dict[int, CategoryEntry]:
-    """Повний індекс {prom_category_id: CategoryEntry}."""
-    return _load_category_map()
+def resolve_category(
+    prom_cat_id: int,
+    prom_params: dict[str, str],
+) -> CategoryEntry | None:
+    """
+    Визначає категорію Epicenter для офера з урахуванням його атрибутів.
+
+    Пріоритет (see module docstring для деталей):
+    1. param-based правила → перше збіжне
+    2. plain-правила (param_names порожні) → перше
+    3. conservative fallback на rules[0] + warning
+
+    Не кидає виключень — безпечно для поштучної обробки товарів.
+    """
+    rules = _load_mapping_rules().get(prom_cat_id)
+    if not rules:
+        return None
+
+    plain_fallback: CategoryMappingRule | None = None
+
+    for rule in rules:
+        if not rule.param_names:
+            # Plain-правило (no param filter) → запам'ятовуємо як fallback
+            if plain_fallback is None:
+                plain_fallback = rule
+            continue
+
+        # Param-based: перевіряємо кожен аліас prom_param_name
+        for param_name in rule.param_names:
+            raw_value = prom_params.get(param_name)
+            if raw_value is None:
+                continue
+            # Prom може об'єднувати кілька значень через ", " (multiselect)
+            for sub_val in (v.strip() for v in raw_value.split(",")):
+                if sub_val in rule.option_names:
+                    return CategoryEntry(code=rule.code, name=rule.name)
+
+    # Param-правила не спрацювали → plain fallback
+    if plain_fallback is not None:
+        return CategoryEntry(code=plain_fallback.code, name=plain_fallback.name)
+
+    # Всі правила param-based, але жодне не збіглось → conservative fallback.
+    # Не спамимо лог на кожен товар — накопичуємо лічильник, flush_fallback_warnings() в кінці ран.
+    _fallback_miss_counts[(prom_cat_id, rules[0].code)] += 1
+    return CategoryEntry(code=rules[0].code, name=rules[0].name)
+
+
+def flush_fallback_warnings() -> None:
+    """
+    Виводить зведений WARNING по всіх fallback-промахах і скидає лічильник.
+    Викликати один раз після завершення обробки всіх товарів фіду.
+
+    Замість N однакових рядків у лозі — один рядок на (prom_cat_id, code):
+        prom_cat_id=53004 (×847): param-фільтр не збігся → fallback rules[0] (code=3528).
+    """
+    if not _fallback_miss_counts:
+        return
+    for (prom_cat_id, code), count in sorted(_fallback_miss_counts.items()):
+        logger.warning(
+            "prom_cat_id=%d (×%d): param-фільтр не збігся ні з одним правилом "
+            "→ fallback rules[0] (code=%s). Оновіть Маппінг або додайте plain-рядок.",
+            prom_cat_id, count, code,
+        )
+    _fallback_miss_counts.clear()
 
 
 def get_category(prom_category_id: int) -> CategoryEntry | None:
     """
-    Повертає CategoryEntry для prom_category_id або None якщо немає маппінгу.
-    Не кидає виключення — безпечно для поштучної обробки товарів.
+    Backward-compat: повертає CategoryEntry без param-фільтрації.
+    Еквівалентно resolve_category(id, {}).
+    Для офер-рівневого роутингу використовуй resolve_category().
     """
-    return _load_category_map().get(prom_category_id)
+    return resolve_category(prom_category_id, {})
+
+
+def get_category_map() -> dict[int, CategoryEntry]:
+    """Повний індекс {prom_category_id: CategoryEntry} — перше правило кожної категорії."""
+    return {
+        prom_id: CategoryEntry(code=rules[0].code, name=rules[0].name)
+        for prom_id, rules in _load_mapping_rules().items()
+    }
 
 
 def build_categories_xml(entries: Iterable[CategoryEntry]) -> str:
@@ -144,7 +268,6 @@ def build_categories_xml(entries: Iterable[CategoryEntry]) -> str:
             <category id="67890">Мережеві фільтри</category>
         </categories>
     """
-    # Числове сортування — коди є рядковими представленнями int (без .0)
     sorted_entries = sorted(
         entries,
         key=lambda e: int(e["code"]) if e["code"].isdigit() else e["code"],

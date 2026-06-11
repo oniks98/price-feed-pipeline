@@ -10,6 +10,10 @@ services/epicenter_text_sanitizer_service.py
 Видаляє HTML-сміття, що потрапляє з промовського фіду (напр. з Google Translate):
     class="Y2IQFc", class="...", тощо
 
+Видаляє зовнішні посилання з текстових полів (описів):
+    "Детальніше: https://..."  — мітка разом з URL
+    будь-який bare URL у тексті — якщо не є структурним XML-полем
+
 Виклик відбувається над повним XML-рядком фіду в самому кінці пайплайну —
 після всіх трансформацій (inject_epicenter_attrs, normalize_name_description_tags,
 strip_prom_offer_fields), щоб гарантовано захопити сміття у будь-яких полях:
@@ -17,6 +21,7 @@ strip_prom_offer_fields), щоб гарантовано захопити смі�
 
 Безпечно: XML-теги та атрибути (paramcode, lang тощо) не містять слова «class»
 та кирилиці — заміна їх не зачіпає.
+Структурні URL (<picture>https://...) не видаляються — URL після > не матчиться.
 """
 
 from __future__ import annotations
@@ -34,6 +39,29 @@ _CHAR_REPLACEMENTS: Final[tuple[tuple[str, str], ...]] = (
     ("Ы", "И"),
     ("ъ", "'"),
     ("Ъ", "'"),
+)
+
+# ---------------------------------------------------------------------------
+# Зовнішні посилання в текстових полях
+# ---------------------------------------------------------------------------
+
+# «Детальніше: URL» — видаляє разом з попереднім роздільником.
+# Приклади що матчаться:
+#   ", Детальніше: https://example.com/path?q=1"
+#   " Детальніше: https://example.com"
+_DETAILS_LINK_RE: Final[re.Pattern[str]] = re.compile(
+    r'[,;\s]*Детальніше:\s*https?://[^\s<>"\']+'  ,
+    re.IGNORECASE,
+)
+
+# Будь-який bare URL у текстовому контексті.
+# Negative lookbehind виключає URLs у структурних XML-позиціях:
+#   >  — безпосередній вміст XML-тегу: <picture>https://img.ua/...  → KEEP
+#   "  — значення XML/HTML-атрибута:  href="https://..."            → KEEP
+#   '  — значення XML/HTML-атрибута:  href='https://...'            → KEEP
+#   =  — значення без лапок:          src=https://...               → KEEP
+_BARE_URL_RE: Final[re.Pattern[str]] = re.compile(
+    r'(?<![>"\' =])https?://[^\s<>"\' ]+',
 )
 
 # ---------------------------------------------------------------------------
@@ -70,6 +98,38 @@ def sanitize_russian_chars(xml: str) -> str:
     for src, dst in _CHAR_REPLACEMENTS:
         xml = xml.replace(src, dst)
     return xml
+
+
+def strip_external_links(xml: str) -> str:
+    """
+    Видаляє зовнішні посилання з текстових полів (описів) фіду.
+
+    Прохід 1 — «Детальніше: URL»:
+        Видаляє мітку разом з URL і попереднім роздільником (кома, крапка з комою, пробіл).
+        Приклад: ", Детальніше: https://seven-systems.com.ua/..." → ""
+
+    Прохід 2 — bare URLs у тексті:
+        Видаляє будь-який https?://... що не є структурним XML-полем.
+        Не зачіпає:
+            <picture>https://img.ua/...   (URL після  > )
+            href="https://..."             (URL після  " )
+            src='https://...'             (URL після  ' )
+
+    Args:
+        xml: повний XML-рядок фіду.
+
+    Returns:
+        XML з видаленими external URLs з текстових полів.
+    """
+    result, n1 = _DETAILS_LINK_RE.subn('', xml)
+    result, n2 = _BARE_URL_RE.subn('', result)
+    total = n1 + n2
+    if total:
+        print(
+            f"🔗 strip_external_links: видалено {total} посилань "
+            f"({n1} 'Детальніше', {n2} bare URL)"
+        )
+    return result
 
 
 def strip_html_classes(xml: str) -> str:
