@@ -226,6 +226,21 @@ def _write_csv(csv_path: Path, fieldnames: list[str], rows: list[dict]) -> None:
     csv_path.write_text(out.getvalue(), encoding=CSV_ENCODING)
 
 
+def _serialize_row(row: list[str], delimiter: str, quotechar: str = '"') -> str:
+    """
+    Сериализует строку CSV, сохраняя оригинальный стиль кавычек:
+    кавычки добавляются если поле содержит delimiter, quotechar, запятую или перевод строки.
+    Соответствует поведению VSCode / Excel / LibreOffice при сохранении CSV с разделителем ';'.
+    """
+    parts: list[str] = []
+    for val in row:
+        if delimiter in val or quotechar in val or "," in val or "\n" in val or "\r" in val:
+            parts.append(f'{quotechar}{val.replace(quotechar, quotechar * 2)}{quotechar}')
+        else:
+            parts.append(val)
+    return delimiter.join(parts)
+
+
 def _resolve_coef(
     cat_id: int,
     commissions: dict[int, float],
@@ -321,52 +336,97 @@ def process_category_csv(
     label: str,
 ) -> tuple[int, int, int]:
     """
-    Заполняет threshold в category CSV (viatec / secur).
+    Заполняет threshold в category CSV (viatec / secur / lp).
     Фильтр: channel == "prom".
     Ключ: Ідентифікатор_підрозділу.
     Строки с пустым ключом или channel != "prom" — не трогаем.
+
+    Line-by-line подход:
+    - строки без изменений пишутся verbatim (кавычки вокруг ',' сохраняются)
+    - только изменённые prom-строки перезаписываются через _serialize_row
+      (квотирование совместимо с VSCode/Excel: кавычки вокруг полей с ',' и ';')
+    Меняется ровно один столбец — threshold.
+    Если текущее значение уже совпадает с новым — строка не трогается.
+
     Возвращает (updated, fallback_used, skipped).
     """
-    raw    = csv_path.read_text(encoding=CSV_ENCODING)
-    reader = csv.DictReader(io.StringIO(raw), delimiter=CSV_DELIMITER)
+    raw: str = csv_path.read_text(encoding=CSV_ENCODING)
+    lines: list[str] = raw.splitlines()
 
-    if reader.fieldnames is None:
+    if not lines:
         raise RuntimeError(f"CSV {csv_path} пуст или не читается")
-    for required in (CAT_COL_CHANNEL, CAT_COL_KEY):
-        if required not in reader.fieldnames:
-            raise RuntimeError(f"Столбик '{required}' не найден в {csv_path}")
 
-    fieldnames = _ensure_column(list(reader.fieldnames), CAT_COL_THRESHOLD)
-    rows       = list(reader)
+    # ── найти нужные индексы ──────────────────────────────────────────────────
+    header: list[str] = next(csv.reader([lines[0]], delimiter=CSV_DELIMITER))
 
+    def _col_index(name: str) -> int:
+        try:
+            return header.index(name)
+        except ValueError:
+            raise RuntimeError(f"Столбик '{name}' не найден в {csv_path}")
+
+    idx_channel = _col_index(CAT_COL_CHANNEL)
+    idx_key     = _col_index(CAT_COL_KEY)
+
+    if CAT_COL_THRESHOLD not in header:
+        header.append(CAT_COL_THRESHOLD)
+        lines[0] = _serialize_row(header, CSV_DELIMITER)
+        log.info("Столбик '%s' добавлен в CSV %s", CAT_COL_THRESHOLD, csv_path.name)
+
+    idx_threshold = header.index(CAT_COL_THRESHOLD)
+
+    result_lines: list[str] = [lines[0]]
     updated, fallback_used, skipped = 0, 0, 0
 
-    for row in rows:
-        if row.get(CAT_COL_CHANNEL, "").strip() != CAT_CHANNEL_PROM:
-            continue  # только prom-строки
+    for raw_line in lines[1:]:
+        if not raw_line:
+            result_lines.append(raw_line)  # пустая строка — verbatim
+            continue
 
-        raw_id = row.get(CAT_COL_KEY, "").strip()
-        if not raw_id:
-            continue  # нет ключа — не трогаем
+        row: list[str] = next(csv.reader([raw_line], delimiter=CSV_DELIMITER))
+
+        channel = row[idx_channel].strip() if idx_channel < len(row) else ""
+        raw_id  = row[idx_key].strip()     if idx_key     < len(row) else ""
+
+        if channel != CAT_CHANNEL_PROM or not raw_id:
+            result_lines.append(raw_line)  # verbatim — не prom-строка
+            continue
 
         try:
             cat_id = int(raw_id)
         except (ValueError, TypeError):
             log.warning("%s: невалидный %s='%s' — пропускаем", label, CAT_COL_KEY, raw_id)
             skipped += 1
+            result_lines.append(raw_line)  # verbatim
             continue
 
         coef_str, is_fallback = _resolve_coef(cat_id, commissions, fallback_coef, f"[{label}]")
         if coef_str is None:
             skipped += 1
+            result_lines.append(raw_line)  # verbatim
             continue
 
-        row[CAT_COL_THRESHOLD] = coef_str
+        # ── skip if unchanged (идемпотентность по CAT_COL_KEY) ───────────────
+        current = row[idx_threshold] if idx_threshold < len(row) else ""
+        if current == coef_str:
+            result_lines.append(raw_line)  # verbatim — значение не изменилось
+            continue
+
+        # ── обновляем ровно одну ячейку, сериализуем строку заново ───────────
+        while len(row) < idx_threshold + 1:
+            row.append("")
+        row[idx_threshold] = coef_str
+        result_lines.append(_serialize_row(row, CSV_DELIMITER))
         updated += 1
         if is_fallback:
             fallback_used += 1
 
-    _write_csv(csv_path, fieldnames, rows)
+    # ── write back, сохраняем завершающий перевод строки как в оригинале ──────
+    output = "\n".join(result_lines)
+    if raw.endswith("\n"):
+        output += "\n"
+    csv_path.write_text(output, encoding=CSV_ENCODING)
+
     return updated, fallback_used, skipped
 
 
