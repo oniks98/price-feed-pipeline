@@ -13,9 +13,16 @@ API дозволяє запустити повний імпорт (включа�
   PROM_API_TOKEN      — токен API Prom.ua (обов'язково, GitHub Secret)
   GITHUB_REPOSITORY   — автоматично в GitHub Actions (наприклад, user/repo)
   PROM_MERGED_CSV_URL — опційно, перевизначити URL файлу (для тестів)
+  PROJECT_ROOT        — опційно, корінь проєкту (для пошуку data/merged.csv)
 
 Документація API:
   https://public-api.docs.prom.ua/#/Products/postProductsImportURL
+
+Параметри запиту /products/import_url:
+  - force_update=True     → не чекаємо розкладу Прому
+  - only_available=False  → імпортуємо всі товари незалежно від наявності
+  - only_update=False     → дозволяємо створення нових товарів
+  - updated_fields        → список UPDATED_FIELDS, див. нижче
 
 Логіка updated_fields (згідно документації Prom):
   - Для нових товарів: імпортуються ВСІ поля з CSV незалежно від updated_fields
@@ -23,6 +30,15 @@ API дозволяє запустити повний імпорт (включа�
   - "price"             → також оновлює валюту, одиницю виміру, мін. обсяг
   - "presence"          → також оновлює кількість, готовність до відправки
   - "quantity_in_stock" → явно для залишків
+  - "attributes"        → характеристики (атрибути) товару
+  - "group"             → групу товару (для варіацій/групових карток)
+
+Retry при зайнятому імпорті:
+  Якщо Prom відповідає 400 з повідомленням про обмеження одночасних
+  імпортів (is_busy_import_error), чекаємо RETRY_DELAY (180 сек) і
+  повторюємо запит — максимум RETRY_MAX (4) спроб (~12 хв загалом).
+  Кожен запит має таймаут REQUEST_TIMEOUT (30 сек). Будь-яка інша
+  помилка (401/403/500/невірний payload тощо) — вихід одразу, exit 1.
 
 Статус імпорту:
   Результат (success/failed) записується в data/prom_import_status.json через
@@ -60,8 +76,9 @@ UPDATED_FIELDS = [
     "price",
     "presence",
     "quantity_in_stock",
+    "group",
     "attributes",
-]
+    ]
 
 REQUEST_TIMEOUT = 30   # сек на HTTP запит
 RETRY_DELAY     = 180  # сек між retry (3 хв) — Prom може тримати імпорт 5-10 хв
