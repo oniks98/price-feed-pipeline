@@ -1,14 +1,14 @@
 """
-Facade / router for market-specific pricing.
+Фасад / маршрутизатор ціноутворення для конкретних майданчиків.
 
-Public API consumed by generate_*_feed.py scripts:
+Публічне API, яке використовують скрипти generate_*_feed.py:
     apply_market_prices(market, xml, wholesale_index, currency_rates) -> str
     get_market_default_coefficient(market) -> Decimal
 
-Adding a new market:
-    1. Create scripts/services/pricing_rules/<market>.py
-       with apply_prices() and get_default_coefficient().
-    2. Import it below and add it to _APPLY_ROUTERS / _COEF_ROUTERS.
+Додавання нового майданчика:
+    1. Створити scripts/services/pricing_rules/<market>.py
+       з функціями apply_prices() та get_default_coefficient().
+    2. Імпортувати нижче та додати до _APPLY_ROUTERS / _COEF_ROUTERS.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from .pricing_rules import kasta as _kasta
 from .pricing_rules import rozetka as _rozetka
 
 # ---------------------------------------------------------------------------
-# Registry — add new markets here
+# Реєстр — додавайте нові майданчики тут
 # ---------------------------------------------------------------------------
 
 _ApplyFn = Callable[[str, dict[str, Decimal], dict[str, Decimal]], str]
@@ -47,7 +47,7 @@ def _assert_supported(market: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Публічне API
 # ---------------------------------------------------------------------------
 
 def apply_market_prices(

@@ -325,8 +325,8 @@
 324;"https://viatec.ua/catalog/parking-systems/0:0;89:barier-parkuvalnii,blok-miscia";prom;prom_;"0,85";1.31;140905382;Безопасность и комфорт;301501;https://prom.ua/Dorozhnye-ograzhdeniya;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Блокувальник паркувального місця;;;
 325;"https://viatec.ua/catalog/parking-systems/0:0;89:338,898,900,1299,komplekt-sharnir,komplekt-pruzhin,signalna-lampa,fotoelement,radar-vhid";site;;"0,85";"1,2";152481192;Системы парковки;13560901;https://prom.ua/Aksessuary-dlya-vorot-i-shagbaumov;V;;Вага;кг;;Тип устройства;;Комплектуючі до шлагбаумів;;;
 326;"https://viatec.ua/catalog/parking-systems/0:0;89:338,898,900,1299,komplekt-sharnir,komplekt-pruzhin,signalna-lampa,fotoelement,radar-vhid";prom;prom_;"0,85";1.25;140905382;Безопасность и комфорт;13560901;https://prom.ua/Aksessuary-dlya-vorot-i-shagbaumov;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Комплектуючі до шлагбаумів;;;
-327;https://viatec.ua/catalog/boksi-montazhni/0:0;site;;"0,85";"1,2";17012456;Серверные шкафы;70306;https://prom.ua/Shkafy-servernye;V;;Вага;кг;;Тип устройства;;Бокси монтажні;;;
-328;https://viatec.ua/catalog/boksi-montazhni/0:0;prom;prom_;"0,85";1.30;140905382;Безопасность и комфорт;70306;https://prom.ua/Shkafy-servernye;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Бокси монтажні;;;
+327;https://viatec.ua/catalog/boksi-montazhni/0:0;site;;"0,85";"1,2";17012456;Серверные шкафы;50904;https://prom.ua/Raspredelitelnye-schity;V;;Вага;кг;;Тип устройства;;Бокси монтажні;;;
+328;https://viatec.ua/catalog/boksi-montazhni/0:0;prom;prom_;"0,85";1.30;140905382;Безопасность и комфорт;50904;https://prom.ua/Raspredelitelnye-schity;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Бокси монтажні;;;
 329;https://viatec.ua/catalog/shkafi/0:0;site;;"0,85";"1,2";17012456;Серверные шкафы;70306;https://prom.ua/Shkafy-servernye;V;;Вага;кг;;Тип устройства;;Серверні шафи;;;
 330;https://viatec.ua/catalog/shkafi/0:0;prom;prom_;"0,85";1.30;140905382;Безопасность и комфорт;70306;https://prom.ua/Shkafy-servernye;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Серверні шафи;;;
 331;"https://viatec.ua/catalog/equipment-cable/0:0;80:849";site;;"0,85";"1,2";17012111;Кабель;7190605;https://prom.ua/Kabel-telefonnyj;V;;Вага;кг;;Тип устройства;;Мережевий;;;
@@ -403,7 +403,7 @@
 402;https://viatec.ua/catalog/equipment-batteries/0:0;prom;prom_;"0,85";1.27;140905382;Безопасность и комфорт;5280501;https://prom.ua/Akkumulyatornye-bloki;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Свинцеві акумулятори;;;
 403;https://viatec.ua/catalog/litievi-akumuliatori/0:0;site;;"0,85";"1,2";144038788;Литивые аккумуляторы;5280501;https://prom.ua/Akkumulyatornye-bloki;V;;Вага;кг;;Тип устройства;;Акумулятори літієві;;;
 404;https://viatec.ua/catalog/litievi-akumuliatori/0:0;prom;prom_;"0,85";1.27;140905382;Безопасность и комфорт;5280501;https://prom.ua/Akkumulyatornye-bloki;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Акумулятори літієві;;;
-405;https://viatec.ua/catalog/invertori/0:0;site;;"0,85";"1,2";144038804;Инверторы;5140401;https://prom.ua/Invertory;V;;Вага;г;;;;;;;
+405;https://viatec.ua/catalog/invertori/0:0;site;;"0,7";"1,16";144038804;Инверторы;5140401;https://prom.ua/Invertory;V;;Вага;г;;;;;;;
 406;https://viatec.ua/catalog/invertori/0:0;prom;prom_;"0,999";1.25;140905382;Безопасность и комфорт;5140401;https://prom.ua/Invertory;"V, Vmin, noindex";;Вага;г;;;;;;;
 407;https://viatec.ua/catalog/sistemi-nakopichennia-energii/0:0;site;;"0,85";"1,2";144038790;Системы накопления энергии BESS;14191106;https://prom.ua/Istochnik-besperebojnogo-pitaniya-ibp;V;;Вага;г;;Тип устройства;;Системи накопичення енергії BESS;;;
 408;https://viatec.ua/catalog/sistemi-nakopichennia-energii/0:0;prom;prom_;"0,999";1.27;140905382;Безопасность и комфорт;14191106;https://prom.ua/Istochnik-besperebojnogo-pitaniya-ibp;"V, Vmin, noindex";;Вага;г;;Тип устройства;;Системи накопичення енергії BESS;;;
@@ -549,8 +549,8 @@
 548;"https://viatec.ua/catalog/elektroinstrumenti/0:0;tip-instrumentu-elektro:vikonnii-pilosos";prom;prom_;"0,85";1.30;140905382;Безопасность и комфорт;608;https://prom.ua/ua/Pylesosy;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Віконний пилосос;;;
 549;"https://viatec.ua/catalog/elektroinstrumenti/0:0;tip-instrumentu-elektro:elektroshvabra";site;;"0,85";"1,2";152104243;Електроінструменти;151408;https://prom.ua/ua/Shvabry;V;;Вага;кг;;Тип устройства;;Електрошвабра;;;
 550;"https://viatec.ua/catalog/elektroinstrumenti/0:0;tip-instrumentu-elektro:elektroshvabra";prom;prom_;"0,85";1.31;140905382;Безопасность и комфорт;151408;https://prom.ua/ua/Shvabry;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Електрошвабра;;;
-551;"https://viatec.ua/catalog/elektroinstrumenti/0:0;elektro-aks:acumuliator";site;;"0,85";"1,2";152104243;Електроінструменти;5280501;https://prom.ua/ua/Akkumulyatornye-bloki;V;;Вага;кг;;Тип устройства;;Акумулятор;;;
-552;"https://viatec.ua/catalog/elektroinstrumenti/0:0;elektro-aks:acumuliator";prom;prom_;"0,85";1.27;140905382;Безопасность и комфорт;5280501;https://prom.ua/ua/Akkumulyatornye-bloki;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Акумулятор;;;
+551;"https://viatec.ua/catalog/elektroinstrumenti/0:0;elektro-aks:acumuliator";site;;"0,85";"1,2";152104243;Електроінструменти;5280501;https://prom.ua/ua/Akkumulyatornye-bloki;V;;Вага;кг;;Тип устройства;;Акумулятор для інструмента;;;
+552;"https://viatec.ua/catalog/elektroinstrumenti/0:0;elektro-aks:acumuliator";prom;prom_;"0,85";1.27;140905382;Безопасность и комфорт;5280501;https://prom.ua/ua/Akkumulyatornye-bloki;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Акумулятор для інструмента;;;
 553;"https://viatec.ua/catalog/elektroinstrumenti/0:0;elektro-aks:zariadne";site;;"0,85";"1,2";152104243;Електроінструменти;410201;https://prom.ua/ua/Zaryadnye-ustrojstva-dlya-akkumulyatorov;V;;Вага;кг;;Тип устройства;;Зарядний пристрій;;;
 554;"https://viatec.ua/catalog/elektroinstrumenti/0:0;elektro-aks:zariadne";prom;prom_;"0,85";1.31;140905382;Безопасность и комфорт;410201;https://prom.ua/ua/Zaryadnye-ustrojstva-dlya-akkumulyatorov;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Зарядний пристрій;;;
 555;"https://viatec.ua/catalog/elektroinstrumenti/0:0;elektro-aks:zariadne-akum";site;;"0,85";"1,2";152104243;Електроінструменти;410201;https://prom.ua/ua/Zaryadnye-ustrojstva-dlya-akkumulyatorov;V;;Вага;кг;;Тип устройства;;Зарядний пристрій+акумулятор;;;
@@ -797,8 +797,8 @@
 796;https://viatec.ua/catalog/equipment-testers/0:0;prom;prom_;"0,85";1.25;140905382;Безопасность и комфорт;50504;https://prom.ua/ua/Analizatory-spektra;"V, Vmin, noindex";;Вага;кг;;;;;;;
 797;https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;site;;"0,85";"1,2";152133408;Модульное оборудование;14190906;https://prom.ua/Rele-differentsialnye;V;;Вага;кг;;;;;;;
 798;https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;prom;prom_;"0,85";1.31;140905382;Безопасность и комфорт;14190906;https://prom.ua/Rele-differentsialnye;"V, Vmin, noindex";;Вага;кг;;;;;;;
-799;https://viatec.ua/catalog/rozpodilni-shitki/0:0;site;;"0,85";"1,2";152133464;Модульные электрощиты;50904;https://prom.ua/Raspredelitelnye-schity;V;;Вага;кг;;;;;;;
-800;https://viatec.ua/catalog/rozpodilni-shitki/0:0;prom;prom_;"0,85";1.30;140905382;Безопасность и комфорт;50904;https://prom.ua/Raspredelitelnye-schity;"V, Vmin, noindex";;Вага;кг;;;;;;;
+799;https://viatec.ua/catalog/rozpodilni-shitki/0:0;site;;"0,85";"1,2";152133464;Модульные электрощиты;50904;https://prom.ua/Raspredelitelnye-schity;V;;Вага;кг;;Тип устройства;;Модульні електрощити;;;
+800;https://viatec.ua/catalog/rozpodilni-shitki/0:0;prom;prom_;"0,85";1.30;140905382;Безопасность и комфорт;50904;https://prom.ua/Raspredelitelnye-schity;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Модульні електрощити;;;
 801;"https://viatec.ua/catalog/drabini/0:0;tip-shodiv:shodi";site;;"0,85";"1,2";152133483;"Сходи, драбини";13070703;https://prom.ua/ua/Lestnitsy-stroitelnye;V;;Вага;кг;;Тип устройства;;Сходи;;;
 802;"https://viatec.ua/catalog/drabini/0:0;tip-shodiv:shodi";prom;prom_;"0,85";1.29;140905382;Безопасность и комфорт;13070703;https://prom.ua/ua/Lestnitsy-stroitelnye;"V, Vmin, noindex";;Вага;кг;;Тип устройства;;Сходи;;;
 803;"https://viatec.ua/catalog/drabini/0:0;tip-shodiv:drabina";site;;"0,85";"1,2";152133483;"Сходи, драбини";13070701;https://prom.ua/ua/Stremyanki;V;;Вага;кг;;Тип устройства;;Драбина;;;
