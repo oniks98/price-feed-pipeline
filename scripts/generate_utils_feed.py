@@ -37,10 +37,6 @@ _COL_IDENTIFIER: str = "Ідентифікатор_товару"
 _COL_WHOLESALE: str = "Оптова_ціна"
 _PROM_ID_PREFIX: str = "prom_"
 
-PROM_IMAGE_RE: re.Pattern[str] = re.compile(
-    r'https://images\.prom\.ua/(?:[^"<\s]*/)?(\d+)_[^"<\s]+\.jpg'
-)
-
 DEFAULT_VENDOR: str = "Anker"
 DEFAULT_COUNTRY: str = "Китай"
 
@@ -220,16 +216,6 @@ def load_wholesale_price_index(root: Path) -> dict[str, Decimal]:
 # ---------------------------------------------------------------------------
 # XML-трансформації
 # ---------------------------------------------------------------------------
-
-def transform_prom_image_urls(xml: str) -> str:
-    """Нормалізує URL зображень Prom.ua до формату w640_h640."""
-    result, count = PROM_IMAGE_RE.subn(
-        lambda m: f"https://images.prom.ua/{m.group(1)}_w640_h640_{m.group(1)}.jpg",
-        xml,
-    )
-    print(f"🖼️  Нормалізовано URL зображень Prom.ua → w640_h640: {count}")
-    return result
-
 
 def replace_vendor_aliases(xml: str) -> str:
     """

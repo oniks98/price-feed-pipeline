@@ -35,7 +35,6 @@ from generate_utils_feed import (
     filter_unavailable_offers,
     load_wholesale_price_index,
     parse_currency_rates,
-    transform_prom_image_urls,
 )
 from services.market_pricing import apply_market_prices
 from services.rozetka_stop_brand_service import filter_stop_brand_offers
@@ -237,7 +236,6 @@ def main() -> None:
     wholesale_index = load_wholesale_price_index(ROOT)
 
     updated_xml = apply_market_prices(MARKET, updated_xml, wholesale_index, currency_rates)
-    updated_xml = transform_prom_image_urls(updated_xml)
     updated_xml = fill_missing_vendor(updated_xml)
     updated_xml = filter_stop_brand_offers(updated_xml)
 

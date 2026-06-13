@@ -25,7 +25,6 @@ from generate_utils_feed import (
     load_wholesale_price_index,
     parse_currency_rates,
     replace_vendor_aliases,
-    transform_prom_image_urls,
 )
 from services.market_pricing import apply_market_prices
 
@@ -53,7 +52,6 @@ def main() -> None:
     wholesale_index = load_wholesale_price_index(ROOT)
 
     updated_xml = apply_market_prices(MARKET, updated_xml, wholesale_index, currency_rates)
-    updated_xml = transform_prom_image_urls(updated_xml)
     updated_xml = replace_vendor_aliases(updated_xml)
     updated_xml = fill_missing_vendor(updated_xml)
     updated_xml = add_name_ua(updated_xml)
