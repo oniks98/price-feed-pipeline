@@ -185,6 +185,7 @@ git push origin data-latest --force
 | 19.04.26 | 41 847            |
 
 12.05 57 000
+14.06 165262
 
 ```
 https://api.github.com/repos/oniks98/price-feed-pipeline
