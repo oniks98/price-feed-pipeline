@@ -170,7 +170,7 @@ class ImageService:
             https://wsrv.nl/?url=<encoded>&w=640&h=640&fit=contain&...
         """
         params: dict[str, str] = {"url": original_url, **_WSRV_STATIC_PARAMS}
-        return _WSRV_BASE + "?" + urllib.parse.urlencode(params)
+        return _WSRV_BASE + "?" + urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
 
     def save_cache(self) -> None:
         """Зберігає кеш на диск. Викликати в close_spider()."""
