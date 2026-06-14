@@ -153,6 +153,7 @@ jobs:
             data/output/${{ matrix.supplier }}_new.csv
             data/output/${{ matrix.supplier }}_status.txt
             data/${{ matrix.supplier }}/sku_map.json
+            data/${{ matrix.supplier }}/image_cache.json
           retention-days: 1
           if-no-files-found: warn
           compression-level: 6
@@ -333,17 +334,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Commit sku_map.json to main
+      - name: Commit sku_map + image_cache to main
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add "data/*/sku_map.json"
+          git add "data/*/sku_map.json" "data/*/image_cache.json"
 
           if git diff --staged --quiet; then
             echo "✅ Змін немає — коміт пропущено"
           else
-            git commit -m "chore: sku_map update $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git commit -m "chore: sku_map + image_cache update $(date -u '+%Y-%m-%d %H:%M UTC')"
             git fetch origin main
             git rebase origin/main -X ours || git rebase --abort
             git push origin HEAD:main --force-with-lease

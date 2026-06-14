@@ -103,6 +103,7 @@ from suppliers.services.field_processor import FieldProcessor
 from suppliers.services.validation_service import ValidationService
 from suppliers.services.sku_code_service import SkuCodeService
 from suppliers.services.text_sanitizer import TextSanitizer
+from suppliers.services.image_service import ImageService
 from suppliers.constants import get_start_code
 
 RAW_CSV_ROWS_FIELD = "__raw_csv_rows__"
@@ -207,6 +208,7 @@ class SuppliersPipeline:
         self.spec_length_handler = SpecificationLengthHandler(strategy="hybrid")
         self.field_processor: FieldProcessor | None = None
         self.validation_service = ValidationService()
+        self.image_services: dict[str, ImageService] = {}  # per-supplier, як sku_code_services
 
         # Manufacturers DB: {spider_name: ManufacturersDB}
         # Завантажується з {supplier}_manufacturers.csv для всіх постачальників
@@ -239,7 +241,7 @@ class SuppliersPipeline:
         
         spider.logger.info(f"📦 {config}")
 
-        # 2️⃣ Ініціалізуємо сервіси на основі конфігу
+        # 2️⃣ Ініціалізуємо сервіси на основі конфігу (включно з ImageService)
         self._init_services(config, spider)
 
         # 3️⃣ Ініціалізуємо CSV
@@ -308,7 +310,15 @@ class SuppliersPipeline:
             spider.logger.info(f"🔀 Мультиканальний режим активовано для {spider.name}")
         
         # PriceService більше не використовується (LEGACY видалено)
-        
+
+        # ImageService — per-supplier, кеш в data/{supplier}/image_cache.json
+        cache_path = config.data_dir / "image_cache.json"
+        self.image_services[spider.name] = ImageService(
+            cache_path=cache_path,
+            logger=spider.logger,
+        )
+        spider.logger.info(f"🖼️  ImageService ({spider.name}): кеш → {cache_path}")
+
         # AttributeMapper
         if config.use_attribute_mapper and config.mapping_rules_file:
             self.attribute_mapper = AttributeMapper(
@@ -343,8 +353,18 @@ class SuppliersPipeline:
 
         raw_rows = adapter.get(RAW_CSV_ROWS_FIELD)
         if raw_rows is not None:
+            svc = self.image_services.get(spider.name)
+            try:
+                img_col = list(PromCsvSchema.BASE_FIELDS).index("Посилання_зображення")
+            except ValueError:
+                img_col = -1
             written = 0
             for row in raw_rows:
+                # При fast-path трансформуємо URL зображення безпосередньо в рядку.
+                # wsrv.nl URL проходить через resolve_url без змін (захист у _resolve_single).
+                if svc and img_col >= 0 and img_col < len(row) and row[img_col]:
+                    row = list(row)
+                    row[img_col] = svc.resolve_url(row[img_col])
                 self._write_raw_row(output_file, row)
                 written += 1
             self.stats[output_file]["count"] += written
@@ -689,6 +709,10 @@ class SuppliersPipeline:
                 value = self.field_processor.process_dimension(value, "Довжина", spider)
             elif prom_field in ("Назва_позиції_укр", "Опис_укр") and value:
                 value = FieldProcessor.normalize_cyrillic(value)
+            elif prom_field == "Посилання_зображення" and value:
+                svc = self.image_services.get(spider.name)
+                if svc:
+                    value = svc.resolve_url(value)
 
             result[prom_field] = value
 
@@ -762,9 +786,11 @@ class SuppliersPipeline:
             self._anomaly_log.close()
             self._anomaly_log = None
 
-        # Зберігаємо sku_map на диск
+        # Зберігаємо sku_map та image-кеш на диск (per-supplier)
         for sku_service in self.sku_code_services.values():
             sku_service.save()
+        for img_service in self.image_services.values():
+            img_service.save_cache()
 
         # Виводимо статистику обробки характеристик
         self.spec_length_handler.print_stats()
