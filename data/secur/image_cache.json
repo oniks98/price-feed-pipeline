@@ -5008,5 +5008,15 @@
     "w": 804,
     "h": 747,
     "transform_url": null
+  },
+  "https://content.secur.ua/products/Bxqx8g7JywsjW3GPsAmu0YMMLojKUtWTRUFQlicC.png": {
+    "w": 358,
+    "h": 842,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FBxqx8g7JywsjW3GPsAmu0YMMLojKUtWTRUFQlicC.png&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://content.secur.ua/products/D3QRbocLpfNLjclZHXTUvJFDlj3E0Wogqv8lgvEf.png": {
+    "w": 384,
+    "h": 886,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FD3QRbocLpfNLjclZHXTUvJFDlj3E0Wogqv8lgvEf.png&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
   }
 }
