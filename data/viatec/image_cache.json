@@ -30163,5 +30163,15 @@
     "w": 402,
     "h": 402,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FMustWiFiPLUV20.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/prime_fhd_black.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/optimaid_fhd_r-1200x1200.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
   }
 }
