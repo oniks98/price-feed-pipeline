@@ -112,6 +112,9 @@ class LpApiSpider(BaseDealerSpider):
         # Set вже оброблених кодів товарів (resume)
         self.processed_codes: set[str] = self._load_processed_codes()
 
+        # product_code → leaf_category_code (генерується lp_export_categories.py)
+        self._product_cat_map: dict[str, str] = self._load_product_category_map()
+
         # Статистика
         self._stats: dict[str, int] = {
             "yielded":              0,
@@ -143,6 +146,25 @@ class LpApiSpider(BaseDealerSpider):
 
         self.logger.info(f"📂 Category codes завантажено: {len(codes)}")
         return codes
+
+    def _load_product_category_map(self) -> dict[str, str]:
+        """
+        Зчитує lp_product_categories.json → dict[product_code → leaf_cat_code].
+        Файл генерується scripts/lp_export_categories.py.
+        Якщо відсутній — fallback на product.categories[].
+        """
+        import json
+        path = self._root / "data" / "lp" / "lp_product_categories.json"
+        if not path.exists():
+            self.logger.warning(
+                "⚠️ lp_product_categories.json не знайдено — "
+                "запустіть scripts/lp_export_categories.py"
+            )
+            return {}
+        with open(path, encoding="utf-8") as f:
+            data: dict[str, str] = json.load(f)
+        self.logger.info(f"🗺️  Product→Category map: {len(data)} товарів")
+        return data
 
     def _load_processed_codes(self) -> set[str]:
         """Читає output CSV → set кодів для resume-mode."""
@@ -287,7 +309,7 @@ class LpApiSpider(BaseDealerSpider):
             return None
 
         # 4. Category
-        category_code = self._resolve_category(product.get("categories", []))
+        category_code = self._resolve_category(product.get("categories", []), code)
         if category_code is None:
             self._stats["skip_no_category"] += 1
             raw_codes = [c.get("code") for c in product.get("categories", [])]
@@ -361,17 +383,23 @@ class LpApiSpider(BaseDealerSpider):
     # HELPERS
     # ──────────────────────────────────────────────────────────────────
 
-    def _resolve_category(self, categories: list[dict]) -> str | None:
+    def _resolve_category(self, categories: list[dict], product_code: str = "") -> str | None:
         """
-        Повертає перший code з product.categories що є в lp_category.csv.
-        Перебір від кінця (deepest) до початку (root).
-        Якщо CSV порожній (ще не заповнений) — повертає останній code без перевірки.
+        Пріоритети пошуку категорії:
+          1. lp_product_categories.json — точний leaf маппінг (генерує lp_export_categories.py)
+          2. product.categories[] × lp_category.csv (reversed — deepest first)
+          3. Fallback (якщо CSV порожній): cats[-1]
         """
+        # 1. JSON map (найточніший — leaf категорія з дерева категорій)
+        if product_code and product_code in self._product_cat_map:
+            return self._product_cat_map[product_code]
+
+        # 2. Fallback через product.categories[] (зазвичай повертає батьківський код)
         if not categories:
             return None
 
         if not self.category_codes:
-            # CSV ще не заповнений — беремо найглибший code без валідації
+            # CSV ще не заповнений — беремо найглибший код без валідації
             return str(categories[-1].get("code", "")).strip() or None
 
         for cat in reversed(categories):

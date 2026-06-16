@@ -4,14 +4,14 @@
 
 Додавання нового постачальника потребує **2 ручних реєстрації** + решта автоматично:
 
-| Крок | Файл | Що робити |
-|------|------|-----------|
-| 1 | `scripts/update_products.py` | Додати рядок у `SUPPLIER_CONFIG` |
-| 2 | `.github/workflows/pipeline.yml` | Додати рядок у `matrix.include` |
-| 3 | `suppliers/constants.py` | Код, валюта, округлення |
-| 4 | `data/newsupplier/` | CSV файли категорій |
-| 5 | `suppliers/items.py` | Новий Item клас |
-| 6 | `suppliers/spiders/newsupplier/` | Spider (без абсолютних шляхів!) |
+| Крок | Файл                             | Що робити                        |
+| ---- | -------------------------------- | -------------------------------- |
+| 1    | `scripts/update_products.py`     | Додати рядок у `SUPPLIER_CONFIG` |
+| 2    | `.github/workflows/pipeline.yml` | Додати рядок у `matrix.include`  |
+| 3    | `suppliers/constants.py`         | Код, валюта, округлення          |
+| 4    | `data/newsupplier/`              | CSV файли категорій              |
+| 5    | `suppliers/items.py`             | Новий Item клас                  |
+| 6    | `suppliers/spiders/newsupplier/` | Spider (без абсолютних шляхів!)  |
 
 **Що відбувається автоматично після реєстрації:**
 
@@ -19,6 +19,7 @@
 - `merge_csv.py` включає його у `merged.csv` для Prom.ua
 - `SupplierConfig.from_spider(spider.name)` знаходить всі файли по імені паука
 - `SkuCodeService` призначає стабільний `Код_товару` кожному SKU постачальника
+- `ImageService` Сервіс трансформації зображень постачальників
 - `ChannelService` розподіляє товари по каналах (site, prom...) з різними цінами
 
 ---
@@ -60,8 +61,8 @@ matrix:
       spider: secur_retail
     - supplier: eserver
       spider: eserver_retail
-    - supplier: newsupplier        # ← додати
-      spider: newsupplier_retail   # ← додати
+    - supplier: newsupplier # ← додати
+      spider: newsupplier_retail # ← додати
 ```
 
 ---
@@ -110,7 +111,7 @@ data/newsupplier/
 └── newsupplier_mapping_rules.csv   # опціонально — маппінг характеристик
 ```
 
-> `sku_map.json` з'явиться тут автоматично після першого запуску паука.
+> `sku_map.json` і `image_cache.json`з'явиться тут автоматично після першого запуску паука.
 
 ---
 
