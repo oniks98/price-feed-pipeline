@@ -37,6 +37,7 @@ python scripts/ultra_clean_run.py secur_feed_full
 python scripts/update_products.py viatec dealer
 python scripts/update_products.py viatec retail
 python scripts/update_products.py secur retail
+python scripts/update_products.py lp dealer
 
 # Всі постачальники (dealer + retail) одразу
 python scripts/update_products.py
