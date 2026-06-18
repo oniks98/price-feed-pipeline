@@ -290,6 +290,15 @@ _ATTR_CONFIG_BY_CODE: Final[dict[str, AttrConfig]] = {
     cfg.attr_code: cfg for cfg in _ATTRS
 }
 
+# Lookup: attr_name_uk → AttrConfig для атрибутів-розмірів (width / height / length).
+# Дозволяє кроку 6c отримувати вже нормоване індивідуальне значення
+# замість складеного рядка типу «Ф120х121х173.5 мм» від окремого prom-параметра («Розміри» тощо).
+_DIM_ATTR_CONFIG_BY_NAME: Final[dict[str, AttrConfig]] = {
+    cfg.attr_name_uk: cfg
+    for cfg in _ATTRS
+    if cfg.attr_code in ("width", "height", "length")
+}
+
 # Підмножина _ALWAYS_PRESENT_ATTR_CODES з типом float/text/array (NON_OPTION_TYPES).
 # Кроки 6a+6b НЕ лічать їх у attr_drops — крок 8 ЗАВЖДИ підставить "0".
 _ALWAYS_PRESENT_FLOAT_CODES: Final[frozenset[str]] = frozenset(
@@ -438,6 +447,23 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
             else:
                 prom_params[_name] = _value
 
+        # --- 2b. Pre-resolve dimension values (Ширина/Висота/Глибина) для кроку 6c ---
+        # Деякі продукти мають одночасно окремі prom-параметри (Ширина=120, Висота=121)
+        # і складений рядок в іншому параметрі («Розміри»=«Ф120х121х173.5 мм»).
+        # _ATTRS (крок 6a) використовує окремі значення коректно.
+        # Category numeric attrs (attr_code=110/111, крок 6c) раніше отримували
+        # складений рядок без нормалізації — dim_resolved виправляє це.
+        dim_resolved: dict[str, str] = {}
+        for _dcfg in _ATTRS:
+            if _dcfg.attr_code not in ("width", "height", "length"):
+                continue
+            for _dkey in (_dcfg.prom_param_name, *_dcfg.prom_aliases):
+                if _dkey and (_draw := prom_params.get(_dkey)):
+                    dim_resolved[_dcfg.attr_name_uk] = (
+                        _dcfg.normalize(_draw) if _dcfg.normalize else _draw
+                    )
+                    break
+
         # --- 3. Визначаємо категорію Epicenter (може залежати від prom_params) ---
         category = resolve_category(prom_cat_id, prom_params)
 
@@ -533,7 +559,22 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
             numeric_metas = rules.numeric_map.get(prom_name, [])
             for meta in numeric_metas:
                 if meta.attr_code not in mapped_attr_codes:
-                    params.append(_render_numeric_param(meta, prom_value))
+                    # Для category numeric attrs що відповідають розмірам (Ширина/Висота/Глибина):
+                    # підставляємо pre-resolved індивідуальне значення (вже нормоване через _to_mm)
+                    # замість сирого prom_value (напр. «Ф120х121х173.5 мм»).
+                    # Fallback 1: якщо окремого prom-параметра нема — нормалізуємо prom_value напряму.
+                    # Fallback 2: якщо attr не є розміром — підставляємо prom_value без змін.
+                    _pre = dim_resolved.get(meta.attr_name)
+                    if _pre is not None:
+                        _meta_value = _pre
+                    else:
+                        _dim_cfg = _DIM_ATTR_CONFIG_BY_NAME.get(meta.attr_name)
+                        _meta_value = (
+                            _dim_cfg.normalize(prom_value)
+                            if _dim_cfg and _dim_cfg.normalize
+                            else prom_value
+                        )
+                    params.append(_render_numeric_param(meta, _meta_value))
                     mapped_attr_codes.add(meta.attr_code)
 
         # --- 7. Дефолти для атрибутів без маппінгу ---
