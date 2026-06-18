@@ -31423,5 +31423,30 @@
     "w": null,
     "h": null,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/UPC-50SCSC.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2023-03/Corning%C2%A0SMF28e.webp": {
+    "w": 688,
+    "h": 688,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/Renon-Power-kitt11.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/etimat2p32a.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/ECH-36PT.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
   }
 }
