@@ -1,19 +1,19 @@
 """
-Роутер категорій для постачальника Secur.
+Роутер категорій для постачальника LP.
 """
 
 from typing import Optional, Callable, List, Set
 
 from keywords.core.helpers import SpecAccessor
-from keywords.categories.secur import (
+from keywords.categories.lp import (
     battery,
     boxes,
     camera,
     dvr,
+    hdd,
     intercom,
     kommutatory,
     lock,
-    mounts,
 )
 
 
@@ -21,7 +21,7 @@ from keywords.categories.secur import (
 CATEGORY_HANDLERS = {
     "301105": camera.generate,      # Камери відеоспостереження
     "301102": dvr.generate,         # Відеореєстратори (DVR/NVR)
-    "301112": mounts.generate,      # Кронштейни та кожухи
+    "70704": hdd.generate,          # Жорсткі диски
     "5092913": boxes.generate,      # Монтажні коробки
     "3029": intercom.generate,      # Домофони та відеодомофони
     "301010": lock.generate,        # Замки

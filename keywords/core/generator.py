@@ -11,6 +11,7 @@ from keywords.core.loaders import ConfigLoader, CategoryConfig
 from keywords.processors.viatec.generic import GenericProcessor as ViatecGenericProcessor
 from keywords.processors.eserver.generic import GenericProcessor as EServerGenericProcessor
 from keywords.processors.secur.generic import GenericProcessor as SecurGenericProcessor
+from keywords.processors.lp.generic import GenericProcessor as LpGenericProcessor
 
 
 class ProductKeywordsGenerator:
@@ -20,7 +21,7 @@ class ProductKeywordsGenerator:
         self,
         keywords_csv_path: str,
         manufacturers_csv_path: str,
-        supplier: str = "viatec",  # viatec, secur, eserver
+        supplier: str = "viatec",  # viatec, secur, eserver, lp
         logger: Optional[logging.Logger] = None
     ):
         """
@@ -40,6 +41,7 @@ class ProductKeywordsGenerator:
             "viatec": ViatecGenericProcessor(),
             "secur": SecurGenericProcessor(),
             "eserver": EServerGenericProcessor(),
+            "lp":     LpGenericProcessor(),
         }
 
         # Завантажуємо конфігурацію
