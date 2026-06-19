@@ -31448,5 +31448,85 @@
     "w": null,
     "h": null,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/images/1-241/2CD1347G2H-LIU.webp": {
+    "w": 800,
+    "h": 800,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/TML-200_Trinix.webp": {
+    "w": 500,
+    "h": 500,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2FTML-200_Trinix.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/0ce5e0a5e033d9c2e6e600c2d5e86266.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/07abc3246626b31c7544454d40d06b39.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-04/UA-OF42-D54-BK.webp": {
+    "w": 513,
+    "h": 513,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2024-04%2FUA-OF42-D54-BK.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2024-02/CS4226-24ET-375.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2023-12/CS4226-24ET-3751.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-04/6X5A9531.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-04/PXL_20240402_074325200.NIGHT.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2023-05/KRAUSE_Corda_3%D1%859.webp": {
+    "w": 500,
+    "h": 500,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2023-05%2FKRAUSE_Corda_3%25D1%25859.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-05/KRAUSE_Tribilo310.webp": {
+    "w": 500,
+    "h": 500,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2023-05%2FKRAUSE_Tribilo310.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-04/KRAUSE_Corda_5.webp": {
+    "w": 832,
+    "h": 832,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2023-04/KRAUSE_Corda38.webp": {
+    "w": 500,
+    "h": 500,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2023-04%2FKRAUSE_Corda38.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-04/corda311.webp": {
+    "w": 940,
+    "h": 940,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/safety4d-500x500.webp": {
+    "w": 500,
+    "h": 500,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fsafety4d-500x500.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-04/KRAUSE_Corda_4%D1%853.webp": {
+    "w": 667,
+    "h": 667,
+    "transform_url": null
   }
 }
