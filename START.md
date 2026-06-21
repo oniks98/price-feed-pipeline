@@ -13,10 +13,10 @@ python scripts/ultra_clean_run.py viatec_dealer
 python scripts/ultra_clean_run.py secur_feed
 python scripts/ultra_clean_run.py lp_api
 
-python scripts/ultra_clean_run.py viatec_feed_full
+python scripts/ultra_clean_run.py viatec_feed_full  - недоделан, не проставлены категории под фид в category.csv
 python scripts/ultra_clean_run.py viatec_retail
 python scripts/ultra_clean_run.py secur_retail
-python scripts/ultra_clean_run.py secur_feed_full
+python scripts/ultra_clean_run.py secur_feed_full  - для хар-к аякс
 ```
 
 ---

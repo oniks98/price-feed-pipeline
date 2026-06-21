@@ -7,6 +7,7 @@
 ## 🎯 Архітектура генерації ключових слів
 
 Кожен постачальник використовує СВІЙ процесор:
+
 - `viatec` → `ViatecGenericProcessor`
 - `secur` → `SecurGenericProcessor`
 - `eserver` → `EServerGenericProcessor`
@@ -20,11 +21,13 @@
 ### ⚠️ КРИТИЧНО: Ваш обробник повертає ТІЛЬКИ Блок 2!
 
 **Додавайте ТІЛЬКИ:**
+
 - ✅ `{base} {характеристика}` (наприклад: "патч панель utp")
 - ✅ `{характеристика} {base}` (наприклад: "utp патч панель")
 - ✅ `{base} {число} {одиниця}` (наприклад: "патч панель 24 портів")
 
 **НЕ додавайте:**
+
 - ❌ Модель/бренд (додає Блок 1)
 - ❌ Universal phrases (додає Блок 3)
 - ❌ Складні комбінації (створюються автоматично)
@@ -35,18 +38,20 @@
 
 ### Крок 1: Додати категорію в CSV
 
-**Шлях:** `C:\FullStack\Scrapy\data\{supplier}\{supplier}_keywords.csv`
+**Шлях:** `C:\FullStack\PriceFeedPipeline\data\{supplier}\{supplier}_keywords.csv`
 
 ```csv
 5092902;https://prom.ua/...;universal_phrases_ru;universal_phrases_ua;base_keyword_ru;base_keyword_ua;allowed_specs
 ```
 
 **Поля:**
+
 - `universal_phrases_ru/ua` - загальні фрази через кому
 - `base_keyword_ru/ua` - базове ключове слово
 - `allowed_specs` - **WHITE LIST** характеристик через кому
 
 ⚠️ **allowed_specs** - строгий white list з exact match!
+
 - "Тип" дозволить ТІЛЬКИ "Тип", НЕ "Тип корпусу"
 - "Порт" дозволить ТІЛЬКИ "Порт", НЕ "Кількість портів"
 
@@ -54,7 +59,7 @@
 
 ### Крок 2: Створити обробник категорії
 
-**Шлях:** `C:\FullStack\Scrapy\keywords\categories\{supplier}\{назва}.py`
+**Шлях:** `C:\FullStack\PriceFeedPipeline\keywords\categories\{supplier}\{назва}.py`
 
 **Шаблон:**
 
@@ -79,7 +84,7 @@ def generate(
 ) -> List[str]:
     """
     Генерація ключових слів для {категорія}.
-    
+
     Повертає ТІЛЬКИ Блок 2 (характеристики).
 
     Args:
@@ -116,6 +121,7 @@ def generate(
 ```
 
 **Правила:**
+
 - ✅ Кожен `accessor.value()` **СТРОГО** через `is_spec_allowed()`
 - ✅ `is_spec_allowed` використовує exact match (не fuzzy)
 - ✅ Повертати ТІЛЬКИ `["{base} {spec}", "{spec} {base}"]`
@@ -125,7 +131,7 @@ def generate(
 
 ### Крок 3: Зареєструвати в роутері постачальника
 
-**Шлях:** `C:\FullStack\Scrapy\keywords\categories\{supplier}\router.py`
+**Шлях:** `C:\FullStack\PriceFeedPipeline\keywords\categories\{supplier}\router.py`
 
 ```python
 from keywords.categories.{supplier} import existing_module, new_module
@@ -140,7 +146,7 @@ CATEGORY_HANDLERS = {
 
 ### Крок 4: Експортувати модуль
 
-**Шлях:** `C:\FullStack\Scrapy\keywords\categories\{supplier}\__init__.py`
+**Шлях:** `C:\FullStack\PriceFeedPipeline\keywords\categories\{supplier}\__init__.py`
 
 ```python
 from keywords.categories.{supplier} import existing_module, new_module
@@ -153,7 +159,7 @@ __all__ = ["existing_module", "new_module", "router"]  # ← додати
 ## 🔄 Як це працює
 
 ```
-Spider → Pipeline → ProductKeywordsGenerator(supplier="viatec") 
+Spider → Pipeline → ProductKeywordsGenerator(supplier="viatec")
                             ↓
                     ViatecGenericProcessor
                             ↓
@@ -181,6 +187,7 @@ from keywords.utils.spec_helpers import (
 ### ⚠️ Важливо про `is_spec_allowed`
 
 **Строга перевірка (exact match):**
+
 ```python
 allowed = {"тип", "кількість портів"}
 
@@ -190,6 +197,7 @@ is_spec_allowed("Порт", allowed)         # False ❌
 ```
 
 **Це запобігає:**
+
 - ❌ "тип" → "тип корпусу", "тип пристрою"
 - ❌ "порт" → "кількість портів", "порт живлення"
 - ❌ Неочікувані збіги
@@ -199,14 +207,17 @@ is_spec_allowed("Порт", allowed)         # False ❌
 ## 📚 Приклади обробників
 
 **Прості (1-2 характеристики):**
+
 - `keywords/categories/viatec/usb_flash.py` - USB флешки
 - `keywords/categories/viatec/battery.py` - Акумулятори
 
 **Середні (3-5 характеристик):**
+
 - `keywords/categories/eserver/panel.py` - Патч-панелі
 - `keywords/categories/viatec/sd_card.py` - SD карти
 
 **Складні (7+ характеристик):**
+
 - `keywords/categories/viatec/hdd.py` - HDD диски
 - `keywords/categories/viatec/camera.py` - Камери відеоспостереження
 - `keywords/categories/eserver/cabinet.py` - Серверні шафи
@@ -229,7 +240,7 @@ is_spec_allowed("Порт", allowed)         # False ❌
 ## 🔍 Перевірка
 
 ```bash
-python C:\FullStack\Scrapy\keywords\categories\{supplier}\check_compliance.py
+python C:\FullStack\PriceFeedPipeline\keywords\categories\{supplier}\check_compliance.py
 ```
 
 Перевіряє, що обробник використовує тільки `allowed_specs` з CSV.
@@ -267,7 +278,7 @@ python C:\FullStack\Scrapy\keywords\categories\{supplier}\check_compliance.py
 ## 🎯 Структура файлів
 
 ```
-C:\FullStack\Scrapy\
+C:\FullStack\PriceFeedPipeline\
 ├── data\{supplier}\
 │   └── {supplier}_keywords.csv          # Крок 1
 ├── keywords\categories\{supplier}\

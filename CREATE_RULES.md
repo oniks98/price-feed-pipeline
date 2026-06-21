@@ -1,14 +1,14 @@
 Вивчи структуру правил у файлі
-C:\FullStack\Scrapy\data\viatec\viatec_mapping_rules – domofony.csv
+C:\FullStack\PriceFeedPipeline\data\viatec\rules\viatec_mapping_rules_zamki.csv
 як приклад формату та логіки.
 
 Проаналізуй ДВА файли:
 
-1. C:\FullStack\Scrapy\data\viatec\dictionary_attribute\kommutatory_prom_attribute.csv
+1. C:\FullStack\PriceFeedPipeline\data\lp\dictionary_attribute\zamki_prom_attribute.csv
 
 - портальні характеристики Prom (це ЄДИНИЙ список дозволених prom_attribute)
 
-2. C:\FullStack\Scrapy\data\viatec\dictionary_attribute\kommutatory_supplier_attribute.csv
+2. C:\FullStack\PriceFeedPipeline\data\lp\dictionary_attribute\zamki_supplier_attribute.csv
 
 - характеристики постачальника (це ЄДИНИЙ список дозволених supplier_attribute)
 
@@ -38,4 +38,4 @@ C:\FullStack\Scrapy\data\viatec\viatec_mapping_rules – domofony.csv
 Виведи список всіх supplier_attribute, які ти знайшов у файлі \_supplier_attribute.csv
 Поясни, які правила ти створиш та чому
 
-Створи новий файл C:\FullStack\Scrapy\data\viatec\viatec_mapping_rules–kommutatory.csv з правилами маппінгу.
+Створи новий файл C:\FullStack\PriceFeedPipeline\data\lp\rules\lp_mapping_rules.csv з правилами маппінгу.

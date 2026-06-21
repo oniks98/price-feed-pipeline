@@ -2,16 +2,16 @@
 
 ## 🎯 Огляд архітектури
 
-Додавання нового постачальника потребує **2 ручних реєстрації** + решта автоматично:
+Додавання нового постачальника потребує **ручної реєстрації в кількох місцях** (Крок 2 — це не одна точка, див. деталі нижче) + решта автоматично:
 
-| Крок | Файл                             | Що робити                        |
-| ---- | -------------------------------- | -------------------------------- |
-| 1    | `scripts/update_products.py`     | Додати рядок у `SUPPLIER_CONFIG` |
-| 2    | `.github/workflows/pipeline.yml` | Додати рядок у `matrix.include`  |
-| 3    | `suppliers/constants.py`         | Код, валюта, округлення          |
-| 4    | `data/newsupplier/`              | CSV файли категорій              |
-| 5    | `suppliers/items.py`             | Новий Item клас                  |
-| 6    | `suppliers/spiders/newsupplier/` | Spider (без абсолютних шляхів!)  |
+| Крок | Файл                                                                | Що робити                                                         |
+| ---- | ------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 1    | `scripts/update_products.py`                                        | Додати рядок у `SUPPLIER_CONFIG`                                  |
+| 2    | `.github/workflows/pipeline.yml` + `scripts/generate_utils_feed.py` | **6 місць у CI + 1 у генераторі фідів** — повний список у Кроці 2 |
+| 3    | `suppliers/constants.py`                                            | Код, валюта, округлення                                           |
+| 4    | `data/newsupplier/`                                                 | CSV файли категорій                                               |
+| 5    | `suppliers/items.py`                                                | Новий Item клас                                                   |
+| 6    | `suppliers/spiders/newsupplier/`                                    | Spider (без абсолютних шляхів!)                                   |
 
 **Що відбувається автоматично після реєстрації:**
 
@@ -46,24 +46,123 @@ SUPPLIER_CONFIG: dict[str, dict[str, str]] = {
 
 ---
 
-## Крок 2: Додати павука в матрицю GitHub Actions
+## Крок 2: Зареєструвати постачальника в CI (GitHub Actions)
 
-**Файл:** `.github/workflows/pipeline.yml`
+**Файли:** `.github/workflows/pipeline.yml`, `scripts/generate_utils_feed.py`
 
-Додайте рядок у секцію `matrix.include`:
+⚠️ **Це НЕ один рядок.** `matrix.include` — лише точка входу для самого скрейпінгу. Решта степів пайплайну (merge, diff, фіди) виконуються **один раз на весь run** (не per-matrix), тому список постачальників там захардкожений окремо і його треба звіряти вручну в кожному місці нижче. Сам файл `pipeline.yml` нагадує про це в шапці (`# ДОДАВАННЯ НОВОГО ПОСТАЧАЛЬНИКА`), але без точного переліку — він нижче.
+
+### 2.1 `jobs.scrape.strategy.matrix.include` — реєстрація самого павука
 
 ```yaml
 matrix:
   include:
     - supplier: viatec
       spider: viatec_dealer
+      timeout_minutes: 120
+      max_attempts: 2
+      retry_wait: 30
+
     - supplier: secur
-      spider: secur_retail
-    - supplier: eserver
-      spider: eserver_retail
+      spider: secur_feed
+      timeout_minutes: 35
+      max_attempts: 2
+      retry_wait: 30
+
     - supplier: newsupplier # ← додати
       spider: newsupplier_retail # ← додати
+      timeout_minutes: 60 # ← підібрати під реальний час прогону
+      max_attempts: 2
+      retry_wait: 30
 ```
+
+> Степи всередині job `scrape` (Restore old.csv, Run spider, Upload artifact)
+> вже параметризовані через `${{ matrix.supplier }}` / `${{ matrix.spider }}` —
+> їх міняти не треба.
+
+### 2.2 Якщо павук потребує credentials (логін/пароль, API-токен)
+
+Додайте секрети в `env:` степу **"Run spider"** (job `scrape`):
+
+```yaml
+      - name: Run spider
+        ...
+        env:
+          PROJECT_ROOT: ${{ github.workspace }}
+          VIATEC_EMAIL: ${{ secrets.VIATEC_EMAIL }}
+          VIATEC_PASSWORD: ${{ secrets.VIATEC_PASSWORD }}
+          NEWSUPPLIER_API_TOKEN: ${{ secrets.NEWSUPPLIER_API_TOKEN }}        # ← додати
+          NEWSUPPLIER_API_BASE_URL: ${{ secrets.NEWSUPPLIER_API_BASE_URL }}  # ← якщо потрібно
+```
+
+І додайте самі секрети в репозиторії: **Settings → Secrets and variables → Actions**.
+Без локального `suppliers/.env` у CI працюють тільки вони
+(`load_dotenv()` не перезаписує вже існуючі env-змінні — секрети підхоплюються автоматично).
+
+### 2.3 Три хардкод-цикли в job `process-and-publish`
+
+Кожен цикл нижче виконується **один раз на весь пайплайн** (не per-matrix),
+тому постачальника треба дописати вручну, інакше дані постачальника
+не потраплять у `data-latest`, а статус павука не звірятиметься:
+
+| Степ                                        | Що робить                                                                                  | Що змінити                                            |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| **Restore \*\_old.csv from data-latest**    | копіює `{supplier}_old.csv` з гілки `data-latest`                                          | `for supplier in viatec secur` → додати `newsupplier` |
+| **Read spider statuses and set env flags**  | читає `{SUPPLIER}_status.txt`, ставить `{SUPPLIER}_OK` (використовує `update_products.py`) | `for SUPPLIER in viatec secur` → додати `NEWSUPPLIER` |
+| **Push large files to data-latest (amend)** | копіює свіжий `{supplier}_old.csv` + `import_products.csv` назад у `data-latest`           | `for supplier in viatec secur` → додати `newsupplier` |
+
+### 2.4 Feed-джоби: `kasta-feed`, `epicenter-feed`, `rozetka-feed`
+
+Кожна з цих трьох джоб має **власний** степ "Restore \**old.csv from data-latest"
+з тим самим хардкодом `for supplier in viatec secur` — додайте постачальника
+в усі три, **якщо** він має брати участь у формуванні маркетплейс-фідів
+(див. також 2.5 нижче — без цього кроку фід просто відкотиться на ціну з XML,
+без помилки, але й без вашого `Оптова*ціна`).
+
+### 2.5 `scripts/generate_utils_feed.py` → `WHOLESALE_SUPPLIERS`
+
+Окрема, не пов'язана з `pipeline.yml` точка реєстрації — список постачальників,
+чий `{supplier}_old.csv` містить колонку `Оптова_ціна` для розрахунку цін
+у фідах Kasta/Epicenter/Rozetka:
+
+```python
+WHOLESALE_SUPPLIERS: list[str] = ["viatec", "secur", "newsupplier"]  # ← додати, якщо є Оптова_ціна
+```
+
+Без цього кроку фіди мовчки впадуть назад на роздрібну ціну з XML
+(`load_wholesale_price_index` обробляє відсутність файлу як штатний fallback) —
+тому це не зламає пайплайн, але збиває точність цін постачальника у фідах.
+
+### 2.6 Bootstrap `{supplier}_old.csv` у гілці `data-latest`
+
+CI **не вміє сам створити** перший `{supplier}_old.csv` — на першому запуску
+`update_products.py` просто пропустить постачальника ("OLD файл не знайдено"),
+і файл ніколи не з'явиться в `data-latest` сам по собі. Перед першим
+прод-запуском зробіть **один раз локально**:
+
+```bash
+python scripts/ultra_clean_run.py newsupplier_retail
+python scripts/update_products.py newsupplier retail
+```
+
+і запуште отриманий `data/newsupplier/newsupplier_old.csv` у гілку `data-latest`
+вручну (той самий шлях, що й для `viatec`/`secur`):
+
+```bash
+git fetch origin data-latest
+git worktree add ../data-latest-wt data-latest
+mkdir -p ../data-latest-wt/data/newsupplier
+cp data/newsupplier/newsupplier_old.csv ../data-latest-wt/data/newsupplier/
+cd ../data-latest-wt
+git add data/newsupplier/newsupplier_old.csv
+git commit -m "chore: bootstrap newsupplier_old.csv"
+git push origin data-latest
+cd .. && git worktree remove data-latest-wt
+```
+
+> `sku_map.json` і `image_cache.json` бутстрапити окремо не треба — вони
+> комітяться в `main` через `git add "data/*/sku_map.json" "data/*/image_cache.json"`,
+> а цей wildcard вже покриває будь-якого нового постачальника автоматично.
 
 ---
 
@@ -115,7 +214,7 @@ data/newsupplier/
 
 ---
 
-### 2.1 Головний файл — `newsupplier_category.csv` (обов'язковий)
+### 4.1 Головний файл — `newsupplier_category.csv` (обов'язковий)
 
 Це **єдиний файл**, що замінює старі `coefficient_*.csv`, `personal_notes_*.csv`.  
 Один рядок = один канал для однієї категорії постачальника.
@@ -140,7 +239,7 @@ data/newsupplier/
 
 ---
 
-### 2.2 `newsupplier_keywords.csv` (опціонально)
+### 4.2 `newsupplier_keywords.csv` (опціонально)
 
 ```csv
 Ідентифікатор_підрозділу;Посилання_підрозділу;universal_phrases_ru;universal_phrases_ua;base_keyword_ru;base_keyword_ua;allowed_specs
@@ -149,7 +248,7 @@ data/newsupplier/
 
 ---
 
-### 2.3 `newsupplier_manufacturers.csv` (опціонально)
+### 4.3 `newsupplier_manufacturers.csv` (опціонально)
 
 ```csv
 Слово в названии продукта;Производитель (виробник)
@@ -159,7 +258,7 @@ dahua;Dahua
 
 ---
 
-### 2.4 `newsupplier_mapping_rules.csv` (опціонально)
+### 4.4 `newsupplier_mapping_rules.csv` (опціонально)
 
 Правила маппінгу характеристик постачальника → стандартні назви ПРОМ.  
 Дивіться приклад: `data/viatec/viatec_mapping_rules.csv`
@@ -232,8 +331,15 @@ suppliers/spiders/newsupplier/
 
 > **Важливо:** НЕ використовуйте абсолютні шляхи `C:\...` у павуках.  
 > Шляхи до CSV файлів та `.env` завжди визначайте через `PROJECT_ROOT` env:  
-> `Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy")) / "data" / ...`  
-> Це забезпечує роботу як локально, так і в GitHub Actions.
+> `Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline")) / "data" / ...`  
+> Це забезпечує роботу як локально, так і в GitHub Actions — прив'язаний рядок з `C:\...` тут лише fallback-значення для локальної розробки, а не хардкод шляху.
+
+> **Виняток для API-постачальників:** якщо павук ходить у REST/JSON API
+> постачальника (а не парсить HTML-сторінки), допустимий суфікс `_api`
+> замість `_retail`/`_dealer` (приклад: `lp_api`). `SupplierConfig.from_spider()`
+> все одно коректно резолвить шляхи до файлів (бере лише першу частину
+> імені до `_`), а тип (`dealer`/`retail`) для логіки `update_products.py`
+> визначається окремо через `SUPPLIER_CONFIG["type"]`, не через суфікс імені павука.
 
 ```python
 import os
@@ -261,7 +367,7 @@ class NewSupplierRetailSpider(scrapy.Spider):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Шлях до CSV завжди через PROJECT_ROOT — працює локально і в CI
-        _root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+        _root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
         self.category_mapping = self._load_category_mapping(_root)
 
     def _load_category_mapping(self, root: Path) -> dict:
@@ -298,7 +404,7 @@ from dotenv import load_dotenv
 
 def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
-    _root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\Scrapy"))
+    _root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
 
     # load_dotenv НЕ перезаписує вже існуючі env-змінні.
     # Локально: читає з suppliers/.env
@@ -415,6 +521,19 @@ ChannelService(newsupplier_category.csv)
 data/output/newsupplier_new.csv
 ```
 
+### 8 У prom_prosale_automation.py додати нові кампанії CPA і CPC
+
+CAMPAIGNS: List[Campaign] = [
+Campaign(name="SECUR CPA", tag="Sprom"),
+Campaign(name="VIATEC MAX CPA", tag="VMAX"),
+Campaign(name="VIATEC MIN CPA", tag="Vmin"),
+Campaign(name="LP CPA", tag="Lprom"),
+Campaign(name="SECUR CPC", tag="Sprom"),
+Campaign(name="VIATEC MAX CPC", tag="VMAX"),
+Campaign(name="VIATEC MIN CPC", tag="Vmin"),
+Campaign(name="LP CPC", tag="Lprom"),
+]
+
 ---
 
 ## ✅ Чек-лист
@@ -422,7 +541,12 @@ data/output/newsupplier_new.csv
 ### Обов'язково:
 
 - [ ] `SUPPLIER_CONFIG` в `scripts/update_products.py` — додати рядок
-- [ ] `matrix.include` в `.github/workflows/pipeline.yml` — додати рядок
+- [ ] `matrix.include` в `.github/workflows/pipeline.yml` — додати рядок (див. Крок 2.1)
+- [ ] GitHub Secrets + `env:` блок степу "Run spider", якщо павук потребує credentials (Крок 2.2)
+- [ ] Додати постачальника в 3 хардкод-цикли job `process-and-publish` (Крок 2.3)
+- [ ] Додати постачальника в `kasta-feed`/`epicenter-feed`/`rozetka-feed`, якщо бере участь у фідах (Крок 2.4)
+- [ ] `WHOLESALE_SUPPLIERS` в `scripts/generate_utils_feed.py`, якщо є `Оптова_ціна` (Крок 2.5)
+- [ ] Бутстрап `{supplier}_old.csv` у гілці `data-latest` перед прод-запуском (Крок 2.6)
 - [ ] `SUPPLIER_CODE_RANGES` — новий діапазон в `constants.py`
 - [ ] `PRICE_DECIMALS` — округлення ціни в `constants.py`
 - [ ] `SUPPLIER_CURRENCIES` — валюта в `constants.py`
@@ -430,6 +554,7 @@ data/output/newsupplier_new.csv
 - [ ] `data/newsupplier/newsupplier_old.csv` — початковий baseline для diff (після першого запуску)
 - [ ] Item у `suppliers/items.py`
 - [ ] Spider у `suppliers/spiders/newsupplier/` — **без абсолютних шляхів** (через `PROJECT_ROOT`)
+- [ ] У `prom_prosale_automation.py` додати нові кампанії CPA і CPC
 
 ### Опціонально:
 
@@ -438,7 +563,6 @@ data/output/newsupplier_new.csv
 - [ ] Процесор у `keywords/processors/newsupplier/`
 - [ ] Роутер у `keywords/categories/newsupplier/`
 - [ ] Реєстрація в `keywords/core/generator.py`
-- [ ] GitHub Secrets для credentials (якщо павук потребує авторизації)
 
 ---
 
