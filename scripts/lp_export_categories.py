@@ -85,8 +85,28 @@ TARGET_MANUFACTURERS: frozenset[str] = frozenset({
 # - New occurrences during collection are skipped entirely.
 # "12261" = Уцінка (списання/розпродаж) — не товарна категорія.
 EXCLUDED_CATEGORY_CODES: frozenset[str] = frozenset({
-    "12261",
-    "12864",
+    "12261",  # Уцінка
+    "12864",  # Рекламна продукція
+    "12356",  # Системи безпеки > Витратні матеріали
+    # Системи безпеки > СКУД
+    "12358",  # > Ключі
+    # Комп'ютерні комплектуючі та периферія
+    "12272",  # > Блоки живлення
+    "11265",  # > Клавіатури
+    "12271",  # > Комп'ютерні корпуси
+    # Електроніка та аксесуари
+    "11887",  # > Кабелі та перехідники
+    # Мережеве обладнання
+    "12345",  # > Інструмент
+    "12363",  # > Пасивне мережеве обладнання > Мережеві конектори, розетки, модулі
+    "12362",  # > Пасивне мережеве обладнання > Патч-корди
+})
+
+# Статуси, які вважаються доступними для обробки категорій.
+# Must stay in sync with suppliers/spiders/lp/api.py → ALLOWED_STATUSES.
+ALLOWED_STATUSES: frozenset[str] = frozenset({
+    "inStock",          # В наявності
+    "quickProduction",  # Швидке виробництво
 })
 
 CHANNELS: tuple[str, ...] = ("site", "prom")
@@ -330,6 +350,24 @@ def is_target_manufacturer(item: dict[str, Any]) -> bool:
     return _slug_value(mfr.get("slug", "")) in TARGET_MANUFACTURERS
 
 
+def _is_available(item: dict[str, Any]) -> bool:
+    """Mirror of api.py ALLOWED_STATUSES filter: inStock + quickProduction."""
+    return item.get("status") in ALLOWED_STATUSES
+
+
+def _has_personal_usd_price(item: dict[str, Any]) -> bool:
+    """Mirror of api.py spider filter: skip items without a dealer USD price."""
+    for p in item.get("prices") or []:
+        money = p.get("money") or {}
+        if (
+            p.get("type") == "personal"
+            and money.get("currency") == "USD"
+            and money.get("amount") is not None
+        ):
+            return True
+    return False
+
+
 # ─────────────────────────────────────────────────────────────────────
 # CATEGORY EXTRACTION
 # ─────────────────────────────────────────────────────────────────────
@@ -404,19 +442,33 @@ def collect_categories(
     """
     Stream products → collect unique leaf categories from target-manufacturer items.
 
+    Mirrors the spider's exact filter chain (api.py → _build_item):
+      1. target manufacturer
+      2. status in ALLOWED_STATUSES  ← inStock + quickProduction
+      3. has personal USD price
+      4. not in EXCLUDED_CATEGORY_CODES
+
     Key   = category code (matches col 16 in the CSV).
     Value = CategoryRecord (first seen wins for a given code).
-
-    Категорії з EXCLUDED_CATEGORY_CODES пропускаються повністю.
     """
     seen: dict[str, CategoryRecord] = {}
-    n_total    = 0
-    n_matched  = 0
-    n_excluded = 0
+    n_total       = 0
+    n_matched     = 0
+    n_excluded    = 0
+    n_unavailable = 0
+    n_no_price    = 0
 
     for item in products:
         n_total += 1
         if not is_target_manufacturer(item):
+            continue
+
+        if not _is_available(item):
+            n_unavailable += 1
+            continue
+
+        if not _has_personal_usd_price(item):
+            n_no_price += 1
             continue
 
         n_matched += 1
@@ -436,8 +488,10 @@ def collect_categories(
             log.debug("+ категорія [%s] %s", record.code, record.breadcrumb)
 
     log.info(
-        "✅ Товарів: %d | відповідає виробникам: %d | унікальних категорій: %d | виключено: %d",
-        n_total, n_matched, len(seen), n_excluded,
+        "✅ Товарів: %d | відповідає виробникам: %d "
+        "| недоступних (не inStock/quickProduction): %d | без dealer-ціни: %d "
+        "| унікальних категорій: %d | виключено: %d",
+        n_total, n_matched, n_unavailable, n_no_price, len(seen), n_excluded,
     )
     return seen
 

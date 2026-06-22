@@ -57,6 +57,45 @@ class ValidationService:
         )
 
     @staticmethod
+    def sanitize_prom_numeric(value: str, decimals: int = 3) -> str:
+        """
+        Нормалізує числове значення для числових полів Prom.ua.
+
+        Проблема: Prom.ua вимагає числові значення з комою як десятковим
+        розділювачем. Постачальники передають значення з крапкою ("630.805"),
+        а Python float може генерувати артефакти ("0.6308050000000001").
+
+        Перетворення:
+        - "630.805"              → "630,805"
+        - "0.6308050000000001"   → "0,631"
+        - "2,8"                  → "2,8"   (вже коректне)
+        - "1500"                 → "1500"  (ціле — без коми)
+        - ""  / None / сміття   → ""
+
+        Args:
+            value:    числовий рядок (крапка або кома як розділювач)
+            decimals: максимальна кількість знаків після коми (за замовч. 3)
+
+        Returns:
+            Нормалізований рядок з комою-розділювачем, або "" при помилці
+        """
+        if not value:
+            return ""
+
+        try:
+            num = float(str(value).strip().replace(",", "."))
+            num = round(num, decimals)
+
+            if num == int(num):
+                return str(int(num))
+
+            formatted = f"{num:.{decimals}f}".rstrip("0")
+            return formatted.replace(".", ",")
+
+        except (ValueError, AttributeError):
+            return ""
+
+    @staticmethod
     def validate_required_fields(item_dict: dict, required_fields: list) -> tuple[bool, list]:
         """
         Перевіряє наявність обов'язкових полів.

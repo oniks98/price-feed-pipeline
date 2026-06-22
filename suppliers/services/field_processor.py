@@ -16,6 +16,8 @@ import re
 import csv
 from pathlib import Path
 
+from .validation_service import ValidationService
+
 
 class FieldProcessor:
     """Постобробка полів для конвертації одиниць виміру"""
@@ -114,7 +116,7 @@ class FieldProcessor:
             spider: для логування
         
         Returns:
-            Число для PROM (без одиниць)
+            Число для PROM (без одиниць), десятковий розділювач — кома
         """
         if not value:
             return ""
@@ -137,14 +139,13 @@ class FieldProcessor:
             
             if required_unit == 'г':
                 # PROM вимагає грами - залишаємо як є
-                result = str(int(grams)) if grams == int(grams) else str(grams).replace('.', ',')
+                result = ValidationService.sanitize_prom_numeric(str(grams))
                 spider.logger.debug(f"⚖️ Вага (cat={category_id}, unit=г): {value} → {result} г")
                 return result
             else:
                 # PROM вимагає кг - конвертуємо г → кг
                 kg = grams / 1000
-                # Форматуємо без зайвих нулів: 2.8 замість 2.800
-                result = str(kg).replace('.', ',')
+                result = ValidationService.sanitize_prom_numeric(str(kg))
                 spider.logger.debug(f"⚖️ Вага (cat={category_id}, unit=кг): {value} → {result} кг")
                 return result
         
@@ -154,12 +155,12 @@ class FieldProcessor:
             if required_unit == 'г':
                 # PROM вимагає грами - конвертуємо кг → г
                 grams = kg * 1000
-                result = str(int(grams)) if grams == int(grams) else str(grams).replace('.', ',')
+                result = ValidationService.sanitize_prom_numeric(str(grams))
                 spider.logger.debug(f"⚖️ Вага (cat={category_id}, unit=г): {value} → {result} г")
                 return result
             else:
                 # PROM вимагає кг - залишаємо як є
-                result = str(kg).replace('.', ',')
+                result = ValidationService.sanitize_prom_numeric(str(kg))
                 spider.logger.debug(f"⚖️ Вага (cat={category_id}, unit=кг): {value} → {result} кг")
                 return result
         
@@ -212,76 +213,121 @@ class FieldProcessor:
     def process_specs_weight(self, specs_list: list, category_id: str, spider) -> list:
         """
         SMART постобробка ваги в характеристиках.
-        
+
         Використовує конфігурацію категорії для визначення одиниць.
         - Категорія вимагає 'г': "300 г" → "300" + unit="г"
         - Категорія вимагає 'кг': "300 г" → "0,3" + unit="кг"
+
+        ВАЖЛИВО: значення може прийти в ОДНОМУ з трьох форматів:
+        - єдиним рядком з одиницею всередині: value="300 г", unit=""
+        - вже розділеним павуком через _SPEC_UNIT_RE: value="300", unit="г"
+        - з одиницею, "запеченою" в саму назву характеристики постачальником:
+          name="Вага, кг", value="753.775", unit="" (без суфікса у value)
+        Раніше перевірявся лише перший формат (original_value.endswith(' г')),
+        тому розділені specs і specs з одиницею в назві пролітали повз
+        конвертацію і потрапляли в CSV необробленими (з крапкою замість
+        коми). Тепер одиниця визначається з spec['unit'], а якщо вона
+        порожня — fallback на суфікс у value, а потім на суфікс у назві.
         """
         if not specs_list:
             return specs_list
-        
+
         # Визначаємо вимоги PROM для цієї категорії
         required_unit = self.category_weight_units.get(category_id, 'г')
-        
+
         weight_names = [
             'вага', 'вага брутто', 'вага нетто',
             'weight', 'gross weight', 'net weight'
         ]
-        
+
+        # Канонічні (без коми в назві) Prom-характеристики "Вага", які вже
+        # присутні в specs_list — типово результат AttributeMapper.
+        # БАГ (історія): без цієї перевірки сира характеристика постачальника
+        # у форматі "Вага, кг" (одиниця "запечена" в назву, value="0.495",
+        # unit="") матчилась тим самим блоком нижче через base_name == 'вага'
+        # і мутувалась IN-PLACE в '495' / unit='г' — тобто СИРЕ значення від
+        # постачальника псувалось і потрапляло у CSV замість "0.495" як є,
+        # хоча поруч AttributeMapper вже коректно створював окрему
+        # характеристику "Вага" = '495' / 'г'. В результаті в CSV
+        # дублювались два записи з неправильним сирим.
+        # Якщо канонічна "Вага" вже існує окремим записом — сира
+        # характеристика з комою в назві більше НЕ конвертується і
+        # лишається raw pass-through (як прийшла від постачальника).
+        # Якщо канонічної "Вага" немає (постачальник без AttributeMapper) —
+        # fallback-конвертація через embedded_unit працює як раніше.
+        canonical_weight_present = {
+            spec.get('name', '').strip().lower()
+            for spec in specs_list
+            if spec.get('name', '').strip().lower() in weight_names
+        }
+
         for spec in specs_list:
             spec_name = spec.get('name', '').lower().strip()
-            
-            if spec_name in weight_names:
-                original_value = spec.get('value', '').strip()
-                
-                # Конвертація г → потрібна одиниця
-                if original_value.endswith(' г'):
-                    try:
-                        grams = float(original_value.replace(' г', '').replace(',', '.'))
-                        
-                        if required_unit == 'г':
-                            # PROM вимагає грами - залишаємо як є
-                            spec['value'] = str(int(grams)) if grams == int(grams) else str(grams).replace('.', ',')
-                            spec['unit'] = 'г'
-                            spider.logger.debug(
-                                f"⚖️ Spec вага (cat={category_id}, unit=г): {original_value} → {spec['value']} г"
-                            )
-                        else:
-                            # PROM вимагає кг - конвертуємо
-                            kg = grams / 1000
-                            spec['value'] = str(kg).replace('.', ',')
-                            spec['unit'] = 'кг'
-                            spider.logger.debug(
-                                f"⚖️ Spec вага (cat={category_id}, unit=кг): {original_value} → {kg} кг"
-                            )
-                    except ValueError:
-                        spider.logger.warning(
-                            f"⚠️ Помилка конвертації spec ваги: {original_value}"
-                        )
-                
-                # Якщо вже в кг
-                elif original_value.endswith(' кг'):
-                    try:
-                        kg = float(original_value.replace(' кг', '').replace(',', '.'))
-                        
-                        if required_unit == 'г':
-                            # PROM вимагає грами - конвертуємо
-                            grams = kg * 1000
-                            spec['value'] = str(int(grams)) if grams == int(grams) else str(grams).replace('.', ',')
-                            spec['unit'] = 'г'
-                            spider.logger.debug(
-                                f"⚖️ Spec вага (cat={category_id}, unit=г): {original_value} → {grams} г"
-                            )
-                        else:
-                            # PROM вимагає кг - залишаємо як є
-                            spec['value'] = str(kg).replace('.', ',')
-                            spec['unit'] = 'кг'
-                            spider.logger.debug(
-                                f"⚖️ Spec вага (cat={category_id}, unit=кг): {original_value} → {kg} кг"
-                            )
-                    except ValueError:
-                        pass
-        
+
+            # Деякі постачальники "запікають" одиницю прямо в назву через
+            # кому ("Вага, кг") замість окремого поля unit. Відокремлюємо
+            # базову назву від можливого суфікса одиниці перед звіркою.
+            base_name, _, name_suffix = spec_name.partition(',')
+            base_name = base_name.strip()
+            name_suffix = name_suffix.strip()
+            embedded_unit = name_suffix if name_suffix in ('г', 'кг') else ''
+
+            if base_name not in weight_names:
+                continue
+
+            # Сира характеристика постачальника ("Вага, кг") + поруч вже є
+            # канонічна "Вага" (created by AttributeMapper) → не чіпаємо
+            # сиру, вона має лишитись точним відображенням значення
+            # постачальника (raw pass-through), а не дублювати конвертацію.
+            if embedded_unit and base_name in canonical_weight_present:
+                continue
+
+            raw_value = spec.get('value', '').strip()
+            raw_unit = spec.get('unit', '').strip().lower()
+
+            # Визначаємо число та вихідну одиницю. Пріоритет — суфікс
+            # у самому value: це найбільш конкретний і "свіжий" сигнал.
+            # Поле unit (або одиниця, запечена в назву) — лише fallback,
+            # бо траплялось, що unit виставлений мапінгом/категорією і
+            # суперечить тому, що насправді написано у value (напр.
+            # value="6.84 кг", unit="г" від віатек-ділера — довіряємо суфіксу у value).
+            if raw_value.endswith(' кг'):
+                source_unit = 'кг'
+                numeric_part = raw_value[:-3].strip()
+            elif raw_value.endswith(' г'):
+                source_unit = 'г'
+                numeric_part = raw_value[:-2].strip()
+            elif raw_unit in ('г', 'кг'):
+                source_unit = raw_unit
+                numeric_part = raw_value
+            elif embedded_unit:
+                source_unit = embedded_unit
+                numeric_part = raw_value
+            else:
+                continue  # формат незрозумілий — не чіпаємо
+
+            try:
+                number = float(numeric_part.replace(',', '.'))
+            except ValueError:
+                spider.logger.warning(
+                    f"⚠️ Помилка конвертації spec ваги: value={raw_value!r} unit={raw_unit!r}"
+                )
+                continue
+
+            grams = number if source_unit == 'г' else number * 1000
+
+            if required_unit == 'г':
+                spec['value'] = ValidationService.sanitize_prom_numeric(str(grams))
+                spec['unit'] = 'г'
+            else:
+                spec['value'] = ValidationService.sanitize_prom_numeric(str(grams / 1000))
+                spec['unit'] = 'кг'
+
+            spider.logger.debug(
+                f"⚖️ Spec вага (cat={category_id}, unit={required_unit}): "
+                f"{raw_value!r} unit={raw_unit!r} → {spec['value']} {spec['unit']}"
+            )
+
         return specs_list
 
     @staticmethod
@@ -320,10 +366,10 @@ class FieldProcessor:
                     try:
                         grams = float(original_value.replace(' г', '').replace(',', '.'))
                         kg = grams / 1000
-                        spec['value'] = str(kg).replace('.', ',')
+                        spec['value'] = ValidationService.sanitize_prom_numeric(str(kg))
                         spec['unit'] = 'кг'
                         spider.logger.debug(
-                            f"🔧 Навантаження (кронштейн): {spec['name']} = '{original_value}' → '{kg} кг'"
+                            f"🔧 Навантаження (кронштейн): {spec['name']} = '{original_value}' → '{spec['value']} кг'"
                         )
                     except ValueError:
                         pass
@@ -331,10 +377,10 @@ class FieldProcessor:
                 elif original_value.endswith(' кг'):
                     try:
                         kg = float(original_value.replace(' кг', '').replace(',', '.'))
-                        spec['value'] = str(kg).replace('.', ',')
+                        spec['value'] = ValidationService.sanitize_prom_numeric(str(kg))
                         spec['unit'] = 'кг'
                         spider.logger.debug(
-                            f"🔧 Навантаження (кронштейн): {spec['name']} = '{original_value}' → '{kg} кг'"
+                            f"🔧 Навантаження (кронштейн): {spec['name']} = '{original_value}' → '{spec['value']} кг'"
                         )
                     except ValueError:
                         pass
@@ -345,10 +391,10 @@ class FieldProcessor:
                     try:
                         grams = float(original_value.replace(' г', '').replace(',', '.'))
                         kg = grams / 1000
-                        spec['value'] = str(kg).replace('.', ',')
+                        spec['value'] = ValidationService.sanitize_prom_numeric(str(kg))
                         spec['unit'] = 'кг/м'
                         spider.logger.debug(
-                            f"🔧 Навантаження (допустиме): {spec['name']} = '{original_value}' → '{kg} кг/м'"
+                            f"🔧 Навантаження (допустиме): {spec['name']} = '{original_value}' → '{spec['value']} кг/м'"
                         )
                     except ValueError:
                         pass
@@ -356,10 +402,10 @@ class FieldProcessor:
                 elif original_value.endswith(' кг'):
                     try:
                         kg = float(original_value.replace(' кг', '').replace(',', '.'))
-                        spec['value'] = str(kg).replace('.', ',')
+                        spec['value'] = ValidationService.sanitize_prom_numeric(str(kg))
                         spec['unit'] = 'кг/м'
                         spider.logger.debug(
-                            f"🔧 Навантаження (допустиме): {spec['name']} = '{original_value}' → '{kg} кг/м'"
+                            f"🔧 Навантаження (допустиме): {spec['name']} = '{original_value}' → '{spec['value']} кг/м'"
                         )
                     except ValueError:
                         pass
@@ -480,6 +526,8 @@ class FieldProcessor:
         
         ВАЖЛИВО: Колонка AS (Вага,кг) ЗАВЖДИ в кілограмах,
         а одиниці в характеристиках (DD) можуть бути г або кг.
+        Всі числові значення нормалізуються через sanitize_prom_numeric
+        (кома як десятковий розділювач, без float-артефактів).
         """
         dimensions = {
             "Вага,кг": "",
@@ -509,18 +557,22 @@ class FieldProcessor:
             
             # 1. ВАГА: колонка AS (Вага,кг) ЗАВЖДИ в кілограмах
             if spec_name in weight_keys:
-                # Якщо одиниця вже кг - залишаємо як є
+                # Якщо одиниця вже кг - нормалізуємо через sanitize (крапка → кома, без артефактів)
                 if spec_unit == 'кг':
-                    dimensions["Вага,кг"] = spec_value
-                    spider.logger.debug(f"⚖️ Габарит вага: {spec_value} кг")
+                    normalized = ValidationService.sanitize_prom_numeric(spec_value)
+                    if normalized:
+                        dimensions["Вага,кг"] = normalized
+                        spider.logger.debug(f"⚖️ Габарит вага: {spec_value} кг → {normalized}")
                 
                 # Якщо одиниця грами - конвертуємо г → кг
                 elif spec_unit == 'г':
                     try:
                         grams = float(spec_value.replace(',', '.'))
                         kg = grams / 1000
-                        dimensions["Вага,кг"] = str(kg).replace('.', ',')
-                        spider.logger.debug(f"⚖️ Габарит вага: {grams}г → {kg}кг")
+                        normalized = ValidationService.sanitize_prom_numeric(str(kg))
+                        if normalized:
+                            dimensions["Вага,кг"] = normalized
+                            spider.logger.debug(f"⚖️ Габарит вага: {grams}г → {normalized}кг")
                     except ValueError:
                         pass
                 
@@ -531,8 +583,10 @@ class FieldProcessor:
                         try:
                             grams = float(match_num.group(1).replace(',', '.'))
                             kg = grams / 1000
-                            dimensions["Вага,кг"] = str(kg).replace('.', ',')
-                            spider.logger.debug(f"⚖️ Габарит вага: {grams}г → {kg}кг")
+                            normalized = ValidationService.sanitize_prom_numeric(str(kg))
+                            if normalized:
+                                dimensions["Вага,кг"] = normalized
+                                spider.logger.debug(f"⚖️ Габарит вага: {grams}г → {normalized}кг")
                         except ValueError:
                             pass
             

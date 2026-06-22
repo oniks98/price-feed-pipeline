@@ -25,7 +25,7 @@ from requests.exceptions import ChunkedEncodingError, ConnectionError as Request
 # Постачальники, чиї *_old.csv містять оптові ціни.
 # При додаванні нового постачальника в update_products.py —
 # додайте його і сюди, якщо він має стовпець Оптова_ціна.
-WHOLESALE_SUPPLIERS: list[str] = ["viatec", "secur"]
+WHOLESALE_SUPPLIERS: list[str] = ["viatec", "secur", "lp"]
 
 # ---------------------------------------------------------------------------
 # Private constants

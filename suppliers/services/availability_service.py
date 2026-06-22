@@ -57,31 +57,39 @@ class AvailabilityService:
     
     def normalize_availability(self, availability_str: str) -> tuple[str, str]:
         """
-        Нормалізує статус наявності для PROM формату
-        
+        Нормалізує статус наявності для PROM формату.
+
         Args:
             availability_str: Оригінальний рядок наявності
-        
+
         Returns:
             Tuple (availability, quantity):
-            - availability: "+" якщо в наявності
-            - quantity: кількість або "10000" за замовчуванням
-        
+            - availability: "+" якщо в наявності, числовий рядок = дні виробництва
+            - quantity: кількість або "10000" за замовчуванням, "" для днів
+
         Examples:
-            "В наличии" → ("+", "10000")
-            "В наличии 5 шт" → ("+", "5")
+            "В наличии"       → ("+", "10000")
+            "В наличии 5 шт"  → ("+", "5")
+            "7"               → ("7", "")   # Під замовлення, 7 днів (LP quickProduction)
         """
         if not self.is_available(availability_str):
             return ("", "")
-        
-        # За замовчуванням
+
+        # Числовий рядок = кількість днів виробництва.
+        # Prom.ua: ціле число в «Наявність» → «Під замовлення, N днів».
+        # Кількість залишаємо порожньою — поле «Наявність» є єдиним носієм статусу.
+        stripped = str(availability_str).strip()
+        if stripped.isdigit():
+            return (stripped, "")
+
+        # За замовчуванням: в наявності
         availability = "+"
         quantity = "10000"
-        
+
         # Спроба витягнути кількість з рядка типу "В наличии 5 шт"
         import re
         match = re.search(r'(\d+)\s*(?:шт|штук|pcs)', str(availability_str), re.IGNORECASE)
         if match:
             quantity = match.group(1)
-        
+
         return (availability, quantity)

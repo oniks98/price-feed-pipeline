@@ -25,7 +25,8 @@ class ChannelConfig:
         subdivision_link: str,
         personal_notes: str,
         label: str,
-        feed: str = "",  # порожній = підходить для всіх фідів
+        feed: str = "",          # порожній = підходить для всіх фідів
+        virtual_specs: list | None = None,  # [{ name, unit, value }]
     ):
         self.channel = channel
         self.prefix = prefix
@@ -41,6 +42,10 @@ class ChannelConfig:
         self.personal_notes = personal_notes
         self.label = label
         self.feed = feed
+        # Віртуальні характеристики з category.csv (колонки Назва_Характеристики /
+        # Значення_Характеристики). Інжектуються у specs перед генерацією keywords
+        # для постачальників без URL-based CategorySpecsEnricher (напр. LP API).
+        self.virtual_specs: list[dict] = virtual_specs or []
 
     def __repr__(self):
         return (
@@ -165,6 +170,17 @@ class ChannelService:
         coefficient = self._parse_decimal_safe(row.get("coefficient", "1.0"))
         coefficient_feed = self._parse_decimal_safe(row.get("coefficient_feed", "1.0"))
 
+        # Віртуальна характеристика з CSV (остання група колонок при дублях —
+        # DictReader last-wins). Для lp_category.csv: Тип устройства / <значення>.
+        spec_name  = row.get("Назва_Характеристики", "").strip()
+        spec_unit  = row.get("Одиниця_виміру_Характеристики", "").strip()
+        spec_value = row.get("Значення_Характеристики", "").strip()
+        virtual_specs = (
+            [{"name": spec_name, "unit": spec_unit, "value": spec_value}]
+            if spec_name and spec_value
+            else []
+        )
+
         return ChannelConfig(
             channel=channel,
             prefix=row.get("prefix", "").strip(),
@@ -179,6 +195,7 @@ class ChannelService:
             personal_notes=row.get("Особисті_нотатки", "").strip(),
             label=row.get("Ярлик", "").strip(),
             feed=row.get("feed", "").strip(),
+            virtual_specs=virtual_specs,
         )
 
     def _parse_decimal_strict(

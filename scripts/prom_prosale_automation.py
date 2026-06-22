@@ -47,9 +47,11 @@ CAMPAIGNS: List[Campaign] = [
     Campaign(name="SECUR CPA",      tag="Sprom"),
     Campaign(name="VIATEC MAX CPA", tag="VMAX"),
     Campaign(name="VIATEC MIN CPA", tag="Vmin"),
+    Campaign(name="LP CPA", tag="Lprom"),
     Campaign(name="SECUR CPC",      tag="Sprom"),
     Campaign(name="VIATEC MAX CPC", tag="VMAX"),
     Campaign(name="VIATEC MIN CPC", tag="Vmin"),
+    Campaign(name="LP CPC", tag="Lprom"),
 ]
 
 LOG_FILE = "prom_prosale.log"

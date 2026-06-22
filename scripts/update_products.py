@@ -32,7 +32,8 @@ from typing import Dict, List, Set, Tuple
 # type:   тип для логіки pipeline
 SUPPLIER_CONFIG: dict[str, dict[str, str]] = {
     "viatec":   {"spider": "viatec_dealer",  "type": "dealer"},
-    "secur":    {"spider": "secur_feed", "type": "retail"},
+    "secur":    {"spider": "secur_feed",      "type": "retail"},
+    "lp":       {"spider": "lp_api",           "type": "dealer"},
     # Нові постачальники — додавати тут:
     # "neolight": {"spider": "neolight_retail", "type": "retail"},
     # "lun":      {"spider": "lun_retail",      "type": "retail"},

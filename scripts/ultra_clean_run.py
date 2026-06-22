@@ -73,7 +73,7 @@ def silent_configure_logging(settings=None, install_root_handler=True):
         'scrapy.utils.log',
         'scrapy.addons',
         'scrapy.middleware',
-        # 'scrapy.crawler',       # НЕ глушимо — потрібен для діагностики старту
+        'scrapy.crawler',         # логує тільки дамп "Overridden settings"
         # 'scrapy.core.engine',   # НЕ глушимо — ховає реальні помилки пауків
         # 'scrapy.core.scraper',  # НЕ глушимо — ховає exceptions у callbacks
         'scrapy.extensions',

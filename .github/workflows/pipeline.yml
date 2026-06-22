@@ -89,7 +89,13 @@ jobs:
 
           - supplier: secur
             spider: secur_feed
-            timeout_minutes: 35
+            timeout_minutes: 15
+            max_attempts: 2
+            retry_wait: 30
+
+          - supplier: lp
+            spider: lp_api
+            timeout_minutes: 15
             max_attempts: 2
             retry_wait: 30
 
@@ -135,6 +141,8 @@ jobs:
           PROJECT_ROOT: ${{ github.workspace }}
           VIATEC_EMAIL: ${{ secrets.VIATEC_EMAIL }}
           VIATEC_PASSWORD: ${{ secrets.VIATEC_PASSWORD }}
+          LP_API_TOKEN: ${{ secrets.LP_API_TOKEN }}
+          LP_API_BASE_URL: ${{ secrets.LP_API_BASE_URL }}
           # secur_feed використовує тільки HTTP-фіди — Playwright не потрібен
 
       - name: Upload CSV + sku_map artifacts
@@ -213,7 +221,7 @@ jobs:
             cd ..
           fi
 
-          for supplier in viatec secur; do
+          for supplier in viatec secur lp; do
             mkdir -p data/${supplier}
             src="publish-dir/data/${supplier}/${supplier}_old.csv"
             if [ -f "${src}" ]; then
@@ -244,7 +252,7 @@ jobs:
       - name: Read spider statuses and set env flags
         run: |
           FAILED_SUPPLIERS=""
-          for SUPPLIER in viatec secur; do
+          for SUPPLIER in viatec secur lp; do
             STATUS_FILE="data/output/${SUPPLIER}_status.txt"
             if [ -f "$STATUS_FILE" ] && [ "$(cat $STATUS_FILE)" = "success" ]; then
               echo "${SUPPLIER^^}_OK=true" >> $GITHUB_ENV
@@ -304,7 +312,7 @@ jobs:
 
           cp data/merged.csv publish-dir/data/merged.csv
 
-          for supplier in viatec secur; do
+          for supplier in viatec secur lp; do
             mkdir -p publish-dir/data/${supplier}
             [ -f data/${supplier}/${supplier}_old.csv ] && \
               cp data/${supplier}/${supplier}_old.csv \
@@ -557,7 +565,7 @@ jobs:
             git clone --branch data-latest --single-branch --depth 1 \
               "${DATA_LATEST_REMOTE}" \
               data-latest-dir
-            for supplier in viatec secur; do
+            for supplier in viatec secur lp; do
               src="data-latest-dir/data/${supplier}/${supplier}_old.csv"
               if [ -f "${src}" ]; then
                 mkdir -p data/${supplier}
@@ -629,7 +637,7 @@ jobs:
             git clone --branch data-latest --single-branch --depth 1 \
               "${DATA_LATEST_REMOTE}" \
               data-latest-dir
-            for supplier in viatec secur; do
+            for supplier in viatec secur lp; do
               src="data-latest-dir/data/${supplier}/${supplier}_old.csv"
               if [ -f "${src}" ]; then
                 mkdir -p data/${supplier}
@@ -701,7 +709,7 @@ jobs:
             git clone --branch data-latest --single-branch --depth 1 \
               "${DATA_LATEST_REMOTE}" \
               data-latest-dir
-            for supplier in viatec secur; do
+            for supplier in viatec secur lp; do
               src="data-latest-dir/data/${supplier}/${supplier}_old.csv"
               if [ -f "${src}" ]; then
                 mkdir -p data/${supplier}

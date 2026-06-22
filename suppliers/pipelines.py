@@ -99,6 +99,7 @@ from suppliers.services.specs_utils import merge_all_specs
 from suppliers.services.prom_csv_schema import PromCsvSchema
 from suppliers.services.specs_enricher import SpecsEnricher
 from suppliers.services.spec_length_handler import SpecificationLengthHandler
+from suppliers.services.spec_limit_handler import SpecLimitService, PROM_HARD_LIMIT
 from suppliers.services.field_processor import FieldProcessor
 from suppliers.services.validation_service import ValidationService
 from suppliers.services.sku_code_service import SkuCodeService
@@ -177,10 +178,10 @@ class SuppliersPipeline:
     
     PROM CSV:
     - base поля через PromCsvSchema (єдине джерело правди)
-    - 160× (Назва;Одиниця;Значення) БЕЗ нумерації
+    - 101× (Назва;Одиниця;Значення) БЕЗ нумерації (ліміт Prom.ua = 100)
     """
 
-    SPECS_LIMIT = 160
+    SPECS_LIMIT = 101
 
     # ------------------------------------------------------------------ #
     # INIT
@@ -541,9 +542,20 @@ class SuppliersPipeline:
                 cleaned["Ярлик"] = channel_config.label
                 
                 # ---- SPECS ------------------------------------------- #
-                
+
                 specs = adapter.get("specifications_list", [])
-                
+
+                # Інжектуємо віртуальні характеристики з channel_config у самий
+                # початок specs. Для LP API: додає "Тип устройства" зі значенням
+                # з lp_category.csv (колонки Назва_Характеристики / Значення_Характеристики).
+                # Це дозволяє характеристиці з'явитися і в CSV-файлі, і в keywords.
+                # Для Viatec: CategorySpecsEnricher вже додав їх у spider →
+                # guard not any(...) захищає від дублювання.
+                if channel_config.virtual_specs:
+                    injected_names = {vs["name"] for vs in channel_config.virtual_specs}
+                    if not any(s.get("name", "").strip() in injected_names for s in specs):
+                        specs = list(channel_config.virtual_specs) + list(specs)
+
                 # 🔪 ОБРОБКА ДОВГИХ ХАРАКТЕРИСТИК
                 current_description = cleaned.get("Опис", "")
                 specs, updated_description = self.spec_length_handler.process_specifications(
@@ -569,15 +581,18 @@ class SuppliersPipeline:
                 dimensions = self.field_processor.extract_dimensions_from_specs(specs, spider) or {}
                 cleaned.update(dimensions)
 
-                # PROM вимагає крапку (не кому) в базових колонках габаритів.
-                # .replace('.', ',') в field_processor потрібен для характеристик —
-                # тут конвертуємо назад тільки для цих 4 базових полів.
-                for _dim_field in ("Вага,кг", "Ширина,см", "Висота,см", "Довжина,см"):
-                    if cleaned.get(_dim_field):
-                        cleaned[_dim_field] = cleaned[_dim_field].replace(",", ".")
+                # ВАЖЛИВО: "Вага,кг" / "Ширина,см" / "Висота,см" / "Довжина,см"
+                # вже нормалізовані з комою як десятковим розділювачем — так
+                # само, як того вимагає PROM для всіх числових полів (див.
+                # docstring ValidationService.sanitize_prom_numeric).
+                # Раніше тут стояла конвертація коми назад у крапку — вона
+                # трактувала вимогу PROM навпаки і повертала значення у
+                # формат, який PROM відхиляє ("Тільки числові значення
+                # дозволені"). Видалено — більше нічого тут конвертувати не
+                # треба, dimensions вже готові до запису as-is.
                 
                 # ---- KEYWORDS ---------------------------------------- #
-                
+
                 if self.keywords_generator:
                     cleaned["Пошукові_запити"] = self.keywords_generator.generate_keywords(
                         cleaned.get("Назва_позиції", ""), category_id, specs, "ru"
@@ -587,7 +602,13 @@ class SuppliersPipeline:
                     )
                 
                 # ---- WRITE ------------------------------------------- #
-                
+
+                # Шар 2: захисний обрізувач — гарантує ≤ PROM_HARD_LIMIT
+                # зі збереженням обов'язкових хар-к (Стан, Виробник, Країна).
+                specs = SpecLimitService.apply_limit(
+                    specs, spider.logger, cleaned.get("Назва_позиції", "")
+                )
+
                 self._write_row(output_file, cleaned, specs)
                 self.stats[output_file]["count"] += 1
             
@@ -751,19 +772,45 @@ class SuppliersPipeline:
     # ------------------------------------------------------------------ #
 
     def _process_specs(self, specs, cleaned, adapter, spider):
-        """Обробка характеристик через AttributeMapper + merge_all_specs"""
+        """
+        Обробка характеристик через AttributeMapper + merge_all_specs.
+
+        Шар 1 дедуплікації: якщо full_specs > PROM_HARD_LIMIT — замінюємо
+        raw-версії змаплених хар-к їх Prom-еквівалентами (unmapped + mapped).
+        Інформація не втрачається: mapped вже є нормалізованими Prom-версіями.
+        Шар 2 (захисний обрізувач) застосовується далі через SpecLimitService.
+        """
         if not self.attribute_mapper:
             return SpecsEnricher.ensure_condition(specs)
 
-        cat = adapter.get("Ідентифікатор_підрозділу", "")
-        
+        cat = (
+            adapter.get("Ідентифікатор_підрозділу", "")
+            or cleaned.get("Ідентифікатор_підрозділу", "")
+        )
+
         name_specs = self.attribute_mapper.map_product_name(
             cleaned.get("Назва_позиції", ""), cat
         )
-        mapped = self.attribute_mapper.map_attributes(specs, cat).get("mapped", [])
-        final_specs = merge_all_specs(specs, mapped, name_specs, spider.logger)
-        
-        return SpecsEnricher.ensure_condition(final_specs)
+        mapping_result = self.attribute_mapper.map_attributes(specs, cat)
+        mapped   = mapping_result.get("mapped",   [])
+        unmapped = mapping_result.get("unmapped", [])
+
+        full_specs = merge_all_specs(specs, mapped, name_specs, spider.logger)
+
+        if len(full_specs) <= PROM_HARD_LIMIT:
+            return SpecsEnricher.ensure_condition(full_specs)
+
+        # Перевищено ліміт: відкидаємо raw-версії хар-к, що вже представлені
+        # у mapped (Prom-еквіваленти). Залишаємо unmapped + mapped + name_specs.
+        product_name = cleaned.get("Назва_позиції", "")[:60]
+        spider.logger.warning(
+            f"⚠️ [SpecDedup] [{product_name}] "
+            f"full={len(full_specs)} > {PROM_HARD_LIMIT} → "
+            f"dedup: unmapped={len(unmapped)}, mapped={len(mapped)}, name={len(name_specs)}"
+        )
+
+        reduced = merge_all_specs(unmapped, mapped, name_specs, spider.logger)
+        return SpecsEnricher.ensure_condition(reduced)
 
     # ------------------------------------------------------------------ #
     # STATS / CLOSE
