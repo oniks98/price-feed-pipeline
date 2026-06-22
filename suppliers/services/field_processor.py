@@ -139,13 +139,15 @@ class FieldProcessor:
             
             if required_unit == 'г':
                 # PROM вимагає грами - залишаємо як є
-                result = ValidationService.sanitize_prom_numeric(str(grams))
+                # decimal_sep='.' — Prom.ua приймає тільки крапку у фізичних полях
+                # decimals=2 — max 2 знаки після крапки (захист від плутанини з роздільником тисяч)
+                result = ValidationService.sanitize_prom_numeric(str(grams), decimals=2, decimal_sep='.')
                 spider.logger.debug(f"⚖️ Вага (cat={category_id}, unit=г): {value} → {result} г")
                 return result
             else:
                 # PROM вимагає кг - конвертуємо г → кг
                 kg = grams / 1000
-                result = ValidationService.sanitize_prom_numeric(str(kg))
+                result = ValidationService.sanitize_prom_numeric(str(kg), decimals=2, decimal_sep='.')
                 spider.logger.debug(f"⚖️ Вага (cat={category_id}, unit=кг): {value} → {result} кг")
                 return result
         
@@ -155,12 +157,12 @@ class FieldProcessor:
             if required_unit == 'г':
                 # PROM вимагає грами - конвертуємо кг → г
                 grams = kg * 1000
-                result = ValidationService.sanitize_prom_numeric(str(grams))
+                result = ValidationService.sanitize_prom_numeric(str(grams), decimals=2, decimal_sep='.')
                 spider.logger.debug(f"⚖️ Вага (cat={category_id}, unit=г): {value} → {result} г")
                 return result
             else:
                 # PROM вимагає кг - залишаємо як є
-                result = ValidationService.sanitize_prom_numeric(str(kg))
+                result = ValidationService.sanitize_prom_numeric(str(kg), decimals=2, decimal_sep='.')
                 spider.logger.debug(f"⚖️ Вага (cat={category_id}, unit=кг): {value} → {result} кг")
                 return result
         
@@ -189,7 +191,9 @@ class FieldProcessor:
             try:
                 mm = float(value.replace(' мм', '').replace(',', '.'))
                 cm = mm / 10
-                result = f"{cm:.1f}".replace('.', ',')
+                # Крапка як розділювач — Prom.ua приймає тільки крапку в цих полях
+                # 1 знак після крапки — безпечно (роздільник тисяч завжди має рівно 3 цифри)
+                result = f"{cm:.1f}"
                 spider.logger.debug(f"📏 {field_name}: {value} → {result} см")
                 return result
             except ValueError:
@@ -200,7 +204,7 @@ class FieldProcessor:
         elif value.endswith(' см'):
             try:
                 cm = float(value.replace(' см', '').replace(',', '.'))
-                result = f"{cm:.1f}".replace('.', ',')
+                result = f"{cm:.1f}"
                 spider.logger.debug(f"📏 {field_name}: {value} → {result} см")
                 return result
             except ValueError:
@@ -557,9 +561,10 @@ class FieldProcessor:
             
             # 1. ВАГА: колонка AS (Вага,кг) ЗАВЖДИ в кілограмах
             if spec_name in weight_keys:
-                # Якщо одиниця вже кг - нормалізуємо через sanitize (крапка → кома, без артефактів)
+                # Для цих полів Prom.ua приймає тільки крапку як десятковий розділювач;
+                # decimals=2 — max 2 знаки після крапки (роздільник тисяч завжди має 3)
                 if spec_unit == 'кг':
-                    normalized = ValidationService.sanitize_prom_numeric(spec_value)
+                    normalized = ValidationService.sanitize_prom_numeric(spec_value, decimals=2, decimal_sep='.')
                     if normalized:
                         dimensions["Вага,кг"] = normalized
                         spider.logger.debug(f"⚖️ Габарит вага: {spec_value} кг → {normalized}")
@@ -569,7 +574,7 @@ class FieldProcessor:
                     try:
                         grams = float(spec_value.replace(',', '.'))
                         kg = grams / 1000
-                        normalized = ValidationService.sanitize_prom_numeric(str(kg))
+                        normalized = ValidationService.sanitize_prom_numeric(str(kg), decimals=2, decimal_sep='.')
                         if normalized:
                             dimensions["Вага,кг"] = normalized
                             spider.logger.debug(f"⚖️ Габарит вага: {grams}г → {normalized}кг")
@@ -583,7 +588,7 @@ class FieldProcessor:
                         try:
                             grams = float(match_num.group(1).replace(',', '.'))
                             kg = grams / 1000
-                            normalized = ValidationService.sanitize_prom_numeric(str(kg))
+                            normalized = ValidationService.sanitize_prom_numeric(str(kg), decimals=2, decimal_sep='.')
                             if normalized:
                                 dimensions["Вага,кг"] = normalized
                                 spider.logger.debug(f"⚖️ Габарит вага: {grams}г → {normalized}кг")
@@ -598,12 +603,17 @@ class FieldProcessor:
                         try:
                             mm = float(match_num.group(1).replace(',', '.'))
                             cm = mm / 10
-                            dimensions["Ширина,см"] = f"{cm:.1f}".replace('.', ',')
+                            # Крапка; 1 знак після — ніколи не сплутається з роздільником тисяч
+                            dimensions["Ширина,см"] = f"{cm:.1f}"
                             spider.logger.debug(f"📏 Габарит ширина: {mm}мм → {cm}см")
                         except ValueError:
                             pass
                 elif spec_unit == 'см':
-                    dimensions["Ширина,см"] = spec_value
+                    try:
+                        cm_val = float(spec_value.replace(',', '.'))
+                        dimensions["Ширина,см"] = f"{cm_val:.1f}"
+                    except ValueError:
+                        pass
             
             # 3. ВИСОТА: мм → см
             elif spec_name in height_keys:
@@ -613,12 +623,16 @@ class FieldProcessor:
                         try:
                             mm = float(match_num.group(1).replace(',', '.'))
                             cm = mm / 10
-                            dimensions["Висота,см"] = f"{cm:.1f}".replace('.', ',')
+                            dimensions["Висота,см"] = f"{cm:.1f}"
                             spider.logger.debug(f"📏 Габарит висота: {mm}мм → {cm}см")
                         except ValueError:
                             pass
                 elif spec_unit == 'см':
-                    dimensions["Висота,см"] = spec_value
+                    try:
+                        cm_val = float(spec_value.replace(',', '.'))
+                        dimensions["Висота,см"] = f"{cm_val:.1f}"
+                    except ValueError:
+                        pass
             
             # 4. ДОВЖИНА: мм → см
             elif spec_name in length_keys:
@@ -628,12 +642,16 @@ class FieldProcessor:
                         try:
                             mm = float(match_num.group(1).replace(',', '.'))
                             cm = mm / 10
-                            dimensions["Довжина,см"] = f"{cm:.1f}".replace('.', ',')
+                            dimensions["Довжина,см"] = f"{cm:.1f}"
                             spider.logger.debug(f"📏 Габарит довжина: {mm}мм → {cm}см")
                         except ValueError:
                             pass
                 elif spec_unit == 'см':
-                    dimensions["Довжина,см"] = spec_value
+                    try:
+                        cm_val = float(spec_value.replace(',', '.'))
+                        dimensions["Довжина,см"] = f"{cm_val:.1f}"
+                    except ValueError:
+                        pass
         
         return dimensions
 
