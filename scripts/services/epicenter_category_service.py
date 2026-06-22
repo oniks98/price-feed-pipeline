@@ -60,6 +60,11 @@ _ALIAS_SEP: Final[str] = ";"        # роздільник всередині xl
 # Лічильник fallback-промахів: (prom_cat_id, epi_code) → кількість товарів
 _fallback_miss_counts: Counter[tuple[int, str]] = Counter()
 
+# Перші N offer_id для кожного fallback-ключа (щоб показати в лозі конкретні товари).
+# Більше _MAX_OFFER_IDS_LOGGED не зберігаємо — уникаємо memory leak на великих фідах.
+_MAX_OFFER_IDS_LOGGED: Final[int] = 10
+_fallback_miss_offer_ids: dict[tuple[int, str], list[str]] = {}
+
 
 # ---------------------------------------------------------------------------
 # Public types
@@ -172,6 +177,7 @@ def _load_mapping_rules() -> dict[int, list[CategoryMappingRule]]:
 def resolve_category(
     prom_cat_id: int,
     prom_params: dict[str, str],
+    offer_id: str | None = None,
 ) -> CategoryEntry | None:
     """
     Визначає категорію Epicenter для офера з урахуванням його атрибутів.
@@ -180,6 +186,9 @@ def resolve_category(
     1. param-based правила → перше збіжне
     2. plain-правила (param_names порожні) → перше
     3. conservative fallback на rules[0] + warning
+
+    offer_id — опціональний ідентифікатор офера для діагностики fallback-промахів.
+    Передається у flush_fallback_warnings() для відображення у лозі.
 
     Не кидає виключень — безпечно для поштучної обробки товарів.
     """
@@ -212,27 +221,39 @@ def resolve_category(
 
     # Всі правила param-based, але жодне не збіглось → conservative fallback.
     # Не спамимо лог на кожен товар — накопичуємо лічильник, flush_fallback_warnings() в кінці ран.
-    _fallback_miss_counts[(prom_cat_id, rules[0].code)] += 1
+    _key = (prom_cat_id, rules[0].code)
+    _fallback_miss_counts[_key] += 1
+    if offer_id is not None:
+        _ids = _fallback_miss_offer_ids.setdefault(_key, [])
+        if len(_ids) < _MAX_OFFER_IDS_LOGGED:
+            _ids.append(offer_id)
     return CategoryEntry(code=rules[0].code, name=rules[0].name)
 
 
 def flush_fallback_warnings() -> None:
     """
-    Виводить зведений WARNING по всіх fallback-промахах і скидає лічильник.
+    Виводить зведений WARNING по всіх fallback-промахах і скидає лічильники.
     Викликати один раз після завершення обробки всіх товарів фіду.
 
     Замість N однакових рядків у лозі — один рядок на (prom_cat_id, code):
         prom_cat_id=53004 (×847): param-фільтр не збігся → fallback rules[0] (code=3528).
+          offer ids: 111111, 222222, 333333 ...
     """
     if not _fallback_miss_counts:
         return
     for (prom_cat_id, code), count in sorted(_fallback_miss_counts.items()):
+        offer_ids = _fallback_miss_offer_ids.get((prom_cat_id, code), [])
+        ids_str = ", ".join(offer_ids)
+        if count > len(offer_ids):
+            ids_str += ", ..."
         logger.warning(
             "prom_cat_id=%d (×%d): param-фільтр не збігся ні з одним правилом "
-            "→ fallback rules[0] (code=%s). Оновіть Маппінг або додайте plain-рядок.",
-            prom_cat_id, count, code,
+            "→ fallback rules[0] (code=%s). Оновіть Маппінг або додайте plain-рядок.\n"
+            "  offer ids: %s",
+            prom_cat_id, count, code, ids_str,
         )
     _fallback_miss_counts.clear()
+    _fallback_miss_offer_ids.clear()
 
 
 def get_category(prom_category_id: int) -> CategoryEntry | None:

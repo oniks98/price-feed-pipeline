@@ -465,7 +465,8 @@ def inject_epicenter_attrs(xml: str) -> tuple[str, list[CategoryEntry]]:
                     break
 
         # --- 3. Визначаємо категорію Epicenter (може залежати від prom_params) ---
-        category = resolve_category(prom_cat_id, prom_params)
+        # offer_id передається для діагностики fallback-промахів у flush_fallback_warnings().
+        category = resolve_category(prom_cat_id, prom_params, offer_id)
 
         if not category:
             skipped_no_cat += 1
