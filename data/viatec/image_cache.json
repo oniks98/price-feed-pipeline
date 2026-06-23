@@ -32153,5 +32153,25 @@
     "w": 352,
     "h": 301,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F99-00004791.jpg&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2025-01/seagate2tb.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2023-10/IPC-9800ADH_Plus.webp": {
+    "w": 528,
+    "h": 528,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2023-10/9800ADH_Plus1.webp": {
+    "w": 600,
+    "h": 600,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2023-12/MCN263.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
   }
 }
