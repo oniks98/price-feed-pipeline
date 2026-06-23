@@ -95,6 +95,11 @@ class ValidationService:
             num = float(str(value).strip().replace(",", "."))
             num = round(num, decimals)
 
+            # 0,002 з decimals=2 → round=0.0 → Prom.ua відхиляє "0" у фізичних полях,
+            # але пуста комірка проходить валідацію
+            if num == 0:
+                return ""
+
             if num == int(num):
                 return str(int(num))
 
