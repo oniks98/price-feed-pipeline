@@ -21,6 +21,19 @@ python scripts/ultra_clean_run.py secur_feed_full  - для хар-к аякс
 
 ---
 
+## Додавання нових категорій
+
+# Від ПРОМу
+
+python scripts/prom_export_categories.py
+python scripts/markets_export_coef.py
+python scripts/epicenter_attr_pipeline.py
+python scripts/merchant_rule.py
+
+# Від LP
+
+python scripts/lp_export_categories.py
+
 ## 📦 Обробка товарів
 
 | Скрипт                    | Опис                                                                                  |
