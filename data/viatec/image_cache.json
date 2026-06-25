@@ -32918,5 +32918,65 @@
     "w": null,
     "h": null,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/2/IPC-PTS2649C-3E3Z-4GB20.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/IPC-PTS2649C-3E3Z-4GB201.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/HFW3841T-ZAS-S2.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/SDSQUNR-032.webp": {
+    "w": 756,
+    "h": 756,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/t250-obo-240.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-12/DS-K2621X_image_1.webp": {
+    "w": 800,
+    "h": 800,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-12/DS-K2621X_image_5.webp": {
+    "w": 800,
+    "h": 800,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/EP-MPS-1000.webp": {
+    "w": 419,
+    "h": 419,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FEP-MPS-1000.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/EP-MPS-10001.webp": {
+    "w": 461,
+    "h": 461,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FEP-MPS-10001.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/EuropowerEP-MPS-2000.webp": {
+    "w": 412,
+    "h": 412,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FEuropowerEP-MPS-2000.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/EuropowerEP-MPS-20001.webp": {
+    "w": 456,
+    "h": 456,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FEuropowerEP-MPS-20001.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/merl-128100.webp": {
+    "w": 446,
+    "h": 446,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fmerl-128100.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
   }
 }
