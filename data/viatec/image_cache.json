@@ -32773,5 +32773,150 @@
     "w": 720,
     "h": 720,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/DS-1280ZJ-PT61.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2023-06/AGM_Wolf-14_01-940x740.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2023-06/AGM_Wolf-14_02-940x740.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2023-06/AGM_Wolf-14_03-940x740.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2023-06/AGM_Wolf-14_04-940x740.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2023-06/AGM_Wolf-14_05-940x740.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-05/DSC05697-1.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-12/aiko-dualglass-frontback.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/izolyaciyi-14-25-160.webp": {
+    "w": 800,
+    "h": 800,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/knipex-01-06-16.webp": {
+    "w": 800,
+    "h": 800,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/nozhici-elektrik.webp": {
+    "w": 665,
+    "h": 665,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/ORGQPROMCZAPG001.webp": {
+    "w": 496,
+    "h": 496,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FORGQPROMCZAPG001.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/ORGQPROMCZAPG0012.webp": {
+    "w": 518,
+    "h": 518,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FORGQPROMCZAPG0012.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/qb-syst.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/qb-stst2.webp": {
+    "w": 672,
+    "h": 672,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/ORGQMULTICZAPG001.webp": {
+    "w": 727,
+    "h": 727,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/ORGQMULTICZAPG0011.webp": {
+    "w": 505,
+    "h": 505,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FORGQMULTICZAPG0011.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/ORGQMULTICZAPG00112.webp": {
+    "w": 708,
+    "h": 708,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/ORGQMULTICZAPG00113.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/ORGQMULTICZAPG00115.webp": {
+    "w": 587,
+    "h": 587,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/system-two-toolb2-x-q.webp": {
+    "w": 729,
+    "h": 729,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/system-two-toolb2-x-q1.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/qbrick-system-prime-set-2.webp": {
+    "w": 495,
+    "h": 495,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fqbrick-system-prime-set-2.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/qbrick-system-prime-set-21.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/qbrick-system-pro-set-2-plus2.webp": {
+    "w": 765,
+    "h": 765,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/qbrick-system-pro-set-2-plus1.webp": {
+    "w": 768,
+    "h": 768,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/qbrick-system-pro-set-2-plus.webp": {
+    "w": 720,
+    "h": 720,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/qbrick-system-pro-500.webp": {
+    "w": 672,
+    "h": 672,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/qbrick-system-pro-5001.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
   }
 }
