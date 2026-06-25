@@ -30,13 +30,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from update_products import SUPPLIER_CONFIG
 from suppliers.services.prom_csv_schema import PromCsvSchema
+from suppliers.services.spec_limit_handler import PROM_CSV_SPECS_LIMIT
 
 BASE_PATH = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
 OUTPUT_FILE = BASE_PATH / "data" / "merged.csv"
 
-# Еталонний заголовок з єдиного джерела правди
-# specs_limit=160 повинен бути достатнім для всіх постачальників
-CANONICAL_HEADERS: List[str] = PromCsvSchema.get_header(specs_limit=160)
+# Еталонний заголовок з єдиного джерела правди — має збігатися з PROM_CSV_SPECS_LIMIT з pipelines.py
+CANONICAL_HEADERS: List[str] = PromCsvSchema.get_header(specs_limit=PROM_CSV_SPECS_LIMIT)
 
 
 def read_import_csv(supplier: str) -> Tuple[List[str], List[List[str]]]:

@@ -99,7 +99,7 @@ from suppliers.services.specs_utils import merge_all_specs
 from suppliers.services.prom_csv_schema import PromCsvSchema
 from suppliers.services.specs_enricher import SpecsEnricher
 from suppliers.services.spec_length_handler import SpecificationLengthHandler
-from suppliers.services.spec_limit_handler import SpecLimitService, PROM_HARD_LIMIT
+from suppliers.services.spec_limit_handler import SpecLimitService, PROM_HARD_LIMIT, PROM_CSV_SPECS_LIMIT
 from suppliers.services.field_processor import FieldProcessor
 from suppliers.services.validation_service import ValidationService
 from suppliers.services.sku_code_service import SkuCodeService
@@ -181,7 +181,7 @@ class SuppliersPipeline:
     - 101× (Назва;Одиниця;Значення) БЕЗ нумерації (ліміт Prom.ua = 100)
     """
 
-    SPECS_LIMIT = 101
+    # (без локальної SPECS_LIMIT — використовується PROM_CSV_SPECS_LIMIT з spec_limit_handler)
 
     # ------------------------------------------------------------------ #
     # INIT
@@ -648,7 +648,7 @@ class SuppliersPipeline:
 
     def _write_header(self, f):
         """Генерує CSV заголовок через PromCsvSchema"""
-        header = PromCsvSchema.get_header(self.SPECS_LIMIT)
+        header = PromCsvSchema.get_header(PROM_CSV_SPECS_LIMIT)
         f.write(";".join(header) + "\n")
 
     def _write_row(self, output_file, cleaned, specs):
@@ -662,7 +662,7 @@ class SuppliersPipeline:
 
         # Характеристики
         written = 0
-        for spec in specs[: self.SPECS_LIMIT]:
+        for spec in specs[: PROM_CSV_SPECS_LIMIT]:
             row.extend([
                 self.validation_service.sanitize_csv_value(spec.get("name", "")),
                 self.validation_service.sanitize_csv_value(spec.get("unit", "")),
@@ -673,7 +673,7 @@ class SuppliersPipeline:
             written += 1
 
         # Заповнення порожніх характеристик
-        for _ in range(self.SPECS_LIMIT - written):
+        for _ in range(PROM_CSV_SPECS_LIMIT - written):
             row.extend(["", "", ""])
 
         self.files[output_file].write(";".join(row) + "\n")
