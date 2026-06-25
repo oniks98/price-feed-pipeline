@@ -64,11 +64,18 @@
 Дім і сад > посуд > кухонне приладдя > точила для ножів;home;day;752;Home & Garden > Kitchen & Dining > Kitchen Appliances > Knife Sharpeners;auto
 Дім і сад > догляд за будинком > прибирання > освіжувачі повітря;home;day;3898;Home & Garden > Decor > Home Fragrances > Air Fresheners;auto
 Дім і сад > догляд за будинком > прибирання > щітки та скребачки для прибирання;home;day;4670;Home & Garden > Household Supplies > Household Cleaning Supplies > Scrub Brushes;auto
+Опалення > теплові насоси;home;day;499873;"Hardware > Heating, Ventilation & Air Conditioning";auto
+матеріали для ремонту > скріплювальні вироби > метричне кріплення > кріпильні гвинти;home;day;2251;Hardware > Hardware Accessories > Hardware Fasteners > Screws;auto
+"матеріали для ремонту > скріплювальні вироби > метричне кріплення > шайби, гровер";home;day;2195;Hardware > Hardware Accessories > Hardware Fasteners > Washers;auto
+промислове обладнання та верстати > промислове кліматичне обладнання > промислові кондиціонери > фанкойли;home;day;605;Home & Garden > Household Appliances > Climate Control Appliances > Air Conditioners;auto
+техніка та електроніка > аудіотехніка та аксесуари > портативні колонки;home;day;249;Electronics > Audio > Audio Components > Speakers;auto
+техніка та електроніка > побутова техніка > побутова техніка для дому > Роботи для миття вікон;home;day;619;Home & Garden > Household Appliances > Vacuums;auto
 техніка та електроніка > комп'ютерна техніка та ПЗ > Планшети;it;day;4745;Electronics > Computers > Tablet Computers;auto
 "техніка та електроніка > комп'ютерна техніка та ПЗ > комплектуючі для комп'ютерної техніки > внутрішні та зовнішні жорсткі диски, HDD, SSD";it;day;380;Electronics > Electronics Accessories > Computer Components > Storage Devices > Hard Drives;auto
 техніка та електроніка > комп'ютерна техніка та ПЗ > монітори;it;day;305;Electronics > Video > Computer Monitors;auto
 техніка та електроніка > комп'ютерна техніка та ПЗ > носії інформації > USB накопичувачі;it;day;3712;Electronics > Electronics Accessories > Computer Components > Storage Devices > USB Flash Drives;auto
 техніка та електроніка > комп'ютерна техніка та ПЗ > носії інформації > карти пам'яті;it;day;3387;Electronics > Electronics Accessories > Memory > Flash Memory > Flash Memory Cards;auto
+техніка та електроніка > комп'ютерна техніка та ПЗ > комплектуючі для комп'ютерної техніки > блоки живлення для комп'ютерів;it;day;291;Electronics > Electronics Accessories > Computer Components > Computer Power Supplies;auto
 "електрообладнання > освітлення, електрика > LED освітлення";lighting;day;3329;Home & Garden > Lighting > Light Bulbs > LED Light Bulbs;auto
 "електрообладнання > освітлення, електрика > вуличне освітлення";lighting;day;1546;Home & Garden > Lighting > Flood & Spot Lights;auto
 Дім і сад > декор > світильники > LED підсвітка інтер'єрів;lighting;day;2608;Home & Garden > Lighting > Light Ropes & Strings;auto
@@ -76,6 +83,8 @@
 Дім і сад > декор > світильники > лампочки;lighting;day;2425;Home & Garden > Lighting > Light Bulbs;auto
 Дім і сад > декор > світильники > настільні лампи і нічники;lighting;day;4636;Home & Garden > Lighting > Lamps;auto
 Дім і сад > декор > світильники > точкові світильники та трек-системи;lighting;day;6274;Home & Garden > Lighting > Track Lighting;auto
+"електрообладнання > освітлення, електрика > офісно-торгове освітлення";lighting;day;2524;Home & Garden > Lighting > Lighting Fixtures > Ceiling Light Fixtures;auto
+матеріали для ремонту > електрика > Вимикачі світла;lighting;day;1935;Hardware > Power & Electrical Supplies > Electrical Switches > Light Switches;auto
 Воєнторг > Засоби зв'язку і позиціонування > переговорні пристрої;military;day;273;Electronics > Communications > Communication Radios > Two-Way Radios;auto
 Воєнторг > Тактичний захист та екіпірування > Аксесуари та комплектуючі для касок та бронежилетів;military;day;2047;Business & Industrial > Work Safety Protective Gear;auto
 Воєнторг > Тактичний захист та екіпірування > розвантажувальні жилети та плитоноски без плит;military;day;2389;Business & Industrial > Work Safety Protective Gear > Bullet Proof Vests;auto
@@ -105,6 +114,7 @@
 спорт і відпочинок > товари для туризму та подорожей > туристичний посуд > туристичні фляги;outdoor;day;3435;Home & Garden > Kitchen & Dining > Food & Beverage Carriers > Canteens;auto
 спорт і відпочинок > товари для туризму та подорожей > туристичні інструменти > ручні та налобні ліхтарі;outdoor;day;2454;Hardware > Tools > Flashlights & Headlamps > Headlamps;auto
 "спорт і відпочинок > товари для туризму та подорожей > туристичні інструменти > Ножі для полювання, риболовлі та туризму";outdoor;day;3495;Sporting Goods > Outdoor Recreation > Camping & Hiking > Camping Tools > Hunting & Survival Knives;auto
+Дім і сад > меблі > надувні меблі > Надувні матраци;outdoor;day;3695;Sporting Goods > Outdoor Recreation > Camping & Hiking > Camp Furniture > Air Mattresses;auto
 "Зоотовари > товари для домашніх тварин і птахів > Годування домашніх тварин і птахів > годівниці, поїлки та миски для домашніх тварин і птахів";pet;day;6252;"Animals & Pet Supplies > Pet Supplies > Pet Bowls, Feeders & Waterers";auto
 Зоотовари > товари для домашніх тварин і птахів > Товари для прогулянок і подорожей з тваринами > сумки і контейнери для перенесення домашніх тварин;pet;day;6251;Animals & Pet Supplies > Pet Supplies > Pet Carriers & Crates;auto
 Зоотовари > товари для домашніх тварин і птахів > товари для догляду за домашніми тваринами > засоби для гігієни тварин;pet;day;6383;Animals & Pet Supplies > Pet Supplies > Pet Grooming Supplies;auto
@@ -117,6 +127,8 @@
 "авто-, мото > електромобільні зарядні пристрої та станції";power_auto;day;7414;"Vehicles & Parts > Vehicle Parts & Accessories > Vehicle Maintenance, Care & Decor > Vehicle Repair & Specialty Tools > Vehicle Battery Chargers";auto
 техніка та електроніка > Повербанки та зарядні станції > Повербанки;power_banks;day;505295;Electronics > Electronics Accessories > Power > Power Adapters & Chargers;auto
 електрообладнання > батареї та акумулятори > акумулятори загального призначення;power_battery;day;4928;Electronics > Electronics Accessories > Power > Batteries > General Purpose Batteries;auto
+"авто-, мото > електрообладнання автомобілів > автомобільні акумулятори";power_battery;day;8231;Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Parts > Motor Vehicle Power & Electrical Systems;auto
+"електрообладнання > батареї та акумулятори > батарейні, акумуляторні відсіки";power_battery;day;8243;Electronics > Electronics Accessories > Power > Battery Accessories > Battery Holders;auto
 електрообладнання > генератори та електростанції > електрогенератори;power_generators;day;1218;Hardware > Power & Electrical Supplies > Generators;auto
 електрообладнання > компоненти АСУТП > перетворювачі > інвертори;power_inverters;day;5142;Hardware > Power & Electrical Supplies > Power Inverters;auto
 електрообладнання > обладнання для електропостачання > блоки живлення > стабілізатори напруги;power_stabilizers;day;505318;Hardware > Power & Electrical Supplies > Voltage Transformers & Regulators;auto
@@ -193,6 +205,10 @@
 контрольно-вимірювальні прилади > геодезичне обладнання > нівелірні рейки та віхи;tool_measuring;day;1533;Hardware > Tools > Measuring Tools & Sensors > Cruising Rods;auto
 контрольно-вимірювальні прилади > електровимірювальні прилади > мультиметри;tool_measuring;day;503737;Hardware > Tools > Measuring Tools & Sensors > Electrical Testing Tools;auto
 контрольно-вимірювальні прилади > оптичні прилади і системи > лазерні далекоміри;tool_measuring;day;5487;Hardware > Tools > Measuring Tools & Sensors > Distance Meters;auto
+"Інструменти > будівельний інструмент > будівельний вимірювальний інструмент > лазерні нівеліри, рівні, сканери";tool_measuring;day;4931;Hardware > Tools > Measuring Tools & Sensors > Levels > Laser Levels;auto
+контрольно-вимірювальні прилади > оптичні прилади і системи > оптичні нівеліри;tool_measuring;day;4294;Hardware > Tools > Measuring Tools & Sensors > Levels > Sight Levels;auto
+"контрольно-вимірювальні прилади > оптичні прилади і системи > технічні ендоскопи, відеоскопи";tool_measuring;day;499976;Cameras & Optics > Cameras > Borescopes;auto
+"контрольно-вимірювальні прилади > радіовимірювальні прилади > аналізатори спектру, шуму";tool_measuring;day;503737;Hardware > Tools > Measuring Tools & Sensors > Electrical Testing Tools;auto
 "телекомунікації та зв'язок > інструмент для мережевих робіт > кабельні тестери, wi-fi тестери";tool_network;day;5526;Hardware > Tool Accessories > Measuring Tool & Sensor Accessories;auto
 телекомунікації та зв'язок > інструмент для мережевих робіт > інструмент для закладення кабелю;tool_network;day;1469;Hardware > Tools > Wire & Cable Hand Tools;auto
 Інструменти > гідравлічний інструмент > гідравлічні ланцюгові пили;tool_power;day;3610;Home & Garden > Lawn & Garden > Outdoor Power Equipment > Chainsaws;auto
@@ -211,6 +227,7 @@
 Інструменти > електроінструмент > шліфувальні машини;tool_power;day;1188;Hardware > Tools > Sanders;auto
 Інструменти > електроінструмент > штроборізи;tool_power;day;3516;Hardware > Tools > Saws > Cut-Off Saws;auto
 Інструменти > пневматичний інструмент > пневматичні відбійні молотки;tool_power;day;505364;Hardware > Tools > Hammers > Powered Hammers;auto
+Інструменти > електроінструмент > електричні пили > ручні торцювальні пили;tool_power;day;3517;Hardware > Tools > Saws > Miter Saws;auto
 техніка та електроніка > TV та відеотехніка > телевізори;tv;day;404;Electronics > Video > Televisions;auto
 "техніка та електроніка > TV та відеотехніка > супутникове, кабельне телебачення > супутникові антени";tv_antennas;day;1718;Electronics > Electronics Accessories > Antennas;auto
 техніка та електроніка > TV та відеотехніка > аксесуари для телевізорів та проекторів > телевізійні антени;tv_antennas;day;1718;Electronics > Electronics Accessories > Antennas;auto
@@ -223,6 +240,7 @@
 техніка та електроніка > бездротовий зв'язок > антенні підсилювачі;tv_network;day;5473;Electronics > Electronics Accessories > Signal Boosters;auto
 техніка та електроніка > TV та відеотехніка > Медіаплеєри;tv_players;day;5276;Electronics > Video > Video Players & Recorders > Streaming & Home Media Players;auto
 "техніка та електроніка > TV та відеотехніка > супутникове, кабельне телебачення > ресивери цифрового телебачення";tv_receivers;day;401;Electronics > Video > Satellite & Cable TV > Satellite Receivers;auto
+Дім і сад > сучасний будинок > системи відеонагляду;video;night;390;Electronics > Video > Video Players & Recorders > Digital Video Recorders;auto
 "техніка та електроніка > фото-, відеокамери та аксесуари > відеотехніка > відеокамери, екшн-камери";video_action;night;155;Cameras & Optics > Cameras > Video Cameras;auto
 "авто-, мото > автомобільна електроніка > автомобільні відеореєстратори";video_auto;day;505766;Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Electronics > Motor Vehicle A/V Players & In-Dash Systems;auto
 "товари для дітей > гігієна та догляд за дітьми > радіоняні, відеоняні";video_baby;night;541;Baby & Toddler > Baby Safety > Baby Monitors;auto
@@ -235,6 +253,3 @@
 безпека та захист > технічні засоби відеоспостереження > об'єктиви для камер відеоспостереження;video_components;day;5346;Cameras & Optics > Camera & Optic Accessories > Camera & Video Camera Lenses > Surveillance Camera Lenses;auto
 Дім і сад > сучасний будинок > стаціонарні відеореєстратори;video_recorders;day;390;Electronics > Video > Video Players & Recorders > Digital Video Recorders;auto
 "спорт і відпочинок > товари для полювання > фотопастки, камери для полювання";video_trap;day;5402;Cameras & Optics > Cameras > Trail Cameras;auto
-"Інструменти > будівельний інструмент > будівельний вимірювальний інструмент > лазерні нівеліри, рівні, сканери";tool_measuring;day;4931;Hardware > Tools > Measuring Tools & Sensors > Levels > Laser Levels;auto
-"електрообладнання > освітлення, електрика > офісно-торгове освітлення";lighting;day;2524;Home & Garden > Lighting > Lighting Fixtures > Ceiling Light Fixtures;auto
-Дім і сад > сучасний будинок > системи відеонагляду;video;night;390;Electronics > Video > Video Players & Recorders > Digital Video Recorders;auto
