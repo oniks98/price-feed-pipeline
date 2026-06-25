@@ -5218,5 +5218,20 @@
     "w": 578,
     "h": 546,
     "transform_url": null
+  },
+  "https://content.secur.ua/products/lightswitch_3.jpeg": {
+    "w": 2000,
+    "h": 2000,
+    "transform_url": null
+  },
+  "https://content.secur.ua/products/18hSKpplKPl1iJXglTh0enqTpfH0u52uSdm3MpRq.png": {
+    "w": 452,
+    "h": 356,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2F18hSKpplKPl1iJXglTh0enqTpfH0u52uSdm3MpRq.png&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://content.secur.ua/products/wisZwc4jJ5flzQKkwz2ntxYPu0oAkIh0sk1BMYcn.png": {
+    "w": 1698,
+    "h": 696,
+    "transform_url": null
   }
 }
