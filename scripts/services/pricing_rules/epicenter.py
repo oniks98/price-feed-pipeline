@@ -157,6 +157,7 @@ def apply_prices(
     pricing = _load_pricing()
     stats = PricingStats()
     log = _build_logger()
+    no_rule_offer_ids: list[str] = []
 
     def on_offer(match: re.Match) -> str:
         offer_id: str = match.group(1)
@@ -182,6 +183,7 @@ def apply_prices(
                         coefficient = pricing.coef_uncategorized
                         stats.no_category_rules += 1
                         reason = "no_category_rule"
+                        no_rule_offer_ids.append(offer_id)
                     else:
                         coefficient = category_coef
                         stats.category_rules += 1
@@ -254,10 +256,12 @@ def apply_prices(
         # Фід згенеровано з coef_uncategorized — ціни некоректні.
         # Потрібно додати правила у epicenter_coefficients.csv.
         # Деталі у epicenter_default_id.log
+        ids_str = ", ".join(no_rule_offer_ids)
         raise SystemExit(
-            f"\u274c Epicenter: {stats.no_category_rules} \u0442\u043e\u0432\u0430\u0440\u0456\u0432 \u0431\u0435\u0437 \u043f\u0440\u0430\u0432\u0438\u043b \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0456\u0457 "
-            f"(no_category_rules). \u0414\u043e\u0434\u0430\u0439\u0442\u0435 \u043f\u0440\u0430\u0432\u0438\u043b\u0430 \u0443 epicenter_coefficients.csv. "
-            f"\u0414\u0435\u0442\u0430\u043b\u0456: epicenter_default_id.log"
+            f"❌ Epicenter: {stats.no_category_rules} товарів без правил категорії "
+            f"(no_category_rules). Додайте правила у epicenter_coefficients.csv. "
+            f"Деталі: epicenter_default_id.log\n"
+            f"Offer IDs: {ids_str}"
         )
 
     return updated_xml

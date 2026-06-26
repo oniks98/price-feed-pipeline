@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
 BRANCH = "data-latest"
-SUPPLIERS = ["viatec", "secur"]
+SUPPLIERS = ["viatec", "secur", "lp"]
 
 
 def git_show(branch: str, git_path: str, dest: Path) -> bool:

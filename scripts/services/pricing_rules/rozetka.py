@@ -318,6 +318,7 @@ def apply_prices(
     stats = PricingStats()
     brand_rule_hits: int = 0
     log = _build_logger()
+    no_rule_offer_ids: list[str] = []
 
     def on_offer(match: re.Match) -> str:
         nonlocal brand_rule_hits
@@ -352,6 +353,7 @@ def apply_prices(
                         coefficient = pricing.coef_uncategorized
                         stats.no_category_rules += 1
                         reason = "no_category_rule"
+                        no_rule_offer_ids.append(offer_id)
                     else:
                         coefficient = rule.coefficient
                         stats.category_rules += 1
@@ -424,10 +426,12 @@ def apply_prices(
         # Фід згенеровано з coef_uncategorized — ціни некоректні.
         # Потрібно додати правила у rozetka_coefficients.csv.
         # Деталі у rozetka_default_id.log
+        ids_str = ", ".join(no_rule_offer_ids)
         raise SystemExit(
             f"❌ Rozetka: {stats.no_category_rules} товарів без правил категорії "
             f"(no_category_rules). Додайте правила у rozetka_coefficients.csv. "
-            f"Деталі: rozetka_default_id.log"
+            f"Деталі: rozetka_default_id.log\n"
+            f"Offer IDs: {ids_str}"
         )
 
     return updated_xml

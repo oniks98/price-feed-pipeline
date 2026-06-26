@@ -157,6 +157,7 @@ def apply_prices(
     pricing = _load_pricing()
     stats = PricingStats()
     log = _build_logger()
+    no_rule_offer_ids: list[str] = []
 
     def on_offer(match: re.Match) -> str:
         offer_id: str = match.group(1)
@@ -185,6 +186,7 @@ def apply_prices(
                         coefficient = pricing.coef_uncategorized
                         stats.no_category_rules += 1
                         reason = "no_category_rule"
+                        no_rule_offer_ids.append(offer_id)
                     else:
                         coefficient = rule.coefficient
                         stats.category_rules += 1
@@ -253,10 +255,12 @@ def apply_prices(
         # Фід згенеровано з coef_uncategorized — ціни некоректні.
         # Потрібно додати правила у kasta_coefficients.csv.
         # Деталі у kasta_default_id.log
+        ids_str = ", ".join(no_rule_offer_ids)
         raise SystemExit(
             f"❌ Kasta: {stats.no_category_rules} товарів без правил категорії "
             f"(no_category_rules). Додайте правила у kasta_coefficients.csv. "
-            f"Деталі: kasta_default_id.log"
+            f"Деталі: kasta_default_id.log\n"
+            f"Offer IDs: {ids_str}"
         )
 
     return updated_xml
