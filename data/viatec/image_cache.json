@@ -33408,5 +33408,40 @@
     "w": null,
     "h": null,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-05/2CD2383G2-LI2U.webp": {
+    "w": 534,
+    "h": 534,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-05/2CD2043G2-LI2Ub.webp": {
+    "w": 800,
+    "h": 800,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/DS-2DE7A825IW-AEB(T5)_image_1.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/4225_(1).webp": {
+    "w": 500,
+    "h": 500,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F4225_%281%29.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-10/7104NI-Q1.webp": {
+    "w": 696,
+    "h": 696,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/DS-UPS3000-R_image_1.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2025-03/bluesolarMPPT-250-70-Tr-VECan.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
   }
 }
