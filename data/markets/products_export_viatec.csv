@@ -1,1 +1,69 @@
-﻿url;name;category
+﻿url;name;category;Адрес_подраздела;Идентификатор_подраздела;Категория
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:avtomat";Автоматичний вимикач;Тип;https://prom.ua/ua/Rele-differentsialnye;14190906;"Автоматичні вимикачі, пзв"
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:avtomat";Автоматичний вимикач;Тип;https://prom.ua/ua/Rele-differentsialnye;14190906;"Автоматичні вимикачі, пзв"
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:peremikach-rezervu";Перемикач введення резерву;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:peremikach-rezervu";Перемикач введення резерву;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:peremikach";Перемикач;Тип;https://prom.ua/ua/Pereklyuchateli-potokov-rele-rashoda;410602;Перемикачі потоків
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:peremikach";Перемикач;Тип;https://prom.ua/ua/Pereklyuchateli-potokov-rele-rashoda;410602;Перемикачі потоків
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rele-naprugi";Реле напруги;Тип;https://prom.ua/ua/Rele-napryazheniya;14190901;Реле напруги
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rele-naprugi";Реле напруги;Тип;https://prom.ua/ua/Rele-napryazheniya;14190901;Реле напруги
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:difavtomat";Дифавтомат;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:difavtomat";Дифавтомат;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:difrele";Дифреле;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:difrele";Дифреле;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:pzip";ПЗІП;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:pzip";ПЗІП;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:voltmetr";Вольтметр;Тип;https://prom.ua/ua/Voltmetry;15370310;Вольтметри
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:voltmetr";Вольтметр;Тип;https://prom.ua/ua/Voltmetry;15370310;Вольтметри
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:termoreguliator";Терморегулятор;Тип;https://prom.ua/ua/Termoregulyatory;13240901;Побутові терморегулятори
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:termoreguliator";Терморегулятор;Тип;https://prom.ua/ua/Termoregulyatory;13240901;Побутові терморегулятори
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:kontaktor";Контактор;Тип;https://prom.ua/ua/Kontaktory;526;Контактори та пускачі
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:kontaktor";Контактор;Тип;https://prom.ua/ua/Kontaktory;526;Контактори та пускачі
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:shina";Шина;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:shina";Шина;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rele-strumu";Реле струму;Тип;https://prom.ua/ua/Rele-toka;14190903;Реле струму
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rele-strumu";Реле струму;Тип;https://prom.ua/ua/Rele-toka;14190903;Реле струму
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rele-promizhne";Реле проміжне;Тип;https://prom.ua/ua/Rele-impulsnye;14190908;Реле
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rele-promizhne";Реле проміжне;Тип;https://prom.ua/ua/Rele-impulsnye;14190908;Реле
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rele-impuls";Реле імпульсне;Тип;https://prom.ua/ua/Rele-vremeni;410610;Реле часу
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rele-impuls";Реле імпульсне;Тип;https://prom.ua/ua/Rele-vremeni;410610;Реле часу
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rozetka";Розетка;Тип;https://prom.ua/ua/Rozetki-elektricheskie;53004;Розетки електричні
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rozetka";Розетка;Тип;https://prom.ua/ua/Rozetki-elektricheskie;53004;Розетки електричні
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:taimer";Таймер;Тип;https://prom.ua/ua/Tajmery;620;Таймери
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:taimer";Таймер;Тип;https://prom.ua/ua/Tajmery;620;Таймери
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:cokol";Цоколь;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:cokol";Цоколь;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:zatiskach-nabirnii";Затискач набірний;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:zatiskach-nabirnii";Затискач набірний;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rozriad-perenaprugi";Розрядник перенапруги;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rozriad-perenaprugi";Розрядник перенапруги;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:termostat";Термостат;Тип;https://prom.ua/ua/Sistema-ohlazhdeniya;120214;Термостати і комплектуючі системи охолодження
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:termostat";Термостат;Тип;https://prom.ua/ua/Sistema-ohlazhdeniya;120214;Термостати і комплектуючі системи охолодження
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:indikator";Індикатор;Тип;https://prom.ua/ua/Taktilnaya-plitka;13072904;Тактильні плитки та індикатори
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:indikator";Індикатор;Тип;https://prom.ua/ua/Taktilnaya-plitka;13072904;Тактильні плитки та індикатори
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:pe-klema";PE/N-клема;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:pe-klema";PE/N-клема;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:trimach-klem";Тримач клем;Тип;https://prom.ua/ua/Derzhateli;230608;Тримачі
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:trimach-klem";Тримач клем;Тип;https://prom.ua/ua/Derzhateli;230608;Тримачі
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:adapter-klemnik";Адаптер для кріплення клемників;Тип;https://prom.ua/ua/Klyuchi-dlya-patrona;14200328;Ключі для патрона
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:adapter-klemnik";Адаптер для кріплення клемників;Тип;https://prom.ua/ua/Klyuchi-dlya-patrona;14200328;Ключі для патрона
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:shina-faza";Шина фазна;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:shina-faza";Шина фазна;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rozpodilchii-blok";Розподільчий блок;Тип;https://prom.ua/ua/Podstavki-pod-sistemnyj-blok;15030416;Підставки під системний блок
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rozpodilchii-blok";Розподільчий блок;Тип;https://prom.ua/ua/Podstavki-pod-sistemnyj-blok;15030416;Підставки під системний блок
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:obmezh-naprugi";Обмежувач напруги;Тип;https://prom.ua/ua/Ukazateli-i-indikatory-napryazheniya;14200608;Покажчики та індикатори напруги
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:obmezh-naprugi";Обмежувач напруги;Тип;https://prom.ua/ua/Ukazateli-i-indikatory-napryazheniya;14200608;Покажчики та індикатори напруги
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:dzvinok";Дзвінок;Тип;https://prom.ua/ua/Kolokolchiki;1746;Дзвіночки
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:dzvinok";Дзвінок;Тип;https://prom.ua/ua/Kolokolchiki;1746;Дзвіночки
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:utrimuvach-klemi";Утримувач з клемами;Тип;https://prom.ua/ua/Drugie-yuvelirnye-izdeliya-iz-zolota;15090211;"Ювелірні вироби з золота, загальне"
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:utrimuvach-klemi";Утримувач з клемами;Тип;https://prom.ua/ua/Drugie-yuvelirnye-izdeliya-iz-zolota;15090211;"Ювелірні вироби з золота, загальне"
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:torceva-zaglushka";Торцева заглушка;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:torceva-zaglushka";Торцева заглушка;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:elektro-puskach";Електромагнітний пускач;Тип;https://prom.ua/ua/Elektromagnity;508;Електромагніти
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:elektro-puskach";Електромагнітний пускач;Тип;https://prom.ua/ua/Elektromagnity;508;Електромагніти
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rozednuvach";Роз'єднувач;Тип;https://prom.ua/ua/Razediniteli;410516;Роз'єднувачі
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:rozednuvach";Роз'єднувач;Тип;https://prom.ua/ua/Razediniteli;410516;Роз'єднувачі
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:zapobizhnik";Запобіжник;Тип;https://prom.ua/ua/Termopredohraniteli;400504;Термозапобіжники
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:zapobizhnik";Запобіжник;Тип;https://prom.ua/ua/Termopredohraniteli;400504;Термозапобіжники
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:trimach-zapobizhnik";Утримувач запобіжника;Тип;;;
+"https://viatec.ua/catalog/avtomatichni-vimikachi/0:0;tip-avtomatu:trimach-zapobizhnik";Утримувач запобіжника;Тип;;;
