@@ -33483,5 +33483,60 @@
     "w": 1000,
     "h": 1000,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-08/nova-lte.webp": {
+    "w": 738,
+    "h": 738,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/SWAN-1000.jpg": {
+    "w": 352,
+    "h": 301,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2FSWAN-1000.jpg&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/Tiras_8p_front.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/Tiras_8p_side.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/Tiras_8p_back.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/%D0%A2%D1%96%D1%80%D0%B0%D1%81-4%D0%9F_side.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-08/WR841N.webp": {
+    "w": 907,
+    "h": 907,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-08/WR841N1.webp": {
+    "w": 904,
+    "h": 904,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-09/CM-70ST-01.webp": {
+    "w": 546,
+    "h": 546,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-09/CM-70ST-012.webp": {
+    "w": 534,
+    "h": 534,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-09/CM-70ST-0123.webp": {
+    "w": 678,
+    "h": 678,
+    "transform_url": null
   }
 }
