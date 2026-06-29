@@ -33463,5 +33463,25 @@
     "w": 442,
     "h": 442,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FStellar-3Nplus72-1272-514.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-07/PFA13Gb.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-02/CS4006-4ET-60(1).webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/DS-UPS600-R.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/BOS-A-Rack-14.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
   }
 }
