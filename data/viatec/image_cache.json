@@ -33583,5 +33583,20 @@
     "w": 1000,
     "h": 1000,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/pm1.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-03/0603207300.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2023-06/06008A9000.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
   }
 }
