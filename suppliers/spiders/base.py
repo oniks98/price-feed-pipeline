@@ -347,7 +347,17 @@ class ViatecBaseSpider(BaseSupplierSpider):
     
     def _extract_description_with_br(self, response) -> str:
         """
-        Витягує опис товару зі збереженням переносів <br>.
+        Повний опис товару: основний блок + додатковий (вкладка «Опис»).
+        Частини з'єднуються через <br><br>.
+        """
+        main = self._extract_main_description(response)
+        tab  = self._extract_tab_description(response)
+        parts = [p for p in (main, tab) if p]
+        return "<br><br>".join(parts)
+
+    def _extract_main_description(self, response) -> str:
+        """
+        Витягує основний опис товару з div.card-header__card-info-text.
 
         Підтримувані варіанти структури (viatec.ua):
 
@@ -421,6 +431,45 @@ class ViatecBaseSpider(BaseSupplierSpider):
 
         self.logger.debug(f"Fallback (div text+br): {len(lines)} рядків на {response.url}")
         return "<br>".join(lines)
+
+    def _extract_tab_description(self, response) -> str:
+        """
+        Витягує додатковий опис з вкладки «Опис»
+        (div.card-tabs__text-content).
+
+        Вкладка характеристик (card-tabs__characteristic-content) ігнорується
+        автоматично — селектор прив'язаний лише до text-content.
+
+        ВАЖЛИВО: клас .active додається JavaScript-ом ПІСЛЯ завантаження сторінки.
+        Scrapy отримує статичний HTML — .active відсутній. Тому спочатку пробуємо
+        з .active (на випадок SSR), потім fallback без нього — як в _extract_specifications.
+        Повертає "" якщо вкладка відсутня або порожня.
+        """
+        # Спроба 1: .active є в статичному HTML (SSR або перша вкладка за замовчуванням)
+        container = response.css(
+            "li.card-tabs__item.active div.card-tabs__text-content"
+        )
+        # Спроба 2: .active додано JS → беремо будь-який text-content блок
+        if not container:
+            container = response.css("div.card-tabs__text-content")
+        if not container:
+            return ""
+
+        parts: list[str] = []
+        for p in container.css("p"):
+            inner = re.sub(r"^<p[^>]*>|</p>$", "", p.get()).strip()
+            inner = inner.replace("\xa0", " ").strip()
+            if inner:
+                inner = re.sub(r"<br\s*/?>", "<br>", inner)
+                parts.append(inner)
+
+        if not parts:
+            return ""
+
+        self.logger.debug(
+            f"Tab description: {len(parts)} абзаців на {response.url}"
+        )
+        return "<br>".join(parts)
 
     def _extract_specifications(self, response) -> List[Dict[str, str]]:
         """
