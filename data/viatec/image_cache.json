@@ -34278,5 +34278,20 @@
     "w": null,
     "h": null,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/2/volter-smart-5-5.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/gibrid-u-7-125-v2-0.webp": {
+    "w": 937,
+    "h": 937,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/gibrid-u-7-125-v2-0-5.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
   }
 }
