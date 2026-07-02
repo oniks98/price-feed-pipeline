@@ -11,7 +11,7 @@
 
 ВАЖЛИВО: Розетка забирає Prom-фід практично в оригінальному вигляді.
   - Теги XML НЕ перейменовуються і НЕ перетворюються (немає normalize_name_description_tags).
-  - add_name_ua НЕ викликається — Розетка використовує тег <n> напряму.
+  - add_name_ua НЕ викликається — Розетка використовує тег <name> напряму.
   - <currencies> НЕ видаляється — Розетка потребує курси валют для конвертації цін.
   - <company> та <url> (shop + offer рівні) — видаляються як зайві для Розетки.
 
@@ -34,15 +34,19 @@ from generate_utils_feed import (
     fill_missing_vendor,
     filter_unavailable_offers,
     load_wholesale_price_index,
+    normalize_vendor_language,
     parse_currency_rates,
 )
 from services.market_pricing import apply_market_prices
 from services.rozetka_stop_brand_service import filter_stop_brand_offers
+from services.rozetka_unique_name_service import deduplicate_offer_names
 from services.rozetka_category_service import (
     CategoryEntry,
     build_categories_xml,
-    get_category_map,
+    flush_fallback_warnings,
+    resolve_category,
 )
+from services.rozetka_category_leaf_service import validate_used_categories
 
 _logger = logging.getLogger(__name__)
 
@@ -71,6 +75,19 @@ _CATEGORY_ID_RE: Final[re.Pattern[str]] = re.compile(
     r'<categoryId>(\d+)</categoryId>'
 )
 
+# Офер-рівневий парсинг — потрібен для param-based роутингу категорій
+# (resolve_category читає prom_params, щоб розрізнити напр. «IP-камери» /
+# «HDCVI відеокамери» всередині однієї prom-категорії «Камери відеоспостереження»).
+_OFFER_RE: Final[re.Pattern[str]] = re.compile(
+    r'<offer\s+id="(\d+)"([^>]*)>(.*?)</offer>',
+    re.DOTALL,
+)
+_PROM_PARAM_RE: Final[re.Pattern[str]] = re.compile(
+    r'<param\b[^>]*\bname="([^"]+)"[^>]*>(.*?)</param>',
+    re.DOTALL,
+)
+_CDATA_RE: Final[re.Pattern[str]] = re.compile(r'<!\[CDATA\[(.*?)\]\]>', re.DOTALL)
+
 # Prom віддає: <param name="Країна-виробник" unit="">Китай</param>
 # Розетка очікує: <param name="Країна-виробник товару">Китай</param>
 # [^>]* — поглинає будь-які атрибути між name="..." і ">", зокрема unit="".
@@ -94,34 +111,67 @@ _ROZETKA_FIELDS_TO_STRIP: Final[tuple[str, ...]] = (
 # XML transformation helpers (Rozetka-specific)
 # ---------------------------------------------------------------------------
 
+def _strip_cdata(value: str) -> str:
+    """Витягує текст з CDATA-обгортки; якщо її немає — повертає рядок як є."""
+    m = _CDATA_RE.match(value.strip())
+    return m.group(1).strip() if m else value.strip()
+
+
 def replace_category_ids(xml: str) -> tuple[str, list[CategoryEntry]]:
     """
     Замінює prom categoryId на rozetka_category_id у кожному <offer>.
     Повертає оновлений XML та список унікальних використаних CategoryEntry
     (відсортовано за category_id — для детермінованого <categories> блоку).
 
-    Маппінг береться з rozetka_mappings.xlsx (lru_cache — читається один раз).
-    Оффери без маппінгу залишаються з оригінальним prom categoryId:
-    фід не ламається, але відсутні ID логуються як warning.
+    Обробляється пооферно (а не одним re.sub по всьому XML), тому що resolve_category
+    потребує prom_params конкретного офера для param-based роутингу
+    (напр. «Kamери відеоспостереження» → IP-камери / HDCVI відеокамери
+    залежно від його параметра «Тип пристрою»).
+
+    Маппінг береться з rozetka_mappings.xlsx через services.rozetka_category_service
+    (lru_cache — читається один раз). Оффери без маппінгу залишаються з
+    оригінальним prom categoryId: фід не ламається, але відсутні ID логуються як warning.
+    Param-fallback промахи (всі правила param-based, але жодне не збіглось) логуються
+    окремо через flush_fallback_warnings() після виклику цієї функції (в main()).
     """
-    category_map = get_category_map()
     mapped = 0
     skipped_ids: set[int] = set()
     # dict keyed by rozetka category_id — дедублікація без втрати порядку вставки
     used: dict[int, CategoryEntry] = {}
 
-    def _replace(m: re.Match) -> str:
+    def _on_offer(m: re.Match) -> str:
         nonlocal mapped
-        prom_id = int(m.group(1))
-        entry = category_map.get(prom_id)
+        offer_id, tail_attrs, body = m.group(1), m.group(2), m.group(3)
+
+        cat_match = _CATEGORY_ID_RE.search(body)
+        if not cat_match:
+            return m.group(0)   # немає categoryId — залишаємо офер без змін
+        prom_id = int(cat_match.group(1))
+
+        # Prom може віддавати кілька <param> тегів з однаковим name (multiselect) —
+        # дублікати об'єднуються через ", " (так само, як в epicenter_category_service).
+        prom_params: dict[str, str] = {}
+        for pm in _PROM_PARAM_RE.finditer(body):
+            name = pm.group(1).strip()
+            value = _strip_cdata(pm.group(2))
+            if name in prom_params:
+                prom_params[name] = f"{prom_params[name]}, {value}"
+            else:
+                prom_params[name] = value
+
+        entry = resolve_category(prom_id, prom_params, offer_id)
         if entry is None:
             skipped_ids.add(prom_id)
             return m.group(0)   # fallback — залишаємо prom categoryId без змін
+
         used.setdefault(entry["category_id"], entry)
         mapped += 1
-        return f'<categoryId>{entry["category_id"]}</categoryId>'
+        new_body = _CATEGORY_ID_RE.sub(
+            f'<categoryId>{entry["category_id"]}</categoryId>', body, count=1
+        )
+        return f'<offer id="{offer_id}"{tail_attrs}>{new_body}</offer>'
 
-    result = _CATEGORY_ID_RE.sub(_replace, xml)
+    result = _OFFER_RE.sub(_on_offer, xml)
 
     print(f"🗂️  categoryId → Rozetka: {mapped} замінено | унікальних категорій: {len(used)}", end="")
     if skipped_ids:
@@ -204,7 +254,7 @@ def set_shop_name(xml: str) -> str:
     """
     Замінює перший <name>…</name> (назва магазину) на SHOP_NAME.
 
-    В основному Prom-фіді назви товарів зберігаються у <n>, тому
+    В основному Prom-фіді назви товарів зберігаються у <name>, тому
     перший тег <name> завжди є назвою магазину на рівні <shop>.
     Викликати ПІСЛЯ strip_prom_shop_fields (щоб структура XML була стабільна).
     """
@@ -237,17 +287,21 @@ def main() -> None:
 
     updated_xml = apply_market_prices(MARKET, updated_xml, wholesale_index, currency_rates)
     updated_xml = fill_missing_vendor(updated_xml)
+    updated_xml = normalize_vendor_language(updated_xml)  # "Без бренда" → "Без бренду"
     updated_xml = filter_stop_brand_offers(updated_xml)
+    updated_xml = deduplicate_offer_names(updated_xml)  # <name>/<name_ua> мають бути унікальними для Rozetka
 
     # --- Розетка-специфічне очищення та трансформація XML ---
     # replace_category_ids повертає (xml, used_entries) — entries потрібні для <categories> блоку
     updated_xml, used_entries = replace_category_ids(updated_xml)
+    flush_fallback_warnings()  # зведений warning по param-fallback промахам (див. resolve_category)
+    validate_used_categories(entry["category_id"] for entry in used_entries)  # логує non-leaf/unknown id, не блокує генерацію
     updated_xml = replace_prom_categories(updated_xml, used_entries)  # Prom → Rozetka <categories>
     updated_xml = rename_country_param(updated_xml)                    # «Країна-виробник» → «...товару»
     updated_xml = strip_prom_shop_fields(updated_xml)                  # видаляємо <company>, <url>
     updated_xml = set_shop_name(updated_xml)                           # після strip: <name> доступний
 
-    # Примітка: add_name_ua не викликається — Розетка використовує тег <n> напряму.
+    # Примітка: add_name_ua не викликається — Розетка використовує тег <name> напряму.
     # Примітка: normalize_name_description_tags не викликається — теги не перейменовуються.
 
     # Гарантуємо коректну XML-декларацію з великої літери (UTF-8).
