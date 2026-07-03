@@ -34293,5 +34293,15 @@
     "w": 1000,
     "h": 1000,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-12/LTV43-SD400_1.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-12/LTV43-SD400_12.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
   }
 }
