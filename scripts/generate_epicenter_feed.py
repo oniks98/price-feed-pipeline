@@ -36,7 +36,14 @@ from generate_utils_feed import (
 )
 from services.epicenter_params_to_description_service import inject_params_into_description
 from services.epicenter_stop_brand_service import filter_stop_brand_offers
-from services.epicenter_text_sanitizer_service import sanitize_russian_chars, strip_html_classes, strip_external_links
+from services.epicenter_text_sanitizer_service import (
+    sanitize_russian_chars,
+    strip_html_classes,
+    strip_external_links,
+    strip_sale_labels_from_names,
+    strip_emojis_from_descriptions,
+    strip_discount_reason_from_descriptions,
+)
 from services.epicenter_attr_service import (
     CategoryAttrRules,
     AttrMeta,
@@ -879,6 +886,9 @@ def main() -> None:
     updated_xml = sanitize_russian_chars(updated_xml)             # ы→и, ъ→' у всьому фіді
     updated_xml = strip_html_classes(updated_xml)                  # видаляємо class="..." з HTML
     updated_xml = strip_external_links(updated_xml)               # видаляємо "Детальніше:" та bare URLs з описів
+    updated_xml = strip_sale_labels_from_names(updated_xml)       # видаляємо Розпродаж/Распродажа (ID) з назв, додаємо " s"
+    updated_xml = strip_emojis_from_descriptions(updated_xml)     # видаляємо емодзі з описів
+    updated_xml = strip_discount_reason_from_descriptions(updated_xml)  # видаляємо «причина уцінки» з описів
 
     # Гарантуємо коректну XML-декларацію незалежно від того,
     # чи Prom-фід її надсилає і в якому форматі.
