@@ -762,8 +762,11 @@ class SuppliersPipeline:
         result["Валюта"]         = result.get("Валюта") or "UAH"
         result["Одиниця_виміру"] = result.get("Одиниця_виміру") or "шт."
 
-        # Очищення заборонених слів (Prom.ua)
-        TextSanitizer.sanitize_item(result)
+        # Очищення заборонених слів, посилань та supplier-специфічних артефактів (Prom.ua).
+        # supplier=config.supplier_name вмикає LP/Viatec-правила в TextSanitizer.
+        supplier_config = self.configs.get(spider.name)
+        supplier_name = supplier_config.supplier_name if supplier_config else None
+        TextSanitizer.sanitize_item(result, supplier=supplier_name)
 
         return result
 
