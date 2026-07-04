@@ -455,13 +455,32 @@ class ViatecBaseSpider(BaseSupplierSpider):
         if not container:
             return ""
 
+        # ВАЖЛИВО: контейнер може містити суміш <p> та <ul><li> як сусідні
+        # (не вкладені один в одного) елементи, напр.:
+        #   <p><strong>Комплектація базова</strong></p>
+        #   <ul><li><a href="...">SKU</a> опис</li>...</ul>
+        #   <p><strong>Комплектація опціональна</strong></p>
+        #   <ul>...</ul>
+        # Раніше цикл ішов лише по container.css("p") — <ul>-списки як сусідні
+        # (не дочірні <p>) елементи повністю ігнорувалися і губилися з опису.
+        # Обхід прямих дітей у порядку документа обробляє обидва типи блоків.
         parts: list[str] = []
-        for p in container.css("p"):
-            inner = re.sub(r"^<p[^>]*>|</p>$", "", p.get()).strip()
-            inner = inner.replace("\xa0", " ").strip()
-            if inner:
-                inner = re.sub(r"<br\s*/?>", "<br>", inner)
-                parts.append(inner)
+        for node in container.xpath("./*"):
+            tag = node.root.tag
+            if tag == "p":
+                inner = re.sub(r"^<p[^>]*>|</p>$", "", node.get()).strip()
+                inner = inner.replace("\xa0", " ").strip()
+                if inner:
+                    inner = re.sub(r"<br\s*/?>", "<br>", inner)
+                    parts.append(inner)
+            elif tag == "ul":
+                for li in node.css("li"):
+                    inner = re.sub(r"</?li[^>]*>", "", li.get()).strip()
+                    inner = inner.replace("\xa0", " ").strip()
+                    if inner:
+                        if not inner.startswith("●"):
+                            inner = f"● {inner}"
+                        parts.append(inner)
 
         if not parts:
             return ""
