@@ -561,7 +561,15 @@ class SuppliersPipeline:
                 specs, updated_description = self.spec_length_handler.process_specifications(
                     specs, current_description
                 )
-                cleaned["Опис"] = updated_description
+                # ВАЖЛИВО: process_specifications() може вклеїти в опис сирий
+                # вміст занадто довгих характеристик (_format_as_description),
+                # обходячи TextSanitizer, який вже відпрацював у _clean_item()
+                # ДО цього моменту. Тому санітайзимо ще раз — інакше markdown-
+                # посилання/промо-сміття/заборонені слова з raw specs
+                # потрапляють у фінальний CSV без очищення (виявлено на LP).
+                cleaned["Опис"] = TextSanitizer.sanitize(
+                    updated_description, supplier=config.supplier_name
+                )
                 
                 specs = self._process_specs(specs, cleaned, adapter, spider)
                 
