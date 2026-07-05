@@ -34443,5 +34443,30 @@
     "w": 421,
     "h": 421,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FMC4-PV-LTM4-1000V.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/spr_1.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/%D0%94%D0%B6%D0%BC%D1%96%D0%BB%D1%8C_Front.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/%D0%94%D0%B6%D0%BC%D1%96%D0%BB%D1%8C_Front_Light.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/%D0%94%D0%B6%D0%BC%D1%96%D0%BB%D1%8C_Side.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/%D0%94%D0%B6%D0%BC%D1%96%D0%BB%D1%8C_Back.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
   }
 }
