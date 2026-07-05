@@ -36,7 +36,8 @@ WHOLESALE_SUPPLIERS: list[str] = ["viatec", "secur", "lp"]
 # Назви стовпців у Prom.ua-форматному CSV (роздільник ';')
 _COL_CODE: str = "Код_товару"             # відповідає <article> у XML
 _COL_IDENTIFIER: str = "Ідентифікатор_товару"
-_COL_RETAIL: str = "Ціна"                  # РРЦ постачальника (retail, ArticlePrices.retail)
+_COL_RETAIL_SOURCE: str = "Мінімальний_обсяг_замовлення"  # raw РРЦ постачальника, збережена pipeline
+_COL_RETAIL: str = "Ціна"                  # fallback для старих *_old.csv без raw РРЦ
 _COL_WHOLESALE: str = "Оптова_ціна"        # дилерська ціна (dealer, ArticlePrices.dealer)
 _PROM_ID_PREFIX: str = "prom_"
 
@@ -219,7 +220,9 @@ def load_article_price_index(root: Path) -> dict[str, ArticlePrices]:
                 if dealer_price <= 0:
                     continue
 
-                raw_retail = (row.get(_COL_RETAIL) or "").strip().replace(",", ".")
+                raw_retail = (row.get(_COL_RETAIL_SOURCE) or "").strip().replace(",", ".")
+                if not raw_retail:
+                    raw_retail = (row.get(_COL_RETAIL) or "").strip().replace(",", ".")
                 try:
                     retail_price = Decimal(raw_retail) if raw_retail else Decimal("0")
                 except Exception:

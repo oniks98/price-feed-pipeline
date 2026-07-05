@@ -452,6 +452,11 @@ class SuppliersPipeline:
                 # Трекінг для anomaly-логу
                 _price_decimal: Decimal = Decimal("0")
                 _retail_for_anomaly: Decimal = Decimal("0")
+                supplier_retail_uah = DealerPriceService.to_decimal(price_rrp_uah, Decimal("0"))
+                if supplier_retail_uah > 0:
+                    cleaned["Мінімальний_обсяг_замовлення"] = DealerPriceService.format_price(
+                        supplier_retail_uah
+                    )
 
                 if usd_rate_raw:
                     # ── Viatec: USD → UAH конвертація ──
@@ -466,7 +471,7 @@ class SuppliersPipeline:
                     )
                     cleaned["Ціна"]   = DealerPriceService.format_price(_price_decimal)
                     cleaned["Валюта"] = "UAH"
-                    _retail_for_anomaly = DealerPriceService.to_decimal(price_rrp_uah, Decimal("0"))
+                    _retail_for_anomaly = supplier_retail_uah
 
                 elif dealer_price_uah_raw:
                     # ── Secur: вже в UAH ──
@@ -483,7 +488,7 @@ class SuppliersPipeline:
                     )
                     cleaned["Ціна"]   = DealerPriceService.format_price(_price_decimal)
                     cleaned["Валюта"] = "UAH"
-                    _retail_for_anomaly = DealerPriceService.to_decimal(price_rrp_uah, Decimal("0"))
+                    _retail_for_anomaly = supplier_retail_uah
                 else:
                     # ── Legacy: коефіцієнтний режим (не-dealer або інші постачальники) ──
                     coef = (

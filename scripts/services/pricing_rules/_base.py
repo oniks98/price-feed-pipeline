@@ -196,18 +196,21 @@ def rule_sort_key(rule: PriceRule) -> tuple[Decimal, Decimal, Decimal]:
 
 def select_rule(rules: Iterable[PriceRule], base_price: Decimal) -> PriceRule | None:
     """
-    Pick the best PriceRule for a given base price (dealer/wholesale price).
+    Вибрати найкраще правило `PriceRule` для заданої базової ціни (дилерської / гуртової ціни).
 
-    Bracket selection is driven ENTIRELY by `threshold` (unaffected by whether
-    the manual `coef` has been filled in) — this preserves the exact bracket
-    boundaries that were in place before the coef/threshold split.
+Вибір діапазону виконується ВИКЛЮЧНО за полем `threshold` (незалежно від того,
+ чи заповнений вручну `coef`) — це зберігає точні межі діапазонів,
+   які існували до розділення `coef` і `threshold`.
 
-    Strategy:
-    1. Compute the sale price each rule would produce (ceil(base_price * threshold))
-       and find rules whose bracket contains that sale price (self-consistent match).
-    2. If none self-consistent, fall back to the rule whose bracket contains
-       the raw base price (handles edge cases near bracket boundaries).
-    3. Return None if no rule matches at all → caller uses the market default.
+Стратегія:
+
+1. Обчислити ціну продажу, яку дасть кожне правило (`ceil(base_price * threshold)`),
+ і знайти правила, діапазон яких містить цю ціну продажу (самоузгоджений збіг).
+2. Якщо самоузгоджених збігів немає — використати правило, діапазон якого 
+містить вихідну базову ціну (для обробки крайових випадків біля меж діапазонів).
+3. Повернути `None`, якщо не підійшло жодне правило → тоді викликаючий 
+код використовує ринкове значення за замовчуванням.
+
     """
     rules_tuple = tuple(rules)
     if not rules_tuple:

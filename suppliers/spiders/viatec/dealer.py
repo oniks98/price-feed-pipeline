@@ -725,9 +725,19 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         wholesale_idx = self._field_index(self.old_headers, "Оптова_ціна")
         url_idx = self._field_index(self.old_headers, "Продукт_на_сайті")
 
+        retail_source_idx = self._field_index(self.old_headers, "Мінімальний_обсяг_замовлення")
+        supplier_retail = ViatecPriceService.to_decimal(price_rrp_uah, Decimal("0"))
+        supplier_retail_formatted = (
+            ViatecPriceService.format_price(supplier_retail)
+            if supplier_retail > 0
+            else ""
+        )
+
         rows: list[list[str]] = []
         for old_row in old_entry.get("rows", []):
             row = self._ensure_row_len(old_row.copy(), len(self.old_headers))
+            if retail_source_idx != -1 and supplier_retail_formatted:
+                row[retail_source_idx] = supplier_retail_formatted
             old_wholesale = row[wholesale_idx] if wholesale_idx != -1 else ""
             if price_idx != -1 and wholesale_idx != -1:
                 channel_config = self._channel_config_for_fast_row(row, identifier_idx, category_url)

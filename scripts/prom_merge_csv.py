@@ -37,6 +37,10 @@ OUTPUT_FILE = BASE_PATH / "data" / "merged.csv"
 
 # Еталонний заголовок з єдиного джерела правди — має збігатися з PROM_CSV_SPECS_LIMIT з pipelines.py
 CANONICAL_HEADERS: List[str] = PromCsvSchema.get_header(specs_limit=PROM_CSV_SPECS_LIMIT)
+INTERNAL_COLUMNS_TO_CLEAR: Tuple[str, ...] = (
+    "Оптова_ціна",
+    "Мінімальний_обсяг_замовлення",
+)
 
 
 def read_import_csv(supplier: str) -> Tuple[List[str], List[List[str]]]:
@@ -100,16 +104,18 @@ def merge() -> None:
         print("\n❌ Немає даних для злиття — жоден файл не знайдено")
         sys.exit(1)
 
-    # Очищення Оптова_ціна: цей стовпець не повинен потрапляти в merged.csv
-    # (оптова ціна — внутрішній атрибут, не для публічного імпорту)
-    try:
-        wholesale_idx = CANONICAL_HEADERS.index("Оптова_ціна")
+    # Очищення внутрішніх колонок: вони потрібні pipeline/feed generators,
+    # але не повинні потрапляти в публічний import для Prom.
+    for column_name in INTERNAL_COLUMNS_TO_CLEAR:
+        try:
+            column_idx = CANONICAL_HEADERS.index(column_name)
+        except ValueError:
+            continue  # колонки немає в схемі — нічого не робимо
+
         for row in all_rows:
-            if wholesale_idx < len(row):
-                row[wholesale_idx] = ""
-        print(f"  🧹 Очищено колонку 'Оптова_ціна' (індекс {wholesale_idx}) у {len(all_rows)} рядках")
-    except ValueError:
-        pass  # колонки немає в схемі — нічого не робимо
+            if column_idx < len(row):
+                row[column_idx] = ""
+        print(f"  🧹 Очищено колонку '{column_name}' (індекс {column_idx}) у {len(all_rows)} рядках")
 
     # Записуємо merged.csv з канонічним заголовком
     # utf-8 без BOM — Пром вимагає UTF-8 без BOM для коректного імпорту
