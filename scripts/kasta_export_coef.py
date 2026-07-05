@@ -8,8 +8,18 @@ kasta_export_coef.py
 Алгоритм:
   1. З маппінгу читаємо prom_category_id → ключі зіставлення (Приналежність, Група, Вид)
   2. З таблиці роялті збираємо правила цінових діапазонів [price_from, price_to) → royalty_percent
-  3. Для кожного збігу обчислюємо coef = calc_coef(royalty_percent)  # services/market_formula_coef.py
-  4. Вивід містить правила діапазонів, а не один максимальний коефіцієнт на категорію
+  3. Для кожного збігу обчислюємо threshold = calc_coef(royalty_percent)  # services/market_formula_coef.py
+     (threshold — множник дилерської ціни; узгоджено з prom/epicenter/rozetka)
+  4. Вивід містить правила діапазонів, а не один максимальний threshold на категорію
+  5. Стовпці coef / coef_viatec / coef_secur / coef_lp — вручні, цим скриптом НЕ
+     обчислюються — лише додаються до OUTPUT_FIELDS. Нові рядки отримують порожні
+     значення (не "1" і не будь-який інший дефолт) — порожній coef/coef_{supplier}
+     при заповненому threshold це свідома критична відсутність ручного
+     коефіцієнта (missing_manual_coef в pricing_rules/kasta.py::apply_prices).
+     Вже заповнені вручну значення (включно coef_viatec/secur/lp) зберігаються
+     ідемпотентно через services/coef_export_service.py::read_manual_overrides за ключем
+     (prom_category_id, price_from, price_to) — раніше coef_viatec/secur/lp взагалі
+     втрачалися на кожному запуску, бо їх не було в OUTPUT_FIELDS — виправлено.
 
 Зіставлення відбувається за спільними заголовками обох файлів: Приналежність, Група, Вид.
 
@@ -31,6 +41,7 @@ from pathlib import Path
 
 import openpyxl
 
+from services.coef_export_service import SUPPLIER_COEF_FIELDS, read_manual_overrides
 from services.market_formula_coef import calc_coef
 
 warnings.filterwarnings(
@@ -67,10 +78,19 @@ OUTPUT_FIELDS = [
     "royalty_percent",
     "price_from",
     "price_to",
-    "coef",
+    "threshold",            # множник дилерської ціни: calc_coef(royalty_percent)
     "coef_uncategorized",  # J — є оптова ціна, але немає правила для категорії
     "coef_no_base",         # K — немає оптової ціни → базою стає ціна з XML-фіду
+    "coef_viatec",          # ручний коефіцієнт діапазону для viatec — зберігається ідемпотентно
+    "coef_secur",           # ручний коефіцієнт діапазону для secur — зберігається ідемпотентно
+    "coef_lp",              # ручний коефіцієнт діапазону для lp — зберігається ідемпотентно
+    "coef",                 # множник роздрібної ціни — застарілий, цим скриптом НЕ відновлюється (буде порожнім у кожному новому рядку)
 ]
+
+# Усі вручні стовпці постачальників, що повинні переживати повторні запуски скрипта (ідемпотентно).
+# Єдине джерело правди — SUPPLIER_COEF_FIELDS (services/coef_export_service.py).
+# "coef" (загальний множник роздрібної ціни) більше НЕ відновлюється цим скриптом —
+# тепер єдина джерело правди для всіх маркетплейсів — coef_viatec/secur/lp.
 
 OUTPUT_MAPPING_FIELDS = [
     "Приналежність*:6",
@@ -243,6 +263,7 @@ def read_existing_defaults(path: Path) -> tuple[Decimal, Decimal]:
     )
 
 
+
 def load_mappings(
     rows: list[tuple],
     dimensions: list[str],
@@ -348,6 +369,7 @@ def build_output_rows(
     dimensions: list[str],
     default_coef: Decimal,
     no_base_coef: Decimal,
+    manual_overrides: dict[tuple[str, ...], dict[str, str]],
 ) -> tuple[list[dict[str, str]], int, int, int]:
     rows: list[dict[str, str]] = []
     rows.append({field: "" for field in OUTPUT_FIELDS})
@@ -373,10 +395,14 @@ def build_output_rows(
         matched_categories += 1
         for rule in rules:
             try:
-                coef = calc_coef(rule.royalty_percent)
+                threshold = calc_coef(rule.royalty_percent)
             except ValueError as exc:
                 log.warning("category_id=%s: %s, skipped", mapping.category_id, exc)
                 continue
+
+            price_from_str = format_decimal(rule.price_from)
+            price_to_str   = format_decimal(rule.price_to)
+            override_key   = (mapping.category_id, price_from_str, price_to_str)
 
             output_row = {field: "" for field in OUTPUT_FIELDS}
             output_row.update(
@@ -384,13 +410,17 @@ def build_output_rows(
                     "prom_category_id": mapping.category_id,
                     "prom_category_name": mapping.category_name,
                     "royalty_percent": format_decimal(rule.royalty_percent),
-                    "price_from": format_decimal(rule.price_from),
-                    "price_to": format_decimal(rule.price_to),
-                    "coef": format_decimal(coef),
+                    "price_from": price_from_str,
+                    "price_to": price_to_str,
+                    "threshold": format_decimal(threshold),
                 }
             )
             for field in OUTPUT_MAPPING_FIELDS:
                 output_row[field] = mapping.output_values.get(field, "")
+
+            # Ні в якому випадку НЕ підставляється числовий дефолт: порожні coef/coef_{supplier}
+            # при заповненому threshold — ознака для apply_prices, що коефіцієнт ще не перевірено вручну.
+            output_row.update(manual_overrides.get(override_key, {}))
 
             rows.append(output_row)
             generated_rules += 1
@@ -460,6 +490,11 @@ def main() -> None:
     log.info("matching dimensions: %s", ", ".join(dimensions))
 
     default_coef, no_base_coef = read_existing_defaults(OUTPUT_CSV_PATH)
+    manual_overrides = read_manual_overrides(
+        OUTPUT_CSV_PATH,
+        key_fields=("prom_category_id", "price_from", "price_to"),
+        preserve_fields=SUPPLIER_COEF_FIELDS,
+    )
     mappings = load_mappings(mapping_rows, dimensions, mapping_headers)
     royalty_index = load_royalty_index(royalty_rows, dimensions, royalty_headers)
 
@@ -469,6 +504,7 @@ def main() -> None:
         dimensions,
         default_coef,
         no_base_coef,
+        manual_overrides,
     )
     write_csv(OUTPUT_CSV_PATH, rows)
 

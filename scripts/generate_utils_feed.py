@@ -18,6 +18,8 @@ from pathlib import Path
 import requests
 from requests.exceptions import ChunkedEncodingError, ConnectionError as RequestsConnectionError
 
+from services.pricing_rules import ArticlePrices
+
 # ---------------------------------------------------------------------------
 # Public config — змінюйте тут при додаванні нових постачальників
 # ---------------------------------------------------------------------------
@@ -34,7 +36,8 @@ WHOLESALE_SUPPLIERS: list[str] = ["viatec", "secur", "lp"]
 # Назви стовпців у Prom.ua-форматному CSV (роздільник ';')
 _COL_CODE: str = "Код_товару"             # відповідає <article> у XML
 _COL_IDENTIFIER: str = "Ідентифікатор_товару"
-_COL_WHOLESALE: str = "Оптова_ціна"
+_COL_RETAIL: str = "Ціна"                  # РРЦ постачальника (retail, ArticlePrices.retail)
+_COL_WHOLESALE: str = "Оптова_ціна"        # дилерська ціна (dealer, ArticlePrices.dealer)
 _PROM_ID_PREFIX: str = "prom_"
 
 DEFAULT_VENDOR: str = "Anker"
@@ -160,21 +163,29 @@ def _detect_csv_encoding(path: Path) -> str:
     return "utf-8-sig"
 
 
-def load_wholesale_price_index(root: Path) -> dict[str, Decimal]:
+def load_article_price_index(root: Path) -> dict[str, ArticlePrices]:
     """
-    Будує {Код_товару: Оптова_ціна} з усіх supplier *_old.csv файлів
-    (визначених у WHOLESALE_SUPPLIERS).
+    Будує {Код_товару: ArticlePrices(retail, dealer, supplier)} з усіх supplier
+    *_old.csv файлів (визначених у WHOLESALE_SUPPLIERS).
+
+    ArticlePrices несе одразу три речі, потрібні pricing_rules/*.py:
+      - dealer   — Оптова_ціна (нижня межа ціни каналу, resolve_channel_price)
+      - retail   — Ціна постачальника (верхня частина формули, retail * coef)
+      - supplier — джерело рядка ("viatec"/"secur"/"lp") — обирає coef_{supplier}
+                   з SupplierCoefficients (per-supplier коефіцієнти у market_pricing).
 
     Правило вибору рядка:
       - Серед рядків з однаковим Код_товару беремо той,
         де Ідентифікатор_товару НЕ починається з 'prom_'.
       - Рядки з порожньою або нульовою Оптова_ціна пропускаємо.
+      - Відсутня/некоректна Ціна (retail) не блокує рядок — retail=0
+        (resolve_channel_price() має fallback: dealer * threshold).
 
     Повертає порожній dict, якщо файли відсутні (GitHub Actions:
     гілка data-latest не була відновлена) — market_pricing автоматично
     використає ціну з XML-фіду.
     """
-    index: dict[str, Decimal] = {}
+    index: dict[str, ArticlePrices] = {}
 
     for supplier in WHOLESALE_SUPPLIERS:
         csv_path = root / "data" / supplier / f"{supplier}_old.csv"
@@ -194,20 +205,32 @@ def load_wholesale_price_index(root: Path) -> dict[str, Decimal]:
             for row in csv.DictReader(f, delimiter=delimiter):
                 code = (row.get(_COL_CODE) or "").strip()
                 identifier = (row.get(_COL_IDENTIFIER) or "").strip()
-                raw_price = (row.get(_COL_WHOLESALE) or "").strip().replace(",", ".")
+                raw_dealer = (row.get(_COL_WHOLESALE) or "").strip().replace(",", ".")
 
-                # Пропускаємо: немає коду, або prom_-ідентифікатор, або немає ціни
-                if not code or identifier.startswith(_PROM_ID_PREFIX) or not raw_price:
+                # Пропускаємо: немає коду, або prom_-ідентифікатор, або немає дилерської ціни
+                if not code or identifier.startswith(_PROM_ID_PREFIX) or not raw_dealer:
                     continue
 
                 try:
-                    price = Decimal(raw_price)
+                    dealer_price = Decimal(raw_dealer)
                 except Exception:
                     continue
 
-                if price > 0:
-                    index[code] = price
-                    loaded += 1
+                if dealer_price <= 0:
+                    continue
+
+                raw_retail = (row.get(_COL_RETAIL) or "").strip().replace(",", ".")
+                try:
+                    retail_price = Decimal(raw_retail) if raw_retail else Decimal("0")
+                except Exception:
+                    retail_price = Decimal("0")
+
+                index[code] = ArticlePrices(
+                    retail=retail_price,
+                    dealer=dealer_price,
+                    supplier=supplier,
+                )
+                loaded += 1
 
         print(f"📦 {csv_path.name}: {loaded} оптових цін завантажено")
 

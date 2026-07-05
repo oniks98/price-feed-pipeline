@@ -1,4 +1,4 @@
-"""
+r"""
 Скрипт  : python scripts/epicenter_export_royalty.py
 Джерела :
     - Комісії    : https://admin.epicentrm.com.ua/public/commissions  (Angular SPA)
@@ -345,15 +345,21 @@ def _level(node_div) -> int:
     return 0
 
 
+def _is_leaf(node_div) -> bool:
+    """True якщо вузол не має дочірніх категорій (немає стрілки розгортання)."""
+    return "tree-node-leaf" in (node_div.get("class") or [])
+
+
 # ---------------------------------------------------------------------------
 # Проміжний результат парсингу (до визначення ID)
 # ---------------------------------------------------------------------------
 
 @dataclass(slots=True)
 class _ParsedNode:
-    name  : str
-    pct   : str
-    level : int
+    name    : str
+    pct     : str
+    level   : int
+    is_leaf : bool   # True якщо вузол не має дочірніх категорій (CSS-клас tree-node-leaf)
 
 
 def _iter_parsed_nodes(html: str) -> Iterator[_ParsedNode]:
@@ -377,7 +383,7 @@ def _iter_parsed_nodes(html: str) -> Iterator[_ParsedNode]:
         if not name:
             skipped += 1
             continue
-        yield _ParsedNode(name=name, pct=_commission_text(div), level=_level(div))
+        yield _ParsedNode(name=name, pct=_commission_text(div), level=_level(div), is_leaf=_is_leaf(div))
 
     if skipped:
         log.debug("DOM: пропущено %d div без заголовку", skipped)
@@ -399,6 +405,7 @@ def build_rows(html: str, id_map: dict[str, str]) -> list[CategoryRow]:
     rows: list[CategoryRow] = []
     parent_stack: list[tuple[int, str]] = []   # (рівень, cat_id або "")
     skipped_root = 0
+    skipped_leaf = 0
 
     for node in _iter_parsed_nodes(html):
         key    = _normalize(node.name)
@@ -411,9 +418,18 @@ def build_rows(html: str, id_map: dict[str, str]) -> list[CategoryRow]:
         parent_code = parent_stack[-1][1] if parent_stack else ""
         parent_stack.append((node.level, cat_id))
 
-        # Кореневі/проміжні вузли — не пишемо у файл
         if not cat_id:
-            skipped_root += 1
+            if node.is_leaf:
+                # Листова категорія без ID — це реальна прогалина в мапінгу,
+                # а не очікуваний пропуск кореневого/проміжного вузла.
+                skipped_leaf += 1
+                log.warning(
+                    "Лист без ID у Google Sheet: %r (рівень %d) — "
+                    "перевірте стовпець G ('Категорія останнього рівня')",
+                    node.name, node.level,
+                )
+            else:
+                skipped_root += 1  # проміжна/коренева категорія — відкидається за задумом
             continue
 
         rows.append(CategoryRow(
@@ -424,9 +440,9 @@ def build_rows(html: str, id_map: dict[str, str]) -> list[CategoryRow]:
         ))
 
     log.info(
-        "Побудовано %d рядків | відкинуто кореневих/проміжних: %d",
-        len(rows),
-        skipped_root,
+        "Побудовано %d рядків | відкинуто проміжних/кореневих: %d | "
+        "ЛИСТІВ без ID (потребують уваги): %d",
+        len(rows), skipped_root, skipped_leaf,
     )
     return rows
 

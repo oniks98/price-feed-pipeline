@@ -1,16 +1,17 @@
 """
 Shared primitives for market-specific pricing modules.
 
-Each market module (kasta.py, rozetka.py, …) imports from here.
+Each market module (kasta.py, rozetka.py, epicenter.py) imports from here.
 Nothing in this file is market-specific.
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_CEILING
-from typing import Iterable
+from typing import Final, Iterable
 
 
 # ---------------------------------------------------------------------------
@@ -18,14 +19,116 @@ from typing import Iterable
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
+class ArticlePrices:
+    """
+    Роздрібна (retail) і оптова/дилерська (dealer) ціна постачальника для одного артикулу,
+    разом з ідентифікатором постачальника (потрібен щоб обрати правильний coef_{supplier}
+    з SupplierCoefficients — див. нижче).
+
+    Джерело: стовпці «Ціна» (retail) і «Оптова_ціна» (dealer) у {supplier}_old.csv
+    (generate_utils_feed.py::load_article_price_index).
+
+    retail   — РРЦ постачальника (може бути 0, якщо постачальник її не вказав).
+    dealer   — дилерська/оптова ціна (завжди > 0 — рядки без неї не потрапляють в індекс).
+    supplier — постачальник ("viatec" / "secur" / "lp"), визначається файлом-джерелом
+               рядка. Код_товару унікальний для кожного постачальника (діапазони не
+               перетинаються — suppliers/constants.py::SUPPLIER_CODE_RANGES), тому
+               конфліктів між постачальниками для одного коду не буває.
+    """
+
+    retail: Decimal
+    dealer: Decimal
+    supplier: str
+
+
+# ---------------------------------------------------------------------------
+# Per-supplier manual coefficients (coef_viatec / coef_secur / coef_lp)
+# ---------------------------------------------------------------------------
+
+SUPPLIERS: Final[tuple[str, ...]] = ("viatec", "secur", "lp")
+
+_COEF_COLUMNS: Final[dict[str, str]] = {
+    "viatec": "coef_viatec",
+    "secur": "coef_secur",
+    "lp": "coef_lp",
+}
+
+
+@dataclass(frozen=True)
+class SupplierCoefficients:
+    """
+    Ручний коефіцієнт coef, окремо для кожного постачальника (viatec/secur/lp).
+
+    Джерело: стовпці coef_viatec / coef_secur / coef_lp у {market}_coefficients.csv
+    (замінюють колишню єдину колонку coef).
+
+    None для конкретного постачальника → ще не заповнено вручну в CSV для цього
+    правила + цього постачальника. Використання такого поєднання для розрахунку
+    ціни офера цього постачальника — критична помилка (перевіряється у apply_prices
+    кожного market-модуля, відповідно до article_prices.supplier).
+    """
+
+    viatec: Decimal | None
+    secur: Decimal | None
+    lp: Decimal | None
+
+    def get(self, supplier: str) -> Decimal | None:
+        """Повертає coef для конкретного постачальника ("viatec"/"secur"/"lp")."""
+        if supplier not in SUPPLIERS:
+            raise ValueError(f"Unknown supplier: {supplier!r}. Expected one of {SUPPLIERS}")
+        return getattr(self, supplier)
+
+    @property
+    def filled_suppliers(self) -> tuple[str, ...]:
+        """Постачальники, для яких coef вже заповнено вручну."""
+        return tuple(s for s in SUPPLIERS if getattr(self, s) is not None)
+
+
+def parse_supplier_coefficients(row: dict[str, str], *, context: str = "") -> SupplierCoefficients:
+    """
+    Читає coef_viatec / coef_secur / coef_lp з рядка CSV (csv.DictReader).
+
+    Некоректне значення (не парситься як Decimal) трактується як незаповнене,
+    з попередженням у консоль (context — короткий опис рядка для повідомлення,
+    напр. "Kasta: category=518").
+    """
+    values: dict[str, Decimal | None] = {}
+    for supplier, column in _COEF_COLUMNS.items():
+        raw = (row.get(column) or "").strip()
+        value: Decimal | None = None
+        if raw:
+            try:
+                value = parse_decimal(raw)
+            except InvalidOperation:
+                print(
+                    f"⚠️  {context}: некоректний {column}={raw!r} — трактується як незаповнений"
+                )
+        values[supplier] = value
+    return SupplierCoefficients(**values)
+
+
+@dataclass(frozen=True)
 class PriceRule:
-    """Single price bracket: [price_from, price_to) → coefficient."""
+    """
+    Одне цінове правило-діапазон: [price_from, price_to) для категорії.
+
+    threshold — авторахований коефіцієнт з формули роялті (market_formula_coef.py).
+                Використовується (а) для самоузгодженого вибору діапазону
+                (rule_sort_key/select_rule) і (б) як нижня межа ціни каналу
+                у resolve_channel_price.
+    coef      — РУЧНІ коефіцієнти окремо для кожного постачальника
+                (SupplierCoefficients). Конкретне значення для офера обирається
+                через coef.get(article_prices.supplier). None для потрібного
+                постачальника — використання такого правила для розрахунку ціни
+                офера цього постачальника є критичною помилкою (пор. apply_prices).
+    """
 
     category_id: str
     price_from: Decimal
     price_to: Decimal
     royalty_percent: Decimal
-    coefficient: Decimal
+    threshold: Decimal
+    coef: SupplierCoefficients
 
     def contains(self, price: Decimal) -> bool:
         return self.price_from <= price < self.price_to
@@ -41,6 +144,8 @@ class PricingStats:
     converted_prices: int = 0
     category_rules: int = 0
     no_category_rules: int = 0
+    missing_manual_coef: int = 0
+    price_exceptions: int = 0   # непередбачені винятки в replace_price — див. apply_prices
 
 
 # ---------------------------------------------------------------------------
@@ -91,11 +196,15 @@ def rule_sort_key(rule: PriceRule) -> tuple[Decimal, Decimal, Decimal]:
 
 def select_rule(rules: Iterable[PriceRule], base_price: Decimal) -> PriceRule | None:
     """
-    Pick the best PriceRule for a given base price.
+    Pick the best PriceRule for a given base price (dealer/wholesale price).
+
+    Bracket selection is driven ENTIRELY by `threshold` (unaffected by whether
+    the manual `coef` has been filled in) — this preserves the exact bracket
+    boundaries that were in place before the coef/threshold split.
 
     Strategy:
-    1. Compute the sale price each rule would produce and find rules whose
-       bracket contains that sale price (self-consistent match).
+    1. Compute the sale price each rule would produce (ceil(base_price * threshold))
+       and find rules whose bracket contains that sale price (self-consistent match).
     2. If none self-consistent, fall back to the rule whose bracket contains
        the raw base price (handles edge cases near bracket boundaries).
     3. Return None if no rule matches at all → caller uses the market default.
@@ -106,7 +215,7 @@ def select_rule(rules: Iterable[PriceRule], base_price: Decimal) -> PriceRule | 
 
     sale_price_matches: list[PriceRule] = []
     for rule in rules_tuple:
-        sale_price = ceil_uah(base_price * rule.coefficient)
+        sale_price = ceil_uah(base_price * rule.threshold)
         if rule.contains(sale_price):
             sale_price_matches.append(rule)
 
@@ -118,3 +227,50 @@ def select_rule(rules: Iterable[PriceRule], base_price: Decimal) -> PriceRule | 
             return rule
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# Channel price formula
+# ---------------------------------------------------------------------------
+
+def resolve_channel_price(
+    retail: Decimal,
+    dealer: Decimal,
+    coef: Decimal,
+    threshold: Decimal,
+    *,
+    logger: logging.Logger | None = None,
+    product_name: str = "",
+) -> Decimal:
+    """
+    Ціна каналу маркетплейсу — формула, ІДЕНТИЧНА
+    suppliers/services/dealer_price_service.py::DealerPriceService.channel_price.
+
+    Дублюється тут навмисно, а не імпортується: scripts/ і suppliers/ — окремі
+    точки входу (їх скрипти запускаються з різним sys.path[0]), тому прямий
+    імпорт між пакетами був би неявним і крихким (працював би лише випадково,
+    залежно від CWD/PYTHONPATH). Будь-яка зміна формули має синхронно
+    повторюватись в обох місцях.
+
+    Формула:
+        X    = retail / dealer * coef
+        Ціна = dealer * X          якщо X > threshold  (= retail * coef)
+        Ціна = dealer * threshold  якщо X <= threshold
+        Еквівалентно: Ціна = max(retail * coef, dealer * threshold)
+
+    Особливий випадок (помилка постачальника): retail < dealer → swap + warning.
+    Fallback: retail <= 0 або dealer <= 0 → Ціна = dealer * threshold.
+    """
+    if retail <= 0 or dealer <= 0:
+        return dealer * threshold
+
+    if retail < dealer:
+        if logger is not None:
+            logger.warning(
+                "retail < dealer — постачальник переплутав ціни: "
+                "retail=%s dealer=%s | %s",
+                retail, dealer, product_name or "—",
+            )
+        retail, dealer = dealer, retail
+
+    return max(retail * coef, dealer * threshold)

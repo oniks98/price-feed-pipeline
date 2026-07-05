@@ -33,7 +33,7 @@ from generate_utils_feed import (
     fetch_xml,
     fill_missing_vendor,
     filter_unavailable_offers,
-    load_wholesale_price_index,
+    load_article_price_index,
     normalize_vendor_language,
     parse_currency_rates,
 )
@@ -284,9 +284,9 @@ def main() -> None:
     currency_rates = parse_currency_rates(xml)
     updated_xml = filter_unavailable_offers(xml)
 
-    wholesale_index = load_wholesale_price_index(ROOT)
+    price_index = load_article_price_index(ROOT)
 
-    updated_xml = apply_market_prices(MARKET, updated_xml, wholesale_index, currency_rates)
+    updated_xml = apply_market_prices(MARKET, updated_xml, price_index, currency_rates)
     updated_xml = fill_missing_vendor(updated_xml)
     updated_xml = normalize_vendor_language(updated_xml)  # "Без бренда" → "Без бренду"
     updated_xml = filter_stop_brand_offers(updated_xml)

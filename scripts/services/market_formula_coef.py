@@ -21,7 +21,7 @@ from decimal import Decimal, ROUND_HALF_UP
 # ─── Константи формули ───────────────────────────────────────────────────────
 
 FORMULA_NUMERATOR: Decimal = Decimal("110")
-PLATFORM_FEE_PERCENT: Decimal = Decimal("8.5")
+PLATFORM_FEE_PERCENT: Decimal = Decimal("2")
 
 
 # ─── Спільна формула ─────────────────────────────────────────────────────────

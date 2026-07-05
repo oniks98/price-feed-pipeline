@@ -13,6 +13,19 @@ rozetka_export_coef.py
   5. Немає → піднімаємось ще на рівень вгору, і так далі.
   6. Якщо жоден рівень ієрархії не знайдено → warning, запис пропускається.
 
+Стовпець threshold (раніше — coef) — множник дилерської ціни: calc_coef(royalty_percent),
+узгоджено з prom/epicenter/kasta. Стовпці coef / coef_viatec / coef_secur / coef_lp —
+вручні, цим скриптом НЕ обчислюються — лише додаються до OUTPUT_FIELDS. Нові рядки
+отримують порожні значення (не "1" і не будь-який інший дефолт) — порожній
+coef/coef_{supplier} при заповненому threshold це свідома критична відсутність ручного
+коефіцієнта (missing_manual_coef в pricing_rules/rozetka.py::apply_prices). Вже заповнені
+вручну значення coef_viatec/secur/lp зберігаються ідемпотентно через
+services/coef_export_service.py::read_manual_overrides за ключем (prom_category_id, brand,
+price_from, price_to) — раніше coef_viatec/secur/lp взагалі втрачалися на кожному
+запуску, бо їх не було в OUTPUT_FIELDS — виправлено. "coef" (застарілий загальний
+множник роздрібної ціни) цим відновленням НЕ охоплюється — узгоджено з kasta/epicenter,
+лишається порожнім у кожному новому рядку.
+
 Заповнення першого діапазону (Rozetka rule):
   Якщо знайдені правила НЕ мають рядка «-» (ставка для всіх цін) і мінімальна
   ціна правил > 0 → для діапазону [0, min_price_from-1] застосовується ставка
@@ -44,6 +57,7 @@ from pathlib import Path
 
 import openpyxl
 
+from services.coef_export_service import SUPPLIER_COEF_FIELDS, read_manual_overrides
 from services.market_formula_coef import calc_coef
 
 warnings.filterwarnings(
@@ -84,10 +98,19 @@ OUTPUT_FIELDS = [
     "royalty_percent",
     "price_from",
     "price_to",
-    "coef",
+    "threshold",           # множник дилерської ціни: calc_coef(royalty_percent)
     "coef_uncategorized",
     "coef_no_base",
+    "coef_viatec",         # ручний коефіцієнт правила для viatec — зберігається ідемпотентно
+    "coef_secur",          # ручний коефіцієнт правила для secur — зберігається ідемпотентно
+    "coef_lp",             # ручний коефіцієнт правила для lp — зберігається ідемпотентно
+    "coef",                # множник роздрібної ціни — застарілий, цим скриптом НЕ відновлюється (буде порожнім у кожному новому рядку)
 ]
+
+# Усі вручні стовпці постачальників, що повинні переживати повторні запуски скрипта (ідемпотентно).
+# Єдине джерело правди — SUPPLIER_COEF_FIELDS (services/coef_export_service.py).
+# "coef" (загальний множник роздрібної ціни) більше НЕ відновлюється цим скриптом —
+# єдине джерело правди для всіх маркетплейсів (epicenter/kasta/rozetka) — coef_viatec/secur/lp.
 
 # Назви стовпців у «Маппінг» (після normalize_header)
 _COL_PROM_ID   = "prom_category_id"
@@ -696,7 +719,7 @@ def resolve_match_rules(
                 matched_name    = fill_cat_name,
                 match_level_str = f"gap:{match.matched_id}",
             ))
-            log.info(
+            log.debug(
                 "gap_fill: cat=%s (%s) | gap [0-%s] → %s%% з батьківської %s (%s)",
                 match.matched_id, match.matched_name,
                 format_decimal(gap_price_to),
@@ -764,17 +787,19 @@ def read_existing_defaults(path: Path) -> tuple[Decimal, Decimal]:
     )
 
 
+
 # ---------------------------------------------------------------------------
 # Build output rows
 # ---------------------------------------------------------------------------
 
 
 def build_output_rows(
-    mappings:      list[MappingEntry],
-    category_tree: dict[str, RozetkaCategory],
-    royalty_index: dict[str, list[RoyaltyRule]],
-    default_coef:  Decimal,
-    no_base_coef:  Decimal,
+    mappings:         list[MappingEntry],
+    category_tree:    dict[str, RozetkaCategory],
+    royalty_index:    dict[str, list[RoyaltyRule]],
+    default_coef:     Decimal,
+    no_base_coef:     Decimal,
+    manual_overrides: dict[tuple[str, ...], dict[str, str]],
 ) -> tuple[list[dict[str, str]], int, int, int, int, int]:
     """
     Повертає (rows, matched_direct, matched_ancestor, unmatched, generated_rules, gap_fills).
@@ -812,7 +837,7 @@ def build_output_rows(
             matched_ancestor += 1
             cat = category_tree.get(entry.rozetka_id)
             full_path = cat.full_path if cat else "unknown"
-            log.info(
+            log.debug(
                 "prom_id=%s rozetka_id=%s (%s): matched via ancestor "
                 "id=%s (%s) level=%d | path: %s",
                 entry.category_id, entry.rozetka_id, entry.rozetka_name,
@@ -827,7 +852,7 @@ def build_output_rows(
             rule = resolved.rule
 
             try:
-                coef = calc_coef(rule.royalty_percent)
+                threshold = calc_coef(rule.royalty_percent)
             except ValueError as exc:
                 log.warning(
                     "prom_id=%s brand=%r range=%s-%s: %s, skipped",
@@ -838,6 +863,8 @@ def build_output_rows(
             is_gap_fill = resolved.match_level_str.startswith("gap:")
             if is_gap_fill:
                 gap_fills += 1
+
+            override_key = (entry.category_id, rule.brand, rule.price_from, rule.price_to)
 
             row: dict[str, str] = {f: "" for f in OUTPUT_FIELDS}
             row["prom_category_id"]      = entry.category_id
@@ -851,7 +878,10 @@ def build_output_rows(
             row["royalty_percent"]       = format_decimal(rule.royalty_percent)
             row["price_from"]            = rule.price_from
             row["price_to"]              = rule.price_to
-            row["coef"]                  = format_decimal(coef)
+            row["threshold"]             = format_decimal(threshold)
+            # Жодного числового дефолту: порожні coef/coef_{supplier} при заповненому threshold —
+            # ознака для apply_prices, що коефіцієнт ще не перевірено вручну.
+            row.update(manual_overrides.get(override_key, {}))
             rows.append(row)
             generated += 1
 
@@ -899,13 +929,18 @@ def main() -> None:
             sys.exit(1)
 
     default_coef, no_base_coef = read_existing_defaults(OUTPUT_CSV_PATH)
+    manual_overrides = read_manual_overrides(
+        OUTPUT_CSV_PATH,
+        key_fields=("prom_category_id", "brand", "price_from", "price_to"),
+        preserve_fields=SUPPLIER_COEF_FIELDS,
+    )
 
     mappings      = load_mappings(MAPPINGS_PATH, MAPPINGS_SHEET)
     category_tree = load_category_tree(MAPPINGS_PATH, CATEGORIES_SHEET)
     royalty_index = load_royalty_index(ROYALTY_PATH, ROYALTY_SHEET)
 
     rows, matched_direct, matched_ancestor, unmatched, generated, gap_fills = build_output_rows(
-        mappings, category_tree, royalty_index, default_coef, no_base_coef,
+        mappings, category_tree, royalty_index, default_coef, no_base_coef, manual_overrides,
     )
 
     write_csv(OUTPUT_CSV_PATH, rows)

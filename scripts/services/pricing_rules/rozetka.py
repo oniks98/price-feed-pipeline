@@ -13,9 +13,15 @@ CSV schema (semicolon-delimited, utf-8-sig):
   I  royalty_percent
   J  price_from
   K  price_to
-  L  coef
-  M  coef_uncategorized — wholesale exists, no category rule found
-  N  coef_no_base       — no wholesale price → XML price as base
+  L  threshold           — авторахований коефіцієнт з формули роялті (market_formula_coef.py)
+  M  coef_uncategorized  — wholesale exists, no category rule found
+  N  coef_no_base        — no wholesale price → XML price as base
+  O  coef_viatec         — РУЧНИЙ коефіцієнт правила для постачальника viatec.
+  P  coef_secur          — РУЧНИЙ коефіцієнт правила для постачальника secur.
+  Q  coef_lp             — РУЧНИЙ коефіцієнт правила для постачальника lp.
+                            Якщо для правила є threshold, але coef_{supplier}
+                            порожній для постачальника конкретного товару — це
+                            КРИТИЧНА помилка (пор. apply_prices).
 
 Rule priority (highest → lowest):
   1. brand matches  AND  price range matches  — brand + range
@@ -24,9 +30,17 @@ Rule priority (highest → lowest):
   4. no brand AND no price range              — category default
 
 For range tiers (1 and 3) the best candidate is chosen via sale-price
-self-consistency (same strategy as kasta.py): compute sale_price = ceil(base * coef)
+self-consistency (same strategy as kasta.py): compute sale_price = ceil(base * threshold)
 and prefer rules whose bracket contains that sale_price. Falls back to
 checking whether the bracket contains base_price directly.
+Bracket/tier selection is driven entirely by `threshold`, independent of
+whether the manual `coef` has been filled in.
+
+Ціна для офера з обраним правилом (threshold+coef знайдені) рахується за
+формулою resolve_channel_price() з _base.py:
+    Ціна = max(retail * coef, dealer * threshold)
+де dealer = Оптова_ціна постачальника, retail = Ціна постачальника
+(суплаєр *_old.csv).
 """
 
 from __future__ import annotations
@@ -41,9 +55,14 @@ from pathlib import Path
 from typing import Final
 
 from ._base import (
+    ArticlePrices,
     PricingStats,
+    SUPPLIERS,
+    SupplierCoefficients,
     ceil_uah,
     parse_decimal,
+    parse_supplier_coefficients,
+    resolve_channel_price,
     tag_text,
 )
 
@@ -76,6 +95,11 @@ class RozetkaRule:
     brand:       "" → applies to any brand.
     price_from:  Decimal("0")        → no lower bound.
     price_to:    Decimal("Infinity") → no upper bound.
+    threshold:   авторахований коефіцієнт (market_formula_coef.py) — керує вибором
+                 tier/bracket, незалежно від того чи заповнені coef_{supplier}.
+    coef:        РУЧНІ коефіцієнти окремо для кожного постачальника
+                 (SupplierCoefficients). None для конкретного постачальника →
+                 ще не заповнено вручну.
     """
 
     category_id: str
@@ -83,7 +107,8 @@ class RozetkaRule:
     price_from: Decimal
     price_to: Decimal
     royalty_percent: Decimal
-    coefficient: Decimal
+    threshold: Decimal
+    coef: SupplierCoefficients
 
     @property
     def has_brand(self) -> bool:
@@ -154,6 +179,7 @@ def _load_pricing() -> RozetkaPricingTable:
     coef_uncategorized: Decimal | None = None
     coef_no_base: Decimal | None = None
     rules_by_category: dict[str, list[RozetkaRule]] = {}
+    filled_coef_counts: dict[str, int] = {s: 0 for s in SUPPLIERS}
 
     with COEFFICIENTS_PATH.open(encoding=_CSV_ENCODING, errors="replace", newline="") as f:
         reader = csv.DictReader(f, delimiter=_CSV_DELIMITER)
@@ -170,9 +196,21 @@ def _load_pricing() -> RozetkaPricingTable:
                     coef_no_base = parse_decimal(raw)
 
             category_id = (row.get("prom_category_id") or "").strip().strip("\ufeff")
-            raw_coef = (row.get("coef") or "").strip()
-            if not category_id or not raw_coef:
+            raw_threshold = (row.get("threshold") or "").strip()
+            if not category_id or not raw_threshold:
                 continue
+
+            try:
+                threshold = parse_decimal(raw_threshold)
+            except InvalidOperation:
+                continue
+
+            coef = parse_supplier_coefficients(
+                row,
+                context=f"Rozetka: category={category_id}",
+            )
+            for supplier in coef.filled_suppliers:
+                filled_coef_counts[supplier] += 1
 
             brand = (row.get("brand") or "").strip()
 
@@ -183,7 +221,8 @@ def _load_pricing() -> RozetkaPricingTable:
                     price_from=parse_decimal(row.get("price_from"), Decimal("0")),
                     price_to=parse_decimal(row.get("price_to"), Decimal("Infinity")),
                     royalty_percent=parse_decimal(row.get("royalty_percent"), Decimal("0")),
-                    coefficient=parse_decimal(raw_coef),
+                    threshold=threshold,
+                    coef=coef,
                 )
             except InvalidOperation:
                 continue
@@ -202,9 +241,11 @@ def _load_pricing() -> RozetkaPricingTable:
 
     total = sum(len(v) for v in frozen_rules.values())
     brand_count = sum(1 for rules in frozen_rules.values() for r in rules if r.has_brand)
+    filled_str = ", ".join(f"{s}={filled_coef_counts[s]}" for s in SUPPLIERS)
     print(
         f"Rozetka pricing: loaded {total} rules "
         f"({brand_count} brand-specific, {total - brand_count} generic), "
+        f"manual coef filled: {filled_str}, "
         f"coef_uncategorized={coef_uncategorized}, coef_no_base={coef_no_base}"
     )
     return RozetkaPricingTable(coef_uncategorized, coef_no_base, frozen_rules)
@@ -222,13 +263,13 @@ def _best_range_match(
     From a list of range-bearing rules, return the best match.
 
     Preference order:
-      1. Self-consistent: bracket contains ceil(base * coef)  → smallest width wins.
+      1. Self-consistent: bracket contains ceil(base * threshold)  → smallest width wins.
       2. Fallback: bracket contains base_price               → smallest width wins.
       3. None if no bracket matches.
     """
     self_consistent = [
         r for r in candidates
-        if r.range_contains(ceil_uah(base_price * r.coefficient))
+        if r.range_contains(ceil_uah(base_price * r.threshold))
     ]
     if self_consistent:
         return min(self_consistent, key=lambda r: r.range_width)
@@ -311,7 +352,7 @@ def get_default_coefficient() -> Decimal:
 
 def apply_prices(
     xml: str,
-    wholesale_index: dict[str, Decimal],
+    price_index: dict[str, ArticlePrices],
     currency_rates: dict[str, Decimal],
 ) -> str:
     pricing = _load_pricing()
@@ -319,6 +360,7 @@ def apply_prices(
     brand_rule_hits: int = 0
     log = _build_logger()
     no_rule_offer_ids: list[str] = []
+    missing_coef_rules: dict[tuple[str, str, Decimal, Decimal, str], int] = {}
 
     def on_offer(match: re.Match) -> str:
         nonlocal brand_rule_hits
@@ -332,7 +374,7 @@ def apply_prices(
         article = tag_text(body, "article")
         vendor = (tag_text(body, "vendor") or "").strip()
         currency_id = (tag_text(body, "currencyId") or "UAH").upper()
-        wholesale_price = wholesale_index.get(article) if article else None
+        article_prices = price_index.get(article) if article else None
 
         def replace_price(price_match: re.Match) -> str:
             nonlocal brand_rule_hits
@@ -340,13 +382,16 @@ def apply_prices(
             raw_price = price_match.group(1).strip()
             try:
                 reason: str
-                if wholesale_price is not None:
-                    base_price = wholesale_price
+                new_price: Decimal | None
+
+                if article_prices is not None:
+                    dealer = article_prices.dealer
+                    retail = article_prices.retail
                     stats.wholesale_prices += 1
 
                     rule = _select_rule(
                         pricing.rules_by_category.get(category_id, ()),
-                        base_price,
+                        dealer,
                         vendor,
                     )
                     if rule is None:
@@ -354,12 +399,34 @@ def apply_prices(
                         stats.no_category_rules += 1
                         reason = "no_category_rule"
                         no_rule_offer_ids.append(offer_id)
+                        new_price = ceil_uah(dealer * coefficient)
                     else:
-                        coefficient = rule.coefficient
-                        stats.category_rules += 1
-                        if rule.has_brand:
-                            brand_rule_hits += 1
-                        reason = ""
+                        supplier = article_prices.supplier
+                        supplier_coef = rule.coef.get(supplier)
+                        if supplier_coef is None:
+                            stats.missing_manual_coef += 1
+                            key = (
+                                rule.category_id, rule.brand,
+                                rule.price_from, rule.price_to, supplier,
+                            )
+                            missing_coef_rules[key] = missing_coef_rules.get(key, 0) + 1
+                            reason = ""
+                            new_price = None
+                        else:
+                            stats.category_rules += 1
+                            if rule.has_brand:
+                                brand_rule_hits += 1
+                            reason = ""
+                            new_price = ceil_uah(
+                                resolve_channel_price(
+                                    retail=retail,
+                                    dealer=dealer,
+                                    coef=supplier_coef,
+                                    threshold=rule.threshold,
+                                    logger=log,
+                                    product_name=article or offer_id,
+                                )
+                            )
                 else:
                     base_price = parse_decimal(raw_price)
                     if currency_id != "UAH":
@@ -376,24 +443,30 @@ def apply_prices(
                     coefficient = pricing.coef_no_base
                     stats.xml_fallback_prices += 1
                     reason = "xml_fallback"
+                    new_price = ceil_uah(base_price * coefficient)
 
-                new_price = ceil_uah(base_price * coefficient)
+                if new_price is None:
+                    return price_match.group(0)
 
                 if reason:
                     log.info(
-                        "article=%-12s  offer_id=%-14s  base=%-8s  coef=%s  "
+                        "article=%-12s  offer_id=%-14s  base=%-8s  "
                         "price=%-8s  vendor=%-18s  reason=%s",
                         article or "—",
                         offer_id,
-                        base_price,
-                        coefficient,
+                        (article_prices.dealer if article_prices is not None else raw_price),
                         new_price,
                         vendor or "—",
                         reason,
                     )
 
                 return f"<price>{new_price}</price>"
-            except Exception:
+            except Exception as exc:
+                stats.price_exceptions += 1
+                log.warning(
+                    "article=%-12s  offer_id=%-14s  price не змінено (виняток): %s: %s",
+                    article or "—", offer_id, type(exc).__name__, exc,
+                )
                 return price_match.group(0)
 
         new_body = re.sub(r"<price>(.*?)</price>", replace_price, body)
@@ -417,9 +490,15 @@ def apply_prices(
         f"category_rules={stats.category_rules} (brand={brand_rule_hits}) | "
         f"xml_fallback={stats.xml_fallback_prices} | "
         f"no_category_rules={stats.no_category_rules}"
+        + (f" | missing_manual_coef={stats.missing_manual_coef}" if stats.missing_manual_coef else "")
     )
     if stats.converted_prices:
         print(f"Rozetka currency conversions: {stats.converted_prices}")
+
+    if stats.price_exceptions:
+        print(f"⚠️  Rozetka: {stats.price_exceptions} оферів з винятком при розрахунку ціни (ціна з вхідного XML залишена без змін) — деталі: {DEFAULT_LOG_PATH.name}")
+
+    errors: list[str] = []
 
     if stats.no_category_rules:
         # Prom автоматично перемістив товари у нові категорії без правил.
@@ -427,11 +506,27 @@ def apply_prices(
         # Потрібно додати правила у rozetka_coefficients.csv.
         # Деталі у rozetka_default_id.log
         ids_str = ", ".join(no_rule_offer_ids)
-        raise SystemExit(
-            f"❌ Rozetka: {stats.no_category_rules} товарів без правил категорії "
-            f"(no_category_rules). Додайте правила у rozetka_coefficients.csv. "
-            f"Деталі: rozetka_default_id.log\n"
+        errors.append(
+            f"{stats.no_category_rules} товарів без правил категорії (no_category_rules). "
+            f"Додайте правила у rozetka_coefficients.csv. Деталі: rozetka_default_id.log\n"
             f"Offer IDs: {ids_str}"
         )
+
+    if missing_coef_rules:
+        details = "\n".join(
+            f"  category_id={cat_id}  brand={brand or '—'}  "
+            f"price_from={pf}  price_to={pt}  supplier={supplier}  ({count} офферів)"
+            for (cat_id, brand, pf, pt, supplier), count in sorted(
+                missing_coef_rules.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2], kv[0][4])
+            )
+        )
+        errors.append(
+            f"{stats.missing_manual_coef} офферів мають threshold, але ручний "
+            f"coef_{{supplier}} не заповнений у rozetka_coefficients.csv. Заповніть коефіцієнт для цих "
+            f"правил/постачальників перед генерацією фіду:\n{details}"
+        )
+
+    if errors:
+        raise SystemExit("❌ Rozetka:\n\n" + "\n\n".join(errors))
 
     return updated_xml

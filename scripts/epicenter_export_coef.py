@@ -2,7 +2,7 @@
 epicenter_export_coef.py
 ────────────────────────
 Генерує рядки epicenter_coefficients.csv з листа «Маппінг»
-та заповнює coef на основі epicenter_royalty.xlsx.
+та заповнює threshold на основі epicenter_royalty.xlsx.
 
 Алгоритм:
   1. З листа «Маппінг» читаємо prom_category_id, prom_category_name,
@@ -10,9 +10,13 @@ epicenter_export_coef.py
   2. В epicenter_royalty.xlsx шукаємо збіг по стовпцю «ID категорії»
      → беремо Відсоток роялті = X
      Якщо категорію не знайдено → беремо coef_uncategorized зі рядка дефолтів
-  3. coef = calc_coef(X)  # формула в services/market_formula_coef.py
-  4. Записуємо coef у потрібний рядок CSV
+  3. threshold = calc_coef(X)  # формула в services/market_formula_coef.py
+  4. Записуємо threshold у потрібний рядок CSV
      (рядок дефолтів з порожнім prom_category_id не чіпається)
+  5. Ручні coef_viatec / coef_secur / coef_lp переносяться зі старого файлу
+     без змін (services/coef_export_service.py) — скрипт перебудовує рядки
+     з мапінгу при кожному запуску, тому без цього кроку вручну введені
+     коефіцієнти постачальників губилися б на кожному наступному запуску.
 
 Запуск:
     python scripts/epicenter_export_coef.py
@@ -30,6 +34,7 @@ from typing import Optional
 
 import openpyxl
 
+from services.coef_export_service import SUPPLIER_COEF_FIELDS, read_manual_overrides
 from services.market_formula_coef import calc_coef
 
 # ─────────────────────────────── config ───────────────────────────────────────
@@ -52,7 +57,7 @@ ROYALTY_COL_PERCENT     = "Відсоток роялті"
 
 CSV_COL_CAT_ID             = "prom_category_id"
 CSV_COL_CAT_NAME           = "prom_category_name"
-CSV_COL_COEF               = "coef"
+CSV_COL_THRESHOLD          = "threshold"           # авторахований коефіцієнт (було "coef" — колонку перейменували)
 CSV_COL_COEF_UNCATEGORIZED = "coef_uncategorized"  # джерело fallback-значення
 
 CSV_DELIMITER = ";"
@@ -214,11 +219,15 @@ def process_csv(
     fallback_coef: str | None,
 ) -> tuple[int, int]:
     """
-    Генерує рядки CSV з маппінгу та заповнює coef, перезаписує файл.
+    Генерує рядки CSV з маппінгу та заповнює threshold, перезаписує файл.
 
-    Правила для coef:
+    Правила для threshold:
       - знайдено в royalty       → обчислюємо через calc_coef()
       - не знайдено в royalty    → fallback з coef_uncategorized рядка дефолтів
+
+    coef_viatec / coef_secur / coef_lp — вручні, цим скриптом НЕ обчислюються —
+    переносяться зі старого файлу ідемпотентно (read_manual_overrides), інакше
+    вони б губилися на кожному запуску, бо рядки перебудовуються з маппінгу з нуля.
 
     Порядок запису у файлі:
       1. Рядок дефолтів (порожній prom_category_id) — без змін
@@ -232,9 +241,17 @@ def process_csv(
 
     if not fieldnames:
         raise RuntimeError(f"CSV {csv_path} порожній або не читається")
-    for col in (CSV_COL_CAT_ID, CSV_COL_CAT_NAME, CSV_COL_COEF):
+    for col in (CSV_COL_CAT_ID, CSV_COL_CAT_NAME, CSV_COL_THRESHOLD):
         if col not in fieldnames:
             raise RuntimeError(f"Стовпець '{col}' не знайдено в {csv_path}")
+
+    # Вручні coef_viatec/coef_secur/coef_lp зі старого файлу — ключ один на категорію
+    # (таблиця Epicenter плоска — одне правило на категорію).
+    supplier_overrides = read_manual_overrides(
+        csv_path,
+        key_fields=(CSV_COL_CAT_ID,),
+        preserve_fields=SUPPLIER_COEF_FIELDS,
+    )
 
     # Зберігаємо рядок дефолтів (порожній prom_category_id)
     defaults_rows = [
@@ -251,16 +268,16 @@ def process_csv(
 
         if royalty_percent is not None:
             try:
-                coef_str = str(calc_coef(royalty_percent))
+                threshold_str = str(calc_coef(royalty_percent))
             except ValueError as exc:
                 log.error(
                     "prom_id=%d epicenter_id=%d: %s — пропускаємо",
                     prom_id, epicenter_id, exc,
                 )
                 continue
-            log.info(
-                "prom_id=%-6d  epicenter_id=%-6d  royalty=%s  coef=%s",
-                prom_id, epicenter_id, royalty_percent, coef_str,
+            log.debug(
+                "prom_id=%-6d  epicenter_id=%-6d  royalty=%s  threshold=%s",
+                prom_id, epicenter_id, royalty_percent, threshold_str,
             )
         else:
             if fallback_coef is None:
@@ -270,18 +287,19 @@ def process_csv(
                     prom_id, epicenter_id,
                 )
                 continue
-            coef_str = fallback_coef
+            threshold_str = fallback_coef
             log.warning(
                 "prom_category_id=%d -> epicenter_category_id=%d: "
                 "не знайдено в royalty → fallback coef_uncategorized=%s",
-                prom_id, epicenter_id, coef_str,
+                prom_id, epicenter_id, threshold_str,
             )
             fallback_used += 1
 
         row: dict[str, str] = {fn: "" for fn in fieldnames}
-        row[CSV_COL_CAT_ID]   = str(prom_id)
-        row[CSV_COL_CAT_NAME] = prom_name
-        row[CSV_COL_COEF]     = coef_str
+        row[CSV_COL_CAT_ID]    = str(prom_id)
+        row[CSV_COL_CAT_NAME]  = prom_name
+        row[CSV_COL_THRESHOLD] = threshold_str
+        row.update(supplier_overrides.get((str(prom_id),), {}))
         data_rows.append(row)
         updated += 1
 

@@ -14,7 +14,7 @@ prom_export_coef.py
   2. Fallback — coef_transition из строки дефолтов prom_coefficients.csv
      (строка с пустым prom_category_id, не из Google Sheets)
   3. prom_coefficients.csv:
-       ключ: prom_category_id  →  заполняем: coef_cry
+       ключ: prom_category_id  →  заполняем: threshold
   4. viatec_category.csv  (только строки channel == "prom"):
        ключ: Ідентифікатор_підрозділу  →  заполняем: threshold
   5. secur_category.csv   (только строки channel == "prom"):
@@ -68,7 +68,7 @@ SHEETS_DATA_START_ROW = 2
 
 # ── prom_coefficients.csv ──────────────────────────────────────────────────────
 PROM_COL_CAT_ID          = "prom_category_id"
-PROM_COL_COEF            = "coef_cry"         # заполняем
+PROM_COL_COEF            = "threshold"        # заполняем
 PROM_COL_COEF_TRANSITION = "coef_transition"  # источник fallback-значения
 
 # Строка дефолтов — пустой prom_category_id. Её coef_transition используется
@@ -261,7 +261,7 @@ def _resolve_coef(
         except ValueError as exc:
             log.error("%s category_id=%d: ошибка расчёта: %s — пропускаем", label, cat_id, exc)
             return None, False
-        log.info("%s category_id=%-12d  commission=%-6.2f%%  coef=%s", label, cat_id, commission, coef_str)
+        log.debug("%s category_id=%-12d  commission=%-6.2f%%  coef=%s", label, cat_id, commission, coef_str)
         return coef_str, False
 
     if fallback_coef is None:

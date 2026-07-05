@@ -2,7 +2,7 @@
 Фасад / маршрутизатор ціноутворення для конкретних майданчиків.
 
 Публічне API, яке використовують скрипти generate_*_feed.py:
-    apply_market_prices(market, xml, wholesale_index, currency_rates) -> str
+    apply_market_prices(market, xml, price_index, currency_rates) -> str
     get_market_default_coefficient(market) -> Decimal
 
 Додавання нового майданчика:
@@ -16,6 +16,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Callable, Final
 
+from .pricing_rules import ArticlePrices
 from .pricing_rules import epicenter as _epicenter
 from .pricing_rules import kasta as _kasta
 from .pricing_rules import rozetka as _rozetka
@@ -24,7 +25,7 @@ from .pricing_rules import rozetka as _rozetka
 # Реєстр — додавайте нові майданчики тут
 # ---------------------------------------------------------------------------
 
-_ApplyFn = Callable[[str, dict[str, Decimal], dict[str, Decimal]], str]
+_ApplyFn = Callable[[str, dict[str, ArticlePrices], dict[str, Decimal]], str]
 _CoefFn = Callable[[], Decimal]
 
 _APPLY_ROUTERS: Final[dict[str, _ApplyFn]] = {
@@ -53,11 +54,11 @@ def _assert_supported(market: str) -> None:
 def apply_market_prices(
     market: str,
     xml: str,
-    wholesale_index: dict[str, Decimal],
+    price_index: dict[str, ArticlePrices],
     currency_rates: dict[str, Decimal],
 ) -> str:
     _assert_supported(market)
-    return _APPLY_ROUTERS[market](xml, wholesale_index, currency_rates)
+    return _APPLY_ROUTERS[market](xml, price_index, currency_rates)
 
 
 def get_market_default_coefficient(market: str) -> Decimal:

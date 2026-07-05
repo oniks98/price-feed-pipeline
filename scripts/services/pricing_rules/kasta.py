@@ -10,9 +10,22 @@ CSV schema (semicolon-delimited, utf-8-sig):
   F  royalty_percent
   G  price_from
   H  price_to
-  I  coef
+  I  threshold           — авторахований коефіцієнт з формули роялті (market_formula_coef.py)
   J  coef_uncategorized  — wholesale price exists, but no category rule found
   K  coef_no_base        — no wholesale price → XML price used as base
+  L  coef_viatec         — РУЧНИЙ коефіцієнт діапазону для постачальника viatec.
+  M  coef_secur          — РУЧНИЙ коефіцієнт діапазону для постачальника secur.
+  N  coef_lp             — РУЧНИЙ коефіцієнт діапазону для постачальника lp.
+                            Якщо для діапазону є threshold, але coef_{supplier}
+                            порожній для постачальника конкретного товару — це
+                            КРИТИЧНА помилка (пор. apply_prices).
+
+Ціна для офера з відомим category rule (threshold+coef знайдені для
+price-бракету) рахується за формулою resolve_channel_price() з _base.py:
+    Ціна = max(retail * coef, dealer * threshold)
+де dealer = Оптова_ціна постачальника, retail = Ціна постачальника
+(суплаєр *_old.csv). Вибір price-бракету (як і раніше) — за threshold,
+незалежно від того, чи заповнений coef.
 """
 
 from __future__ import annotations
@@ -27,10 +40,15 @@ from pathlib import Path
 from typing import Final
 
 from ._base import (
+    ArticlePrices,
     PriceRule,
     PricingStats,
+    SUPPLIERS,
+    SupplierCoefficients,
     ceil_uah,
     parse_decimal,
+    parse_supplier_coefficients,
+    resolve_channel_price,
     rule_sort_key,
     select_rule,
     tag_text,
@@ -92,6 +110,7 @@ def _load_pricing() -> KastaPricingTable:
     coef_uncategorized: Decimal | None = None
     coef_no_base: Decimal | None = None
     rules_by_category: dict[str, list[PriceRule]] = {}
+    filled_coef_counts: dict[str, int] = {s: 0 for s in SUPPLIERS}
 
     with COEFFICIENTS_PATH.open(encoding=_CSV_ENCODING, errors="replace", newline="") as f:
         reader = csv.DictReader(f, delimiter=_CSV_DELIMITER)
@@ -107,9 +126,21 @@ def _load_pricing() -> KastaPricingTable:
                     coef_no_base = parse_decimal(raw)
 
             category_id = (row.get("prom_category_id") or "").strip().strip("\ufeff")
-            raw_coef = (row.get("coef") or "").strip()
-            if not category_id or not raw_coef:
+            raw_threshold = (row.get("threshold") or "").strip()
+            if not category_id or not raw_threshold:
                 continue
+
+            try:
+                threshold = parse_decimal(raw_threshold)
+            except InvalidOperation:
+                continue
+
+            coef = parse_supplier_coefficients(
+                row,
+                context=f"Kasta: category={category_id}",
+            )
+            for supplier in coef.filled_suppliers:
+                filled_coef_counts[supplier] += 1
 
             try:
                 rule = PriceRule(
@@ -117,7 +148,8 @@ def _load_pricing() -> KastaPricingTable:
                     price_from=parse_decimal(row.get("price_from"), Decimal("0")),
                     price_to=parse_decimal(row.get("price_to"), Decimal("Infinity")),
                     royalty_percent=parse_decimal(row.get("royalty_percent")),
-                    coefficient=parse_decimal(raw_coef),
+                    threshold=threshold,
+                    coef=coef,
                 )
             except InvalidOperation:
                 continue
@@ -134,8 +166,9 @@ def _load_pricing() -> KastaPricingTable:
         for cid, rules in rules_by_category.items()
     }
     total = sum(len(v) for v in frozen_rules.values())
+    filled_str = ", ".join(f"{s}={filled_coef_counts[s]}" for s in SUPPLIERS)
     print(
-        f"Kasta pricing: loaded {total} rules, "
+        f"Kasta pricing: loaded {total} rules (manual coef filled: {filled_str}), "
         f"coef_uncategorized={coef_uncategorized}, coef_no_base={coef_no_base}"
     )
     return KastaPricingTable(coef_uncategorized, coef_no_base, frozen_rules)
@@ -151,13 +184,14 @@ def get_default_coefficient() -> Decimal:
 
 def apply_prices(
     xml: str,
-    wholesale_index: dict[str, Decimal],
+    price_index: dict[str, ArticlePrices],
     currency_rates: dict[str, Decimal],
 ) -> str:
     pricing = _load_pricing()
     stats = PricingStats()
     log = _build_logger()
     no_rule_offer_ids: list[str] = []
+    missing_coef_brackets: dict[tuple[str, Decimal, Decimal, str], int] = {}
 
     def on_offer(match: re.Match) -> str:
         offer_id: str = match.group(1)
@@ -168,29 +202,51 @@ def apply_prices(
         category_id = tag_text(body, "categoryId") or ""
         article = tag_text(body, "article")
         currency_id = (tag_text(body, "currencyId") or "UAH").upper()
-        wholesale_price = wholesale_index.get(article) if article else None
+        article_prices = price_index.get(article) if article else None
 
         def replace_price(price_match: re.Match) -> str:
             raw_price = price_match.group(1).strip()
             try:
                 reason: str
-                if wholesale_price is not None:
-                    base_price = wholesale_price
+                new_price: Decimal | None
+
+                if article_prices is not None:
+                    dealer = article_prices.dealer
+                    retail = article_prices.retail
                     stats.wholesale_prices += 1
 
                     rule = select_rule(
                         pricing.rules_by_category.get(category_id, ()),
-                        base_price,
+                        dealer,
                     )
                     if rule is None:
                         coefficient = pricing.coef_uncategorized
                         stats.no_category_rules += 1
                         reason = "no_category_rule"
                         no_rule_offer_ids.append(offer_id)
+                        new_price = ceil_uah(dealer * coefficient)
                     else:
-                        coefficient = rule.coefficient
-                        stats.category_rules += 1
-                        reason = ""
+                        supplier = article_prices.supplier
+                        supplier_coef = rule.coef.get(supplier)
+                        if supplier_coef is None:
+                            stats.missing_manual_coef += 1
+                            key = (rule.category_id, rule.price_from, rule.price_to, supplier)
+                            missing_coef_brackets[key] = missing_coef_brackets.get(key, 0) + 1
+                            reason = ""
+                            new_price = None
+                        else:
+                            stats.category_rules += 1
+                            reason = ""
+                            new_price = ceil_uah(
+                                resolve_channel_price(
+                                    retail=retail,
+                                    dealer=dealer,
+                                    coef=supplier_coef,
+                                    threshold=rule.threshold,
+                                    logger=log,
+                                    product_name=article or offer_id,
+                                )
+                            )
                 else:
                     base_price = parse_decimal(raw_price)
                     if currency_id != "UAH":
@@ -207,22 +263,28 @@ def apply_prices(
                     coefficient = pricing.coef_no_base
                     stats.xml_fallback_prices += 1
                     reason = "xml_fallback"
+                    new_price = ceil_uah(base_price * coefficient)
 
-                new_price = ceil_uah(base_price * coefficient)
+                if new_price is None:
+                    return price_match.group(0)
 
                 if reason:
                     log.info(
-                        "article=%-12s  offer_id=%-14s  base=%-8s  coef=%s  price=%-8s  reason=%s",
+                        "article=%-12s  offer_id=%-14s  base=%-8s  price=%-8s  reason=%s",
                         article or "—",
                         offer_id,
-                        base_price,
-                        coefficient,
+                        (article_prices.dealer if article_prices is not None else raw_price),
                         new_price,
                         reason,
                     )
 
                 return f"<price>{new_price}</price>"
-            except Exception:
+            except Exception as exc:
+                stats.price_exceptions += 1
+                log.warning(
+                    "article=%-12s  offer_id=%-14s  price не змінено (виняток): %s: %s",
+                    article or "—", offer_id, type(exc).__name__, exc,
+                )
                 return price_match.group(0)
 
         new_body = re.sub(r"<price>(.*?)</price>", replace_price, body)
@@ -246,9 +308,14 @@ def apply_prices(
         f"category_rules={stats.category_rules} | "
         f"xml_fallback={stats.xml_fallback_prices} | "
         f"no_category_rules={stats.no_category_rules}"
+        + (f" | missing_manual_coef={stats.missing_manual_coef}" if stats.missing_manual_coef else "")
     )
     if stats.converted_prices:
         print(f"Kasta currency conversions: {stats.converted_prices}")
+    if stats.price_exceptions:
+        print(f"⚠️  Kasta: {stats.price_exceptions} оферів з винятком при розрахунку ціни (ціна з вхідного XML залишена без змін) — деталі: {DEFAULT_LOG_PATH.name}")
+
+    errors: list[str] = []
 
     if stats.no_category_rules:
         # Prom автоматично перемістив товари у нові категорії без правил.
@@ -256,11 +323,25 @@ def apply_prices(
         # Потрібно додати правила у kasta_coefficients.csv.
         # Деталі у kasta_default_id.log
         ids_str = ", ".join(no_rule_offer_ids)
-        raise SystemExit(
-            f"❌ Kasta: {stats.no_category_rules} товарів без правил категорії "
-            f"(no_category_rules). Додайте правила у kasta_coefficients.csv. "
-            f"Деталі: kasta_default_id.log\n"
+        errors.append(
+            f"{stats.no_category_rules} товарів без правил категорії (no_category_rules). "
+            f"Додайте правила у kasta_coefficients.csv. Деталі: kasta_default_id.log\n"
             f"Offer IDs: {ids_str}"
         )
+
+    if missing_coef_brackets:
+        details = "\n".join(
+            f"  category_id={cat_id}  price_from={pf}  price_to={pt}  supplier={supplier}  "
+            f"({count} офферів)"
+            for (cat_id, pf, pt, supplier), count in sorted(missing_coef_brackets.items())
+        )
+        errors.append(
+            f"{stats.missing_manual_coef} офферів мають threshold, але ручний "
+            f"coef_{{supplier}} не заповнений у kasta_coefficients.csv. Заповніть коефіцієнт для цих "
+            f"діапазонів/постачальників перед генерацією фіду:\n{details}"
+        )
+
+    if errors:
+        raise SystemExit("❌ Kasta:\n\n" + "\n\n".join(errors))
 
     return updated_xml

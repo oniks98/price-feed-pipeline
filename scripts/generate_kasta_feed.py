@@ -22,7 +22,7 @@ from generate_utils_feed import (
     fetch_xml,
     fill_missing_vendor,
     filter_unavailable_offers,
-    load_wholesale_price_index,
+    load_article_price_index,
     parse_currency_rates,
     replace_vendor_aliases,
 )
@@ -49,9 +49,9 @@ def main() -> None:
     currency_rates = parse_currency_rates(xml)
     updated_xml = filter_unavailable_offers(xml)
 
-    wholesale_index = load_wholesale_price_index(ROOT)
+    price_index = load_article_price_index(ROOT)
 
-    updated_xml = apply_market_prices(MARKET, updated_xml, wholesale_index, currency_rates)
+    updated_xml = apply_market_prices(MARKET, updated_xml, price_index, currency_rates)
     updated_xml = replace_vendor_aliases(updated_xml)
     updated_xml = fill_missing_vendor(updated_xml)
     updated_xml = add_name_ua(updated_xml)
