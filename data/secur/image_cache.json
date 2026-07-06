@@ -5283,5 +5283,25 @@
     "w": 330,
     "h": 275,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FLrCglU4HSzyOXhgepH6RtKoc9RuB58L16cfOOwvY.png&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://content.secur.ua/products/13992.jpg": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://content.secur.ua/products/UQDkV1vXq9ymdqnfDvnQvRn61ZX1aMlVLpVw5XhO.jpg": {
+    "w": 2560,
+    "h": 2560,
+    "transform_url": null
+  },
+  "https://content.secur.ua/products/CuHOoMckr27ybhcDUKgfttTJ5sWtdkeEcgulWuTL.png": {
+    "w": 2048,
+    "h": 2048,
+    "transform_url": null
+  },
+  "https://content.secur.ua/products/Kb81au7waM0fsE5DL6HY9suGH79Sos5YfLlD9qp4.png": {
+    "w": 2048,
+    "h": 2048,
+    "transform_url": null
   }
 }
