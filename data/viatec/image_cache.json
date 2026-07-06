@@ -34478,5 +34478,35 @@
     "w": 1000,
     "h": 1000,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/2/cat5evga22.webp": {
+    "w": 483,
+    "h": 483,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fcat5evga22.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/TRAS_1X_Front.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/TRAS_1X_Side.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/TIRAS_1X_Back.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-08/dc-dc-inv.webp": {
+    "w": 445,
+    "h": 445,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2024-08%2Fdc-dc-inv.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-09/profil.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
   }
 }
