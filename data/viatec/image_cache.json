@@ -34533,5 +34533,15 @@
     "w": 1000,
     "h": 1000,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-06/5/05.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-02/WMNC-35-9U-FLAT.webp": {
+    "w": 750,
+    "h": 750,
+    "transform_url": null
   }
 }
