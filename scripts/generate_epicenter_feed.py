@@ -52,6 +52,7 @@ from services.epicenter_attr_service import (
     get_category_attr_rules,
 )
 from services.epicenter_category_service import CategoryEntry, resolve_category, flush_fallback_warnings
+from services.epicenter_category_leaf_service import validate_used_categories
 from services.market_pricing import apply_market_prices
 
 # ---------------------------------------------------------------------------
@@ -879,8 +880,9 @@ def main() -> None:
     updated_xml = fill_missing_vendor(updated_xml)
     updated_xml = filter_stop_brand_offers(updated_xml)
     updated_xml = add_name_ua(updated_xml)
-    updated_xml, _used_entries = inject_epicenter_attrs(updated_xml)
+    updated_xml, used_entries = inject_epicenter_attrs(updated_xml)
     flush_fallback_warnings()  # зведений лог fallback-промахів категорій
+    validate_used_categories(entry["code"] for entry in used_entries)  # логує non-leaf/deleted/unknown code, не блокує генерацію
     updated_xml = normalize_name_description_tags(updated_xml)   # після inject: description вже оновлено
     updated_xml = strip_prom_offer_fields(updated_xml)           # після fill_missing_vendor
     updated_xml = sanitize_russian_chars(updated_xml)             # ы→и, ъ→' у всьому фіді
