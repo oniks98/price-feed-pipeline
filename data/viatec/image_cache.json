@@ -34658,5 +34658,10 @@
     "w": 592,
     "h": 592,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-02/ARCP.webp": {
+    "w": 400,
+    "h": 400,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2024-02%2FARCP.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
   }
 }
