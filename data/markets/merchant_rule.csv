@@ -42,6 +42,7 @@
 техніка та електроніка > побутова техніка > кліматична техніка > зволожувачі та очищувачі повітря;appliance;day;613;Home & Garden > Household Appliances > Climate Control Appliances > Humidifiers;auto
 техніка та електроніка > побутова техніка > кліматична техніка > інфрачервоні та каталітичні обігрівачі;appliance;day;611;Home & Garden > Household Appliances > Climate Control Appliances > Space Heaters;auto
 "електрообладнання > монтажне обладнання > дріт, кабель, системи з'єднання > кабель для систем зв'язку";cable;day;1480;Electronics > Electronics Accessories > Cables > Network Cables;auto
+електрообладнання > монтажне обладнання > елементи кріплення кабелю;cable;day;3764;Electronics > Electronics Accessories > Cable Management > Cable Clips;auto
 електрообладнання > монтажне обладнання > монтажні шафи;cable_box;day;5832;Business & Industrial > Industrial Storage > Industrial Cabinets;auto
 "електрообладнання > монтажне обладнання > дріт, кабель, системи з'єднання > Шнури, перехідники";cable_components;day;1763;Electronics > Electronics Accessories > Cables > System & Power Cables;auto
 "електрообладнання > монтажне обладнання > дріт, кабель, системи з'єднання > роз'єми та конектори";cable_components;day;503729;Hardware > Power & Electrical Supplies > Wire Terminals & Connectors;auto
@@ -57,6 +58,7 @@
 матеріали для ремонту > електрика > настінні вимикачі;energy;day;1935;Hardware > Power & Electrical Supplies > Electrical Switches > Light Switches;auto
 матеріали для ремонту > електрика > розетки електричні;energy;day;1869;Hardware > Power & Electrical Supplies > Power Outlets & Sockets;auto
 матеріали для ремонту > електрика > силові вилки та розетки;energy;day;1869;Hardware > Power & Electrical Supplies > Power Outlets & Sockets;auto
+електрообладнання > технічні вимикачі > рубильники;energy;day;6459;Hardware > Power & Electrical Supplies > Electrical Switches;auto
 матеріали для ремонту > скріплювальні вироби > кронштейни;home;day;7092;Hardware > Hardware Accessories > Brackets & Reinforcement Braces;auto
 матеріали для ремонту > скріплювальні вироби > метричне кріплення > гайки;home;day;1739;Hardware > Hardware Accessories > Hardware Fasteners > Nuts & Bolts;auto
 матеріали для ремонту > аксесуари та фурнітура для вікон і дверей > дверні дзвінки;home;day;2972;Hardware > Building Materials > Door Hardware > Door Bells & Chimes;auto
@@ -85,6 +87,7 @@
 Дім і сад > декор > світильники > точкові світильники та трек-системи;lighting;day;6274;Home & Garden > Lighting > Track Lighting;auto
 "електрообладнання > освітлення, електрика > офісно-торгове освітлення";lighting;day;2524;Home & Garden > Lighting > Lighting Fixtures > Ceiling Light Fixtures;auto
 матеріали для ремонту > електрика > Вимикачі світла;lighting;day;1935;Hardware > Power & Electrical Supplies > Electrical Switches > Light Switches;auto
+"електрообладнання > освітлення, електрика > аварійне освітлення";lighting;day;1436;Home & Garden > Lighting > Emergency Lighting;auto
 Воєнторг > Засоби зв'язку і позиціонування > переговорні пристрої;military;day;273;Electronics > Communications > Communication Radios > Two-Way Radios;auto
 Воєнторг > Тактичний захист та екіпірування > Аксесуари та комплектуючі для касок та бронежилетів;military;day;2047;Business & Industrial > Work Safety Protective Gear;auto
 Воєнторг > Тактичний захист та екіпірування > розвантажувальні жилети та плитоноски без плит;military;day;2389;Business & Industrial > Work Safety Protective Gear > Bullet Proof Vests;auto
@@ -209,6 +212,7 @@
 контрольно-вимірювальні прилади > оптичні прилади і системи > оптичні нівеліри;tool_measuring;day;4294;Hardware > Tools > Measuring Tools & Sensors > Levels > Sight Levels;auto
 "контрольно-вимірювальні прилади > оптичні прилади і системи > технічні ендоскопи, відеоскопи";tool_measuring;day;499976;Cameras & Optics > Cameras > Borescopes;auto
 "контрольно-вимірювальні прилади > радіовимірювальні прилади > аналізатори спектру, шуму";tool_measuring;day;503737;Hardware > Tools > Measuring Tools & Sensors > Electrical Testing Tools;auto
+контрольно-вимірювальні прилади > прилади вимірювання часу > таймери;tool_measuring;day;3522;Home & Garden > Lighting Accessories > Lighting Timers;auto
 "телекомунікації та зв'язок > інструмент для мережевих робіт > кабельні тестери, wi-fi тестери";tool_network;day;5526;Hardware > Tool Accessories > Measuring Tool & Sensor Accessories;auto
 телекомунікації та зв'язок > інструмент для мережевих робіт > інструмент для закладення кабелю;tool_network;day;1469;Hardware > Tools > Wire & Cable Hand Tools;auto
 Інструменти > гідравлічний інструмент > гідравлічні ланцюгові пили;tool_power;day;3610;Home & Garden > Lawn & Garden > Outdoor Power Equipment > Chainsaws;auto
@@ -228,6 +232,7 @@
 Інструменти > електроінструмент > штроборізи;tool_power;day;3516;Hardware > Tools > Saws > Cut-Off Saws;auto
 Інструменти > пневматичний інструмент > пневматичні відбійні молотки;tool_power;day;505364;Hardware > Tools > Hammers > Powered Hammers;auto
 Інструменти > електроінструмент > електричні пили > ручні торцювальні пили;tool_power;day;3517;Hardware > Tools > Saws > Miter Saws;auto
+Інструменти > електроінструмент > електричні фарбопульти;tool_power;day;2465;Hardware > Tools > Paint Tools > Paint Sprayers;auto
 техніка та електроніка > TV та відеотехніка > телевізори;tv;day;404;Electronics > Video > Televisions;auto
 "техніка та електроніка > TV та відеотехніка > супутникове, кабельне телебачення > супутникові антени";tv_antennas;day;1718;Electronics > Electronics Accessories > Antennas;auto
 техніка та електроніка > TV та відеотехніка > аксесуари для телевізорів та проекторів > телевізійні антени;tv_antennas;day;1718;Electronics > Electronics Accessories > Antennas;auto
