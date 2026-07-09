@@ -35213,5 +35213,30 @@
     "w": null,
     "h": null,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2025-01/kpv-vp-250-4-2.webp": {
+    "w": 447,
+    "h": 447,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2025-01%2Fkpv-vp-250-4-2.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/patch-kabel-odeskabel-ok-net-kgpv-vp-100-4-2-0-48-u-utp-cat-5e-sl-patch-awg26-884573.webp": {
+    "w": 500,
+    "h": 500,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2Fpatch-kabel-odeskabel-ok-net-kgpv-vp-100-4-2-0-48-u-utp-cat-5e-sl-patch-awg26-884573.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2025-01/kpvong-hf-vp-250.webp": {
+    "w": 402,
+    "h": 402,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2025-01%2Fkpvong-hf-vp-250.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-12/OK-Net_utp5ecombo.webp": {
+    "w": 419,
+    "h": 419,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2023-12%2FOK-Net_utp5ecombo.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/kppevp6.webp": {
+    "w": 428,
+    "h": 428,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fkppevp6.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
   }
 }
