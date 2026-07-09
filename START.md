@@ -26,7 +26,7 @@ python scripts/ultra_clean_run.py secur_feed_full  - для хар-к аякс
 # Від ПРОМу
 
 python scripts/prom_export_categories.py
-python scripts/markets_export_coef.py
+python scripts/markets_export_coef.py заполнить coef_viatec coef_secur coef_lp
 python scripts/epicenter_attr_pipeline.py
 python scripts/merchant_rule.py
 
