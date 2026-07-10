@@ -35363,5 +35363,15 @@
     "w": 449,
     "h": 449,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FSVR-1000VA.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2025-03/imou-4g-pvt.webp": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/24SFP-8GT4XS.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
   }
 }

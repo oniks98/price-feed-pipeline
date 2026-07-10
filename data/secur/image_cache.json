@@ -5328,5 +5328,20 @@
     "w": 703,
     "h": 535,
     "transform_url": null
+  },
+  "https://content.secur.ua/products/qmRUViG8IElUiaeHsmZ3ynZ3goKWMkotNbN2TQ6l.png": {
+    "w": 439,
+    "h": 374,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FqmRUViG8IElUiaeHsmZ3ynZ3goKWMkotNbN2TQ6l.png&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://content.secur.ua/products/R13L0lHrdDF8b3S1Qv54c1uKQbzRjWxQWDETnNwr.png": {
+    "w": 487,
+    "h": 180,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FR13L0lHrdDF8b3S1Qv54c1uKQbzRjWxQWDETnNwr.png&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://content.secur.ua/products/J62XHDPt1WwpcUPUaiuG05QZXRRe3ybMLa6Vs1WQ.png": {
+    "w": 1959,
+    "h": 883,
+    "transform_url": null
   }
 }
