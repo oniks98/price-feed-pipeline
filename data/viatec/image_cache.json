@@ -35338,5 +35338,10 @@
     "w": 508,
     "h": 508,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fschetchika-3f-i-17-mo.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-05/mifare-1k-orange.webp": {
+    "w": 373,
+    "h": 373,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2023-05%2Fmifare-1k-orange.webp&w=640&h=640&fit=contain&bg=white&output=jpg&q=90"
   }
 }
