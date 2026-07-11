@@ -4,7 +4,9 @@
   2. Читає data/markets/kasta_coefficients.csv (цінові правила Kasta)
   3. Визначає базову ціну: Оптова_ціна з *_old.csv або fallback на ціну з XML
   4. Базова ціна × правило Kasta для категорії/цінового діапазону = нова ціна
-  5. Зберігає результат в data/markets/kasta_feed.xml
+  5. Вставляє блок «Особливості»/«Особенности» з PROM-параметрів у
+     <description_ua>/<description> (services/kasta_params_to_description_service.py)
+  6. Зберігає результат в data/markets/kasta_feed.xml
 
 Запуск локально:
     python scripts/generate_kasta_feed.py
@@ -26,6 +28,7 @@ from generate_utils_feed import (
     parse_currency_rates,
     replace_vendor_aliases,
 )
+from services.kasta_params_to_description_service import inject_params_into_descriptions
 from services.market_pricing import apply_market_prices
 
 # ---------------------------------------------------------------------------
@@ -55,6 +58,7 @@ def main() -> None:
     updated_xml = replace_vendor_aliases(updated_xml)
     updated_xml = fill_missing_vendor(updated_xml)
     updated_xml = add_name_ua(updated_xml)
+    updated_xml = inject_params_into_descriptions(updated_xml)
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(updated_xml, encoding="utf-8")
