@@ -4,10 +4,13 @@
 Алгоритм для кожного URL:
     1. Перевіряємо кеш → повертаємо збережений результат.
     2. Якщо немає — читаємо тільки заголовок файлу (512 Б – 64 КБ),
-       щоб отримати розміри без завантаження всього зображення.
+       щоб отримати розміри та наявність альфа-каналу без завантаження
+       всього зображення.
     3. Зберігаємо (w, h, transform_url | None) в кеш.
-    4. min(w, h) < SMALL_THRESHOLD → повертаємо wsrv.nl URL,
-       інакше — оригінальний URL.
+    4. has_alpha (реальна прозорість — фінальний колір фону залежить
+       від дефолту конкретного споживача, непередбачувано) АБО
+       min(w, h) < SMALL_THRESHOLD → повертаємо wsrv.nl URL з
+       примусовим flatten на білий фон, інакше — оригінальний URL.
 
 Будь-яка помилка (таймаут, 404, невідомий формат) →
     safe fallback: повертаємо оригінальний URL, не падаємо.
@@ -43,8 +46,9 @@ _WSRV_STATIC_PARAMS: Final[dict[str, str]] = {
     "w":      str(TRANSFORM_W),
     "h":      str(TRANSFORM_H),
     "fit":    "contain",     # вписати в бокс зі збереженням пропорцій
-    "bg":     "white",       # фон для letterbox-зон
-    "output": "jpg",
+    "bg":     "white",       # flatten альфа-каналу (PNG/WebP з прозорістю) → білий
+    "cbg":    "white",       # фон letterbox-зон саме для fit=contain (офіційний параметр)
+    "output": "jpg",         # jpg не зберігає альфу → flatten гарантований
     "q":      "90",
 }
 
@@ -92,7 +96,7 @@ class ImageService:
 
     def _resolve_single(self, url: str) -> str:
         """
-        Обробляє один URL: кеш → HTTP-читання розміру → рішення.
+        Обробляє один URL: кеш → HTTP-читання розміру/альфи → рішення.
         Не викликати зовні.
         """
         if url.startswith(_WSRV_BASE):
@@ -102,20 +106,21 @@ class ImageService:
         if cached is not None:
             return cached.get("transform_url") or url
 
-        size = self.get_size(url)
+        info = self.get_image_info(url)
 
-        if size is None:
+        if info is None:
             self._put_cache(url, None, None, None)
             return url
 
-        w, h = size
+        w, h, has_alpha = info
 
-        if self.is_small(w, h):
+        if has_alpha or self.is_small(w, h):
             transform_url = self.build_transform_url(url)
             self._put_cache(url, w, h, transform_url)
             if self._logger:
+                reason = "альфа-канал" if has_alpha else f"{w}×{h} < {SMALL_THRESHOLD}"
                 self._logger.info(
-                    f"🖼️  ImageService: {w}×{h} < {SMALL_THRESHOLD} → wsrv.nl | {url[:70]}"
+                    f"🖼️  ImageService: {reason} → wsrv.nl | {url[:70]}"
                 )
             return transform_url
 
@@ -123,15 +128,26 @@ class ImageService:
         return url
 
     def get_size(self, url: str) -> tuple[int, int] | None:
+        """Backward-compatible: тільки (width, height). Див. get_image_info()."""
+        info = self.get_image_info(url)
+        return (info[0], info[1]) if info else None
+
+    def get_image_info(self, url: str) -> tuple[int, int, bool] | None:
         """
-        Читає мінімум байт для отримання (width, height) зображення.
+        Читає мінімум байт для (width, height, has_alpha).
 
         PNG:  ~24 Б (IHDR chunk)
         JPEG: до ~64 КБ (до SOF маркера)
         WebP: ~30 Б
 
+        has_alpha=True означає, що зображення має реальний альфа-канал
+        (PNG/WebP з прозорістю). Фінальний колір фону при конвертації в
+        JPEG у такому разі залежить від дефолту КОНКРЕТНОГО споживача
+        (Prom / Kasta / Rozetka / браузер) — тобто непередбачуваний,
+        доки ми не зафлетенимо його самі.
+
         Returns:
-            (width, height) або None при помилці / невідомому форматі.
+            (width, height, has_alpha) або None при помилці / невідомому форматі.
         """
         try:
             with requests.get(url, stream=True, timeout=_REQUEST_TIMEOUT) as r:
@@ -141,7 +157,10 @@ class ImageService:
                     buf += chunk
                     try:
                         img = Image.open(BytesIO(buf))
-                        return img.size   # (w, h) — доступно після парсингу заголовку
+                        has_alpha = img.mode in ("RGBA", "LA") or (
+                            img.mode == "P" and "transparency" in img.info
+                        )
+                        return (*img.size, has_alpha)
                     except Exception:
                         pass
                     if len(buf) >= _MAX_HEADER_BYTES:
@@ -149,7 +168,7 @@ class ImageService:
         except Exception as exc:
             if self._logger:
                 self._logger.warning(
-                    f"⚠️  ImageService.get_size: {exc} | {url[:70]}"
+                    f"⚠️  ImageService.get_image_info: {exc} | {url[:70]}"
                 )
         return None
 
