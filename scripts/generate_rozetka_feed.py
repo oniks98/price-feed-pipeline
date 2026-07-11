@@ -36,10 +36,10 @@ from generate_utils_feed import (
     fill_missing_vendor,
     filter_unavailable_offers,
     load_article_price_index,
-    normalize_vendor_language,
     parse_currency_rates,
 )
 from services.market_pricing import apply_market_prices
+from services.rozetka_brand_mapping_service import remap_rozetka_vendors
 from services.rozetka_stop_brand_service import filter_stop_brand_offers
 from services.rozetka_unique_name_service import deduplicate_offer_names
 from services.rozetka_category_service import (
@@ -291,7 +291,7 @@ def main() -> None:
 
     updated_xml = apply_market_prices(MARKET, updated_xml, price_index, currency_rates)
     updated_xml = fill_missing_vendor(updated_xml)
-    updated_xml = normalize_vendor_language(updated_xml)  # "Без бренда" → "Без бренду"
+    updated_xml = remap_rozetka_vendors(updated_xml)  # TelStream/FARADAY/Mustang → канонічний бренд; "Без бренду" → Anker
     updated_xml = filter_stop_brand_offers(updated_xml)
     updated_xml = deduplicate_offer_names(updated_xml)  # <name>/<name_ua> мають бути унікальними для Rozetka
     updated_xml = sanitize_rozetka_text(updated_xml)  # sale-мітки в назвах, емодзі та «причина уцінки» в описах

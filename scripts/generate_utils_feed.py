@@ -44,12 +44,6 @@ _PROM_ID_PREFIX: str = "prom_"
 DEFAULT_VENDOR: str = "Anker"
 DEFAULT_COUNTRY: str = "Китай"
 
-# Мовні виправлення значення <vendor>, що приходять як є з Prom-фіду
-# (джерело віддає змішану укр/рос лексику — нормалізуємо до укр. форми).
-_VENDOR_VALUE_FIXES: dict[str, str] = {
-    "Без бренда": "Без бренду",
-}
-
 # Виробники-псевдоніми: vendor містить «електрон» (case-insensitive) → замінюємо на Anker.
 # Країну замінюємо лише якщо вона рівно «Україна» → «Китай».
 _VENDOR_ALIAS_RE: re.Pattern[str] = re.compile(r"електрон|электрон", re.IGNORECASE)
@@ -388,37 +382,6 @@ def fill_missing_vendor(xml: str) -> str:
         f"🏭  Підставлено виробника за замовчуванням"
         f" ({DEFAULT_VENDOR} / {DEFAULT_COUNTRY}): {total} товарів{detail}"
     )
-    return xml
-
-
-def normalize_vendor_language(xml: str) -> str:
-    """
-    Виправляє мовні неточності у значенні <vendor>, що приходять з Prom-фіду
-    (наприклад, рос. «Без бренда» → укр. «Без бренду»).
-
-    Мапа виправлень — _VENDOR_VALUE_FIXES. Матчиться точне значення тегу
-    (після strip), інші vendor-значення не чіпаються.
-    """
-    fixed = 0
-    fix_counter: Counter[str] = Counter()
-
-    def on_vendor(m: re.Match) -> str:
-        nonlocal fixed
-        value = (m.group(1) or "").strip()
-        replacement = _VENDOR_VALUE_FIXES.get(value)
-        if replacement is None:
-            return m.group(0)
-        fixed += 1
-        fix_counter[value] += 1
-        return f"<vendor>{replacement}</vendor>"
-
-    xml = re.sub(r"<vendor>(.*?)</vendor>", on_vendor, xml, flags=re.DOTALL)
-
-    if fixed:
-        print(f"🏷️  normalize_vendor_language: виправлено {fixed} значень")
-        for original, count in fix_counter.most_common():
-            print(f"    └─ {original!r} → {_VENDOR_VALUE_FIXES[original]!r}: {count} шт")
-
     return xml
 
 
