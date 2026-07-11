@@ -162,21 +162,50 @@ def _replace_preserve_case(match: re.Match, replacement: str) -> str:
     return replacement
 
 # ─── Загальне для ВСІХ постачальників, але Лише в ОПИСАх ───
-# Формат-фікс: окреме слово "COM"/"com" (напр. назва порту/інтерфейсу в тексті)
-# має завершуватися дефісом — але лише в описах (не в назві/пошукових запитах),
-# тож це винесено окремо від загальних sanitize()-кроків і застосовується окремо,
-# лише до полів з TextSanitizer.DESCRIPTION_FIELDS (див. sanitize_item).
+# Формат-фікс: окреме слово "COM" (порт/інтерфейс) має завершуватися дефісом —
+# лише в описах (не в назві/пошукових запитах), тож це винесено окремо від
+# загальних sanitize()-кроків і застосовується окремо, лише до полів з
+# TextSanitizer.DESCRIPTION_FIELDS (див. sanitize_item).
+#
+# Єдине правило, case-insensitive, з нормалізацією кириличних "омографів" —
+# С/О/М (U+0421/U+041E/U+041C) та с/о (U+0441/U+043E) візуально невідрізнювані
+# від латинських C/O/M/c/o, але мають інший codepoint і тому НЕ збігаються з
+# латинським regex навіть при IGNORECASE (кирилиця/латиниця — різні
+# case-folding таблиці). Типова причина: оператор фіда не встиг перемкнути
+# розкладку клавіатури перед технічним терміном усередині кириличного тексту
+# (напр. "Com", де перша літера — кирилична С).
+#
+# Щоб не чіпати легітимні кириличні слова (напр. "сом" — риба), нормалізація
+# кирилиці в латиницю відбувається ТІЛЬКИ якщо у збігу є хоча б одна латинська
+# літера (тобто це вже змішане написання, а не чисто кириличне слово).
 # \b — ціле слово, аби не чепати підрядок у інших словах (напр. "recommend", "company").
-# Без re.IGNORECASE — "COM" та "com" обробляються окремо та дають різні результати.
-_DESC_ONLY_REPLACE_RULES: list[tuple[str, str]] = [
-    ("COM", "COM-"),
-    ("com", "com-"),
-]
+_CYRILLIC_COM_LOOKALIKES: dict[str, str] = {
+    "С": "C", "с": "c",
+    "О": "O", "о": "o",
+    "М": "M",  # лише велика — мала "м" візуально відрізняється від латинської "m"
+}
+_DESC_ONLY_COM_RE: re.Pattern = re.compile(
+    r'\b[CcСс][OoОо][MmМ]\b'
+)
 
-_DESC_ONLY_REPLACE_RE: list[tuple[re.Pattern, str]] = [
-    (re.compile(r'\b' + re.escape(word) + r'\b'), repl)
-    for word, repl in _DESC_ONLY_REPLACE_RULES
-]
+
+def _fix_com_word(match: re.Match) -> str:
+    """
+    Callback для _DESC_ONLY_COM_RE: додає дефіс після "COM"/"Com"/"com" у
+    будь-якому регістрі, нормалізуючи кириличні омографи (С/О/М) до латиниці —
+    але лише якщо збіг змішаний (є хоча б одна латинська літера). Чисто
+    кириличні збіги (напр. "сом" — риба) лишаються без змін.
+
+    Args:
+        match: об'єкт збігу re.Match від _DESC_ONLY_COM_RE
+
+    Returns:
+        Нормалізоване слово з дефісом, або оригінал без змін (чиста кирилиця)
+    """
+    word = match.group(0)
+    if all(ch in _CYRILLIC_COM_LOOKALIKES for ch in word):
+        return word
+    return "".join(_CYRILLIC_COM_LOOKALIKES.get(ch, ch) for ch in word) + "-"
 
 
 # ─── Загальне для ВСІХ постачальників: посилання та фото/відео у описах ───────────
@@ -595,18 +624,16 @@ class TextSanitizer:
     @staticmethod
     def _apply_desc_only_rules(text: str) -> str:
         """
-        Застосовує правила заміни, специфічні лише для полів опису
-        (див. _DESC_ONLY_REPLACE_RULES / _DESC_ONLY_REPLACE_RE): окреме слово
-        "COM"/"com" отримує завершальний дефіс. Однакове для ВСІХ постачальників.
+        Застосовує правило "COM" → "COM-" (див. _DESC_ONLY_COM_RE / _fix_com_word)
+        до полів опису. Case-insensitive, з нормалізацією кириличних омографів
+        С/О/М. Однакове для ВСІХ постачальників.
 
         Args:
             text: вже очищений (після sanitize) текст опису
 
         Returns:
-            Текст з застосованими COM/com-правилами
+            Текст з застосованим COM-правилом
         """
         if not text:
             return text
-        for pattern, repl in _DESC_ONLY_REPLACE_RE:
-            text = pattern.sub(repl, text)
-        return text
+        return _DESC_ONLY_COM_RE.sub(_fix_com_word, text)
