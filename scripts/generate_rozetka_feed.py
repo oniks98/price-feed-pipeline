@@ -6,8 +6,10 @@
   4. Базова ціна × коефіцієнт категорії = нова ціна
   5. Замінює prom categoryId на rozetka_category_id (через services/rozetka_category_service.py)
   6. Замінює Prom <categories> блок на Rozetka-категорії (тільки реально використані)
-  7. Перейменовує param «Країна-виробник» → «Країна-виробник товару», знімає unit=""
-  8. Зберігає результат в data/markets/rozetka_feed.xml
+  7. Вставляє блок «Особливості»/«Особенности» з PROM-параметрів у
+     <description_ua>/<description> (services/rozetka_params_to_description_service.py)
+  8. Перейменовує param «Країна-виробник» → «Країна-виробник товару», знімає unit=""
+  9. Зберігає результат в data/markets/rozetka_feed.xml
 
 ВАЖЛИВО: Розетка забирає Prom-фід практично в оригінальному вигляді.
   - Теги XML НЕ перейменовуються і НЕ перетворюються (немає normalize_name_description_tags).
@@ -47,6 +49,7 @@ from services.rozetka_category_service import (
     resolve_category,
 )
 from services.rozetka_category_leaf_service import validate_used_categories
+from services.rozetka_params_to_description_service import inject_params_into_descriptions
 from services.rozetka_text_sanitizer_service import sanitize_rozetka_text
 
 _logger = logging.getLogger(__name__)
@@ -292,6 +295,7 @@ def main() -> None:
     updated_xml = filter_stop_brand_offers(updated_xml)
     updated_xml = deduplicate_offer_names(updated_xml)  # <name>/<name_ua> мають бути унікальними для Rozetka
     updated_xml = sanitize_rozetka_text(updated_xml)  # sale-мітки в назвах, емодзі та «причина уцінки» в описах
+    updated_xml = inject_params_into_descriptions(updated_xml)  # блок «Особливості»/«Особенности» з PROM-параметрів
 
     # --- Розетка-специфічне очищення та трансформація XML ---
     # replace_category_ids повертає (xml, used_entries) — entries потрібні для <categories> блоку
