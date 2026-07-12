@@ -65,10 +65,10 @@ class AvailabilityService:
         Returns:
             Tuple (availability, quantity):
             - availability: "+" якщо в наявності, числовий рядок = дні виробництва
-            - quantity: кількість або "10000" за замовчуванням, "" для днів
+            - quantity: кількість або "1000" за замовчуванням, "" для днів
 
         Examples:
-            "В наличии"       → ("+", "10000")
+            "В наличии"       → ("+", "1000")
             "В наличии 5 шт"  → ("+", "5")
             "7"               → ("7", "")   # Під замовлення, 7 днів (LP quickProduction)
         """
@@ -84,7 +84,7 @@ class AvailabilityService:
 
         # За замовчуванням: в наявності
         availability = "+"
-        quantity = "10000"
+        quantity = "1000"
 
         # Спроба витягнути кількість з рядка типу "В наличии 5 шт"
         import re

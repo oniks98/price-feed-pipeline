@@ -4,7 +4,7 @@ services/rozetka_text_sanitizer_service.py
 Санітайзер текстових полів (<name>/<name_ua>, <description>/<description_ua>)
 для Rozetka-фіду.
 
-Розв'язує 3 незалежні задачі:
+Розв'язує 4 незалежні задачі:
 
 1. Емодзі в описах.
    Rozetka не потребує емодзі — прибираються з <description>/<description_ua>.
@@ -26,6 +26,17 @@ services/rozetka_text_sanitizer_service.py
    Окремі згадки слова "уцінка"/"уценка" (в будь-якій формі), що лишились
    поза цим реченням, видаляються теж.
 
+4. Зовнішні посилання в описах.
+   Постачальник іноді додає в опис сторонні посилання:
+       "Детальніше: https://..."       — мітка разом з URL
+       будь-який bare URL у тексті      — якщо не є структурним HTML-полем
+                                          (href="...", src='...', src=... без лапок)
+   Видаляється з <description>/<description_ua> (той самий алгоритм, що
+   epicenter_text_sanitizer_service.strip_external_links /
+   kasta_text_sanitizer_service.strip_external_links_from_description_ua,
+   з тим самим виправленим lookbehind — без випадкового пробілу в класі
+   виключень, інакше bare URL з пробілом перед ним взагалі б не видалявся).
+
 Усі функції працюють пооферно (через <offer id="...">...</offer>), а не
 одним re.sub по всьому XML — це гарантує, що трансформація ніколи не
 зачепить <name> магазину (shop-рівень, поза <offer>) чи інші структурні поля.
@@ -41,10 +52,12 @@ regex просто не знаходить збігу і тег лишаєтьс
         strip_sale_labels_from_names,
         strip_emojis_from_descriptions,
         strip_discount_reason_from_descriptions,
+        strip_external_links_from_descriptions,
     )
     updated_xml = strip_sale_labels_from_names(updated_xml)
     updated_xml = strip_emojis_from_descriptions(updated_xml)
     updated_xml = strip_discount_reason_from_descriptions(updated_xml)
+    updated_xml = strip_external_links_from_descriptions(updated_xml)
 
     # або одним викликом (той самий порядок):
     from services.rozetka_text_sanitizer_service import sanitize_rozetka_text
@@ -155,7 +168,14 @@ _EMOJI_RE: Final[re.Pattern[str]] = re.compile(
     "\U0001FA70-\U0001FAFF"  # symbols & pictographs extended-a
     "\U00002600-\U000026FF"  # misc symbols (☀☂☎ тощо)
     "\U00002700-\U000027BF"  # dingbats (✅❌❤ тощо)
-    "\U00002300-\U000023FF"  # misc technical (⏰⌚⏳ тощо)
+    # misc technical: НЕ весь \U2300-\U23FF блок (там багато чисто технічних
+    # символів на кшталт ⎓ DC-напруга, які реально трапляються в описах
+    # електроніки) — лише підмножина, що офіційно класифікована як emoji.
+    "\u231A-\u231B"          # ⌚⌛ watch / hourglass
+    "\u2328"                 # ⌨ keyboard
+    "\u23CF"                 # ⏏ eject symbol
+    "\u23E9-\u23F3"          # ⏩⏪⏫⏬⏭⏮⏯⏰⏱⏲⏳
+    "\u23F8-\u23FA"          # ⏸⏹⏺ pause/stop/record
     "\U00002B00-\U00002BFF"  # misc symbols and arrows
     "\U0001F3FB-\U0001F3FF"  # skin tone modifiers
     "\uFE0F"                 # variation selector-16
@@ -282,15 +302,75 @@ def strip_discount_reason_from_descriptions(xml: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# 4. Зовнішні посилання в описах
+# ---------------------------------------------------------------------------
+
+# «Детальніше: URL» — видаляє мітку разом з попереднім роздільником.
+_DETAILS_LINK_RE: Final[re.Pattern[str]] = re.compile(
+    r'[,;\s]*Детальніше:\s*https?://[^\s<>"\']+',
+    re.IGNORECASE,
+)
+
+# Будь-який bare URL у текстовому контексті. Negative lookbehind виключає
+# URL у структурних HTML-позиціях (href="...", src='...', src=... без лапок),
+# які іноді трапляються всередині опису як inline-розмітка.
+# (Пробіл в класі виключень свідомо НЕ додається — див. виправлений
+# epicenter_text_sanitizer_service.py від 2026-07-12: з пробілом у виключеннях
+# bare URL з пробілом перед ним у реченні взагалі б не видалявся.)
+_BARE_URL_RE: Final[re.Pattern[str]] = re.compile(
+    r'(?<![>"\'=])https?://[^\s<>"\']+',
+)
+
+
+def strip_external_links_from_descriptions(xml: str) -> str:
+    """
+    Видаляє зовнішні посилання з <description>/<description_ua>.
+
+    Прохід 1 — «Детальніше: URL»:
+        Видаляє мітку разом з URL і попереднім роздільником (кома, крапка
+        з комою, пробіл). Приклад: ", Детальніше: https://example.com/..." → ""
+
+    Прохід 2 — bare URLs у тексті:
+        Видаляє будь-який https?://... що не є структурним HTML-полем
+        (href="...", src='...', src=... без лапок — лишаються без змін).
+
+    Після видалення схлопує зайві пробіли, що могли лишитись на місці видаленого
+    URL (так само, як strip_emojis_from_descriptions/strip_discount_reason_from_descriptions
+    в цьому ж файлі) — інакше залишок подвійного пробілу зберігається аж до
+    наступного прогону (ламає справжню ідемпотентність на рівні рядка всередині
+    одного виклику).
+
+    Args:
+        xml: повний XML-рядок фіду.
+
+    Returns:
+        XML з видаленими external URLs з описів.
+    """
+
+    def _strip(inner: str) -> str:
+        cleaned, _ = _DETAILS_LINK_RE.subn("", inner)
+        cleaned, _ = _BARE_URL_RE.subn("", cleaned)
+        return _MULTI_SPACE_RE.sub(" ", cleaned).strip()
+
+    result, changed = _transform_offer_tags(xml, _DESCRIPTION_TAGS, _strip)
+    if changed:
+        print(f"🔗 Rozetka посилання: видалено з {changed} описів")
+    else:
+        print("🔗 Rozetka посилання: збігів не знайдено")
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Public: комбінований виклик
 # ---------------------------------------------------------------------------
 
 def sanitize_rozetka_text(xml: str) -> str:
     """
-    Застосовує всі три санітайзери в детермінованому порядку:
+    Застосовує всі чотири санітайзери в детермінованому порядку:
         1. strip_sale_labels_from_names            — <name>/<name_ua>
         2. strip_emojis_from_descriptions           — <description>/<description_ua>
         3. strip_discount_reason_from_descriptions  — <description>/<description_ua>
+        4. strip_external_links_from_descriptions   — <description>/<description_ua>
 
     Зручний єдиний entrypoint для generate_rozetka_feed.py, якщо не потрібен
     контроль над кожним кроком окремо.
@@ -298,4 +378,5 @@ def sanitize_rozetka_text(xml: str) -> str:
     xml = strip_sale_labels_from_names(xml)
     xml = strip_emojis_from_descriptions(xml)
     xml = strip_discount_reason_from_descriptions(xml)
+    xml = strip_external_links_from_descriptions(xml)
     return xml
