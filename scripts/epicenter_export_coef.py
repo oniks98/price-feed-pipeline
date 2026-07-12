@@ -17,6 +17,10 @@ epicenter_export_coef.py
      без змін (services/coef_export_service.py) — скрипт перебудовує рядки
      з мапінгу при кожному запуску, тому без цього кроку вручну введені
      коефіцієнти постачальників губилися б на кожному наступному запуску.
+  6. НОВІ категорії (яких ще немає в старому файлі, отже без власного
+     ручного override) отримують coef_viatec/secur/lp за дефолтом з рядка дефолтів
+     (порожній prom_category_id) — services/coef_export_service.py::read_defaults_row.
+     Ручний override завжди має пріоритет над цим дефолтом.
 
 Запуск:
     python scripts/epicenter_export_coef.py
@@ -34,7 +38,11 @@ from typing import Optional
 
 import openpyxl
 
-from services.coef_export_service import SUPPLIER_COEF_FIELDS, read_manual_overrides
+from services.coef_export_service import (
+    SUPPLIER_COEF_FIELDS,
+    read_defaults_row,
+    read_manual_overrides,
+)
 from services.market_formula_coef import calc_coef
 
 # ─────────────────────────────── config ───────────────────────────────────────
@@ -217,6 +225,7 @@ def process_csv(
     mappings: dict[int, tuple[str, int]],
     royalty: dict[int, Decimal],
     fallback_coef: str | None,
+    supplier_defaults: dict[str, str],
 ) -> tuple[int, int]:
     """
     Генерує рядки CSV з маппінгу та заповнює threshold, перезаписує файл.
@@ -228,6 +237,9 @@ def process_csv(
     coef_viatec / coef_secur / coef_lp — вручні, цим скриптом НЕ обчислюються —
     переносяться зі старого файлу ідемпотентно (read_manual_overrides), інакше
     вони б губилися на кожному запуску, бо рядки перебудовуються з маппінгу з нуля.
+    Для НОВИХ категорій (без власного override в read_manual_overrides) застосовується
+    supplier_defaults з рядка дефолтів (read_defaults_row) — ручний override завжди
+    має пріоритет над цим дефолтом.
 
     Порядок запису у файлі:
       1. Рядок дефолтів (порожній prom_category_id) — без змін
@@ -296,10 +308,11 @@ def process_csv(
             fallback_used += 1
 
         row: dict[str, str] = {fn: "" for fn in fieldnames}
+        row.update({f: v for f, v in supplier_defaults.items() if f in fieldnames})  # базові coef_viatec/secur/lp для НОВИХ категорій
         row[CSV_COL_CAT_ID]    = str(prom_id)
         row[CSV_COL_CAT_NAME]  = prom_name
         row[CSV_COL_THRESHOLD] = threshold_str
-        row.update(supplier_overrides.get((str(prom_id),), {}))
+        row.update(supplier_overrides.get((str(prom_id),), {}))  # ручний override — завжди переважає дефолт
         data_rows.append(row)
         updated += 1
 
@@ -342,7 +355,9 @@ def main() -> None:
             "категорії без роялті будуть пропущені"
         )
 
-    updated, fallback_used = process_csv(CSV_PATH, mappings, royalty, fallback_coef)
+    supplier_defaults = read_defaults_row(CSV_PATH, SUPPLIER_COEF_FIELDS, key_field=CSV_COL_CAT_ID)
+
+    updated, fallback_used = process_csv(CSV_PATH, mappings, royalty, fallback_coef, supplier_defaults)
 
     log.info(
         "=== Готово: записано=%d, fallback_використано=%d ===",

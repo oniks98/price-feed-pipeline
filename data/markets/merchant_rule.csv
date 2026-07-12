@@ -41,6 +41,8 @@
 "техніка та електроніка > запчастини для техніки та електроніки > запчастини та аксесуари для побутової техніки > запчастини для зволожувачів, очищувачів повітря";appliance;day;3410;Home & Garden > Household Appliance Accessories > Air Purifier Accessories;auto
 техніка та електроніка > побутова техніка > кліматична техніка > зволожувачі та очищувачі повітря;appliance;day;613;Home & Garden > Household Appliances > Climate Control Appliances > Humidifiers;auto
 техніка та електроніка > побутова техніка > кліматична техніка > інфрачервоні та каталітичні обігрівачі;appliance;day;611;Home & Garden > Household Appliances > Climate Control Appliances > Space Heaters;auto
+"будівництво > водо-, газо-, теплозабезпечення > запірна арматура > кульові, коркові крани";appliance;day;2466;Hardware > Plumbing > Plumbing Fittings & Supports > Plumbing Valves;auto
+матеріали для ремонту > побутове водопостачання > побутове очищення води > побутові проточні фільтри;appliance;day;2055;Hardware > Plumbing > Water Dispensing & Filtration > In-Line Water Filters;auto
 "електрообладнання > монтажне обладнання > дріт, кабель, системи з'єднання > кабель для систем зв'язку";cable;day;1480;Electronics > Electronics Accessories > Cables > Network Cables;auto
 електрообладнання > монтажне обладнання > елементи кріплення кабелю;cable;day;3764;Electronics > Electronics Accessories > Cable Management > Cable Clips;auto
 електрообладнання > монтажне обладнання > монтажні шафи;cable_box;day;5832;Business & Industrial > Industrial Storage > Industrial Cabinets;auto
@@ -72,12 +74,16 @@
 промислове обладнання та верстати > промислове кліматичне обладнання > промислові кондиціонери > фанкойли;home;day;605;Home & Garden > Household Appliances > Climate Control Appliances > Air Conditioners;auto
 техніка та електроніка > аудіотехніка та аксесуари > портативні колонки;home;day;249;Electronics > Audio > Audio Components > Speakers;auto
 техніка та електроніка > побутова техніка > побутова техніка для дому > Роботи для миття вікон;home;day;619;Home & Garden > Household Appliances > Vacuums;auto
+матеріали для ремонту > скріплювальні вироби > метричне кріплення > болти;home;day;1739;Hardware > Hardware Accessories > Hardware Fasteners > Nuts & Bolts;auto
 техніка та електроніка > комп'ютерна техніка та ПЗ > Планшети;it;day;4745;Electronics > Computers > Tablet Computers;auto
 "техніка та електроніка > комп'ютерна техніка та ПЗ > комплектуючі для комп'ютерної техніки > внутрішні та зовнішні жорсткі диски, HDD, SSD";it;day;380;Electronics > Electronics Accessories > Computer Components > Storage Devices > Hard Drives;auto
 техніка та електроніка > комп'ютерна техніка та ПЗ > монітори;it;day;305;Electronics > Video > Computer Monitors;auto
 техніка та електроніка > комп'ютерна техніка та ПЗ > носії інформації > USB накопичувачі;it;day;3712;Electronics > Electronics Accessories > Computer Components > Storage Devices > USB Flash Drives;auto
 техніка та електроніка > комп'ютерна техніка та ПЗ > носії інформації > карти пам'яті;it;day;3387;Electronics > Electronics Accessories > Memory > Flash Memory > Flash Memory Cards;auto
 техніка та електроніка > комп'ютерна техніка та ПЗ > комплектуючі для комп'ютерної техніки > блоки живлення для комп'ютерів;it;day;291;Electronics > Electronics Accessories > Computer Components > Computer Power Supplies;auto
+"авто-, мото > автомобільна електроніка > автомобільні відеосистеми > автомобільні монітори";it;day;8483;Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Electronics > Motor Vehicle Video Monitor Mounts;auto
+техніка та електроніка > комп'ютерна техніка та ПЗ > комп'ютерні аксесуари > USB хаби;it;day;300;Electronics > Electronics Accessories > Computer Accessories > Laptop Docking Stations;auto
+техніка та електроніка > комп'ютерна техніка та ПЗ > комп'ютерні аксесуари > док-станції;it;day;300;Electronics > Electronics Accessories > Computer Accessories > Laptop Docking Stations;auto
 "електрообладнання > освітлення, електрика > LED освітлення";lighting;day;3329;Home & Garden > Lighting > Light Bulbs > LED Light Bulbs;auto
 "електрообладнання > освітлення, електрика > вуличне освітлення";lighting;day;1546;Home & Garden > Lighting > Flood & Spot Lights;auto
 Дім і сад > декор > світильники > LED підсвітка інтер'єрів;lighting;day;2608;Home & Garden > Lighting > Light Ropes & Strings;auto
@@ -88,6 +94,7 @@
 "електрообладнання > освітлення, електрика > офісно-торгове освітлення";lighting;day;2524;Home & Garden > Lighting > Lighting Fixtures > Ceiling Light Fixtures;auto
 матеріали для ремонту > електрика > Вимикачі світла;lighting;day;1935;Hardware > Power & Electrical Supplies > Electrical Switches > Light Switches;auto
 "електрообладнання > освітлення, електрика > аварійне освітлення";lighting;day;1436;Home & Garden > Lighting > Emergency Lighting;auto
+"електрообладнання > освітлення, електрика > промислове освітлення";lighting;day;3006;Home & Garden > Lighting > Lighting Fixtures;auto
 Воєнторг > Засоби зв'язку і позиціонування > переговорні пристрої;military;day;273;Electronics > Communications > Communication Radios > Two-Way Radios;auto
 Воєнторг > Тактичний захист та екіпірування > Аксесуари та комплектуючі для касок та бронежилетів;military;day;2047;Business & Industrial > Work Safety Protective Gear;auto
 Воєнторг > Тактичний захист та екіпірування > розвантажувальні жилети та плитоноски без плит;military;day;2389;Business & Industrial > Work Safety Protective Gear > Bullet Proof Vests;auto

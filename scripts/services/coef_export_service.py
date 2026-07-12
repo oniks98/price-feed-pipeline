@@ -11,16 +11,30 @@ coef_export_service.py
   постачальника (coef_viatec / coef_secur / coef_lp) губиться на наступному
   запуску скрипта. Однаково для epicenter, kasta і rozetka — без винятків.
 
-Використання (у кожному {market}_export_coef.py):
-    from services.coef_export_service import SUPPLIER_COEF_FIELDS, read_manual_overrides
+  Друга проблема: НОВІ категорії (яких раніше не було в CSV, отже немає
+  ручного override) отримували порожні coef_viatec/coef_secur/coef_lp. Тепер
+  вони заповнюються дефолтом з рядка дефолтів (порожній prom_category_id,
+  перший рядок даних CSV) — того самого рядка, що вже містить
+  coef_uncategorized/coef_no_base. Ручний override (read_manual_overrides)
+  завжди має пріоритет над цим дефолтом.
 
+Використання (у кожному {market}_export_coef.py):
+    from services.coef_export_service import (
+        SUPPLIER_COEF_FIELDS,
+        read_defaults_row,
+        read_manual_overrides,
+    )
+
+    supplier_defaults = read_defaults_row(CSV_PATH, SUPPLIER_COEF_FIELDS)
     overrides = read_manual_overrides(
         CSV_PATH,
         key_fields=("prom_category_id",),          # унікальний ключ рядка для цього маркетплейсу
         preserve_fields=SUPPLIER_COEF_FIELDS,       # однаково для epicenter/kasta/rozetka
     )
     ...
-    row.update(overrides.get(row_key, {}))          # застосувати ПІСЛЯ побудови базового рядка
+    row.update(supplier_defaults)                   # базові coef_viatec/secur/lp для НОВИХ рядків
+    ...                                              # (побудова решти полів рядка)
+    row.update(overrides.get(row_key, {}))          # ручний override — застосувати ОСТАННІМ (пріоритет)
 
 Ключ рядка (key_fields) залежить від гранулярності правил маркетплейсу:
   - epicenter: (prom_category_id,)                              — одне правило на категорію
@@ -94,3 +108,48 @@ def read_manual_overrides(
                 overrides[key] = values
 
     return overrides
+
+
+def read_defaults_row(
+    csv_path: Path,
+    fields: tuple[str, ...],
+    key_field: str = "prom_category_id",
+) -> dict[str, str]:
+    """
+    Читає рядок дефолтів із {csv_path} — перший рядок даних з порожнім
+    key_field (зазвичай prom_category_id) — і повертає {поле: значення} для всіх
+    fields з непорожнім значенням в цьому рядку.
+
+    Рядок дефолтів — єдине джерело правди для базових значень coef_viatec/
+    coef_secur/coef_lp для НОВИХ категорій, які ще не мають власного ручного override у
+    read_manual_overrides. Застосовувати РАНІШЕ read_manual_overrides при побудові
+    рядка — ручний override повинен мати пріоритет над цим дефолтом.
+
+    Знаходить саме перший рядок з порожнім key_field (інші рядки з порожнім
+    key_field б теоретично бути помилкою даних і ігноруються).
+
+    Повертає {} якщо файл не існує, порожній, без рядка дефолтів, або в цьому
+    рядку жодене з fields не заповнене.
+    """
+    if not csv_path.exists():
+        return {}
+
+    with csv_path.open(encoding=CSV_ENCODING, errors="replace", newline="") as f:
+        reader = csv.DictReader(f, delimiter=CSV_DELIMITER)
+        if not reader.fieldnames or key_field not in reader.fieldnames:
+            return {}
+
+        available_fields = tuple(field for field in fields if field in reader.fieldnames)
+        if not available_fields:
+            return {}
+
+        for row in reader:
+            if (row.get(key_field) or "").strip():
+                continue  # не рядок дефолтів — пропускаємо
+            return {
+                field: value
+                for field in available_fields
+                if (value := (row.get(field) or "").strip())
+            }
+
+    return {}
