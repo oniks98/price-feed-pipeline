@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import json
+import struct
 import urllib.parse
 from io import BytesIO
 from pathlib import Path
@@ -136,9 +137,13 @@ class ImageService:
         """
         Читає мінімум байт для (width, height, has_alpha).
 
-        PNG:  ~24 Б (IHDR chunk)
-        JPEG: до ~64 КБ (до SOF маркера)
-        WebP: ~30 Б
+        PNG:  ~24 Б (IHDR chunk) — через Pillow.
+        JPEG: до ~64 КБ (до SOF маркера) — через Pillow.
+        WebP: ~30-64 Б — власний RIFF-парсер (_parse_webp_header),
+              БЕЗ Pillow. Pillow.Image.open() для WebP НЕ працює на
+              частковому буфері — йому потрібений весь файл, інакше
+              він кидає виняток і файли >_MAX_HEADER_BYTES завжди проходять
+              як None (перевірено емпірично).
 
         has_alpha=True означає, що зображення має реальний альфа-канал
         (PNG/WebP з прозорістю). Фінальний колір фону при конвертації в
@@ -155,6 +160,11 @@ class ImageService:
                 buf = b""
                 for chunk in r.iter_content(_MIN_CHUNK):
                     buf += chunk
+
+                    webp_info = self._parse_webp_header(buf)
+                    if webp_info is not None:
+                        return webp_info
+
                     try:
                         img = Image.open(BytesIO(buf))
                         has_alpha = img.mode in ("RGBA", "LA") or (
@@ -163,13 +173,63 @@ class ImageService:
                         return (*img.size, has_alpha)
                     except Exception:
                         pass
+
                     if len(buf) >= _MAX_HEADER_BYTES:
+                        if self._logger:
+                            self._logger.warning(
+                                f"⚠️  ImageService.get_image_info: не вдалося визначити "
+                                f"формат за {_MAX_HEADER_BYTES} Б | {url[:70]}"
+                            )
                         return None
         except Exception as exc:
             if self._logger:
                 self._logger.warning(
                     f"⚠️  ImageService.get_image_info: {exc} | {url[:70]}"
                 )
+        return None
+
+    @staticmethod
+    def _parse_webp_header(buf: bytes) -> tuple[int, int, bool] | None:
+        """
+        Мінімалістичний RIFF/WebP-парсер без Pillow.
+
+        WebP має 3 підформати, всі відрізняються в перших 12-30 байтах:
+          - VP8X (extended)  — alpha-флаг у байті 20, width/height у байтах 24-29
+          - VP8L (lossless)  — width/height/alpha упаковані в 4 байтах після сигнатури
+          - VP8  (simple lossy) — width/height у байтах 26-29, альфи ніколи немає
+
+        Returns:
+            (width, height, has_alpha) або None (ще не WebP або замало байтів).
+        """
+        if len(buf) < 16 or buf[0:4] != b"RIFF" or buf[8:12] != b"WEBP":
+            return None
+        fourcc = buf[12:16]
+
+        if fourcc == b"VP8X":
+            if len(buf) < 30:
+                return None
+            flags = buf[20]
+            has_alpha = bool(flags & 0x10)
+            w = (buf[24] | (buf[25] << 8) | (buf[26] << 16)) + 1
+            h = (buf[27] | (buf[28] << 8) | (buf[29] << 16)) + 1
+            return (w, h, has_alpha)
+
+        if fourcc == b"VP8L":
+            if len(buf) < 25:
+                return None
+            val = struct.unpack("<I", buf[21:25])[0]
+            w = (val & 0x3FFF) + 1
+            h = ((val >> 14) & 0x3FFF) + 1
+            has_alpha = bool((val >> 28) & 0x1)
+            return (w, h, has_alpha)
+
+        if fourcc == b"VP8 ":
+            if len(buf) < 30:
+                return None
+            w = (buf[26] | (buf[27] << 8)) & 0x3FFF
+            h = (buf[28] | (buf[29] << 8)) & 0x3FFF
+            return (w, h, False)  # simple lossy формат ніколи не має альфи
+
         return None
 
     @staticmethod
