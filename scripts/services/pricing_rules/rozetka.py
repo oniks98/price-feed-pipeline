@@ -41,6 +41,13 @@ whether the manual `coef` has been filled in.
     Ціна = max(retail * coef, dealer * threshold)
 де dealer = Оптова_ціна постачальника, retail = Ціна постачальника
 (суплаєр *_old.csv).
+
+Після округлення ціни (ceil_uah) застосовується надбавка за SURCHARGE_TIERS —
+на відміну від Epicenter (один діапазон + одна сума), тут кілька діапазонів:
+  50–399 грн   → +12 грн
+  400–699 грн  → +18 грн
+  700–3000 грн → +30 грн
+Ціна поза цими діапазонами (< 50 або > 3000) — без надбавки.
 """
 
 from __future__ import annotations
@@ -75,6 +82,34 @@ COEFFICIENTS_PATH: Final[Path] = _ROOT / "data" / "markets" / "rozetka_coefficie
 DEFAULT_LOG_PATH: Final[Path] = _ROOT / "rozetka_default_id.log"
 _CSV_DELIMITER: Final[str] = ";"
 _CSV_ENCODING: Final[str] = "utf-8-sig"
+
+
+# ---------------------------------------------------------------------------
+# Надбавка до ціни після множення на коефіцієнт (кілька цінових діапазонів)
+# Застосовується якщо округлена ціна ∈ [price_min, price_max] відповідного тіру.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class _SurchargeTier:
+    price_min: Decimal
+    price_max: Decimal
+    amount: Decimal
+
+
+SURCHARGE_TIERS: Final[tuple[_SurchargeTier, ...]] = (
+    _SurchargeTier(Decimal("50"),  Decimal("399"),  Decimal("12")),
+    _SurchargeTier(Decimal("400"), Decimal("699"),  Decimal("18")),
+    _SurchargeTier(Decimal("700"), Decimal("3000"), Decimal("30")),
+)
+
+
+def _surcharge_for_price(price: Decimal) -> Decimal:
+    """Повертає надбавку для ціни price за SURCHARGE_TIERS, або Decimal('0') якщо жоден діапазон не підходить."""
+    for tier in SURCHARGE_TIERS:
+        if tier.price_min <= price <= tier.price_max:
+            return tier.amount
+    return Decimal("0")
+
 
 # Tier constants — lower value = higher priority
 _TIER_BRAND_RANGE: Final[int] = 0
@@ -447,6 +482,11 @@ def apply_prices(
 
                 if new_price is None:
                     return price_match.group(0)
+
+                # Надбавка після округлення (кілька цінових діапазонів, SURCHARGE_TIERS)
+                surcharge = _surcharge_for_price(new_price)
+                if surcharge:
+                    new_price += surcharge
 
                 if reason:
                     log.info(
