@@ -10,10 +10,9 @@
 Підготовка (один раз):
   1. Закрий всі вікна Chrome
   2. Запусти Chrome з дебагом (PowerShell):
-     Start-Process "C:/Program Files/Google/Chrome/Application/chrome.exe" `
-       -ArgumentList "--remote-debugging-port=9222","--user-data-dir=C:/chrome-kasta-debug"
+     Start-Process "C:/Program Files/Google/Chrome/Application/chrome.exe" -ArgumentList "--remote-debugging-port=9222","--user-data-dir=C:/chrome-kasta-debug"
   3. Залогінься на hub.kasta.ua вручну
-  4. Запусти скрипт: python scripts/kasta_bulk_select.py
+  4. Запусти скрипт: python scripts/kasta_delete_products.py
 """
 
 import asyncio
