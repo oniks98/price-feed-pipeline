@@ -16,7 +16,7 @@
   і передає результат у Scrapy item безпосередньо.
 
   Pipeline (AvailabilityService.normalize_availability) потім:
-    - "В наявності" → ("+", "10000") — звичайний inStock
+    - "В наявності" → ("+", "1000") — звичайний inStock
     - "7"           → ("7", "")      — числовий fast-path (дні)
 
   Таким чином pipeline залишається supplier-agnostic.
@@ -74,7 +74,7 @@ class LpQuickProductionService:
                   → pipeline normalize_availability("7")  → ("7", "")
                   → Prom.ua: "Під замовлення, 7 днів"
               inStock → ("В наявності", "10")
-                  → pipeline normalize_availability("В наявності") → ("+", "10000")
+                  → pipeline normalize_availability("В наявності") → ("+", "1000")
                   → qty "10" перезаписується зі spider_qty (пріоритет pipeline)
                   → Prom.ua: в наявності, кількість = qty
 

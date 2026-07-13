@@ -53,7 +53,7 @@ def _normalize_card_availability(status_raw: str | None) -> tuple[str, str] | No
         return "+", quantity_match.group(1)
 
     if status in {"В наявності", "Закінчується"}:
-        return "+", "10000"
+        return "+", "1000"
 
     return None
 

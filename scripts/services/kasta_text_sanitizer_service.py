@@ -64,6 +64,7 @@ _OFFER_RE: Final[re.Pattern[str]] = re.compile(
     re.DOTALL,
 )
 _CDATA_RE: Final[re.Pattern[str]] = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.DOTALL)
+_MULTI_SPACE_RE: Final[re.Pattern[str]] = re.compile(r"[ \t]{2,}")
 
 
 @lru_cache(maxsize=None)
@@ -256,7 +257,7 @@ _BARE_URL_RE: Final[re.Pattern[str]] = re.compile(
 def _strip_links_from_text(text: str) -> str:
     text, _ = _DETAILS_LINK_RE.subn("", text)
     text, _ = _BARE_URL_RE.subn("", text)
-    return text
+    return _MULTI_SPACE_RE.sub(" ", text).strip()
 
 
 def strip_external_links_from_description_ua(xml: str) -> str:
@@ -270,6 +271,14 @@ def strip_external_links_from_description_ua(xml: str) -> str:
     Прохід 2 — bare URLs у тексті:
         Видаляє будь-який https?://... що не є структурним HTML-полем
         (href="...", src='...', src=... без лапок — лишаються без змін).
+
+    Після видалення схлопує зайві пробіли, що могли лишитись на місці видаленого
+    URL — інакше два прилеглих пробіли (один до URL, один після) лишалисяб поруч і
+    псували б справжню ідемпотентність (другий прогон над вже очищеним XML знаходив
+    би ще один пробіл, і вважав би це за зміну). Ще безпечно тут, бо схлопується
+    лише вже витягнутий текст тегу, а не весь XML (порівняйте з глобальним
+    підходом в epicenter_text_sanitizer_service.strip_external_links, де таке
+    схлопування знищило б відступи у всьому файлі).
 
     Args:
         xml: повний XML-рядок фіду.
