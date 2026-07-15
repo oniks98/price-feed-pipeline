@@ -33,6 +33,13 @@ PRIORITY_PRODUCT  = 10
 PRIORITY_CATEGORY = 0
 RAW_CSV_ROWS_FIELD = "__raw_csv_rows__"
 
+# Дефолтна кількість для карточок категорії, де точна к-сть не вказана
+# (сайт показує лише текстовий статус без цифри)
+STATUS_QUANTITY_MAP: dict[str, str] = {
+    "В наявності":   "1000",
+    "Закінчується":  "20",
+}
+
 
 def _base_sku(identifier: str) -> str:
     sku = (identifier or "").strip()
@@ -52,8 +59,9 @@ def _normalize_card_availability(status_raw: str | None) -> tuple[str, str] | No
     if quantity_match and status.startswith("В наявності"):
         return "+", quantity_match.group(1)
 
-    if status in {"В наявності", "Закінчується"}:
-        return "+", "1000"
+    default_quantity = STATUS_QUANTITY_MAP.get(status)
+    if default_quantity is not None:
+        return "+", default_quantity
 
     return None
 
