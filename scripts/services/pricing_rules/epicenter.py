@@ -77,7 +77,7 @@ _CSV_ENCODING: Final[str] = "utf-8-sig"
 
 SURCHARGE_PRICE_MIN: Final[Decimal] = Decimal("199")
 SURCHARGE_PRICE_MAX: Final[Decimal] = Decimal("4999")
-SURCHARGE_AMOUNT:    Final[Decimal] = Decimal("35")
+SURCHARGE_AMOUNT:    Final[Decimal] = Decimal("40")
 
 
 # ---------------------------------------------------------------------------
