@@ -97,9 +97,9 @@ class _SurchargeTier:
 
 
 SURCHARGE_TIERS: Final[tuple[_SurchargeTier, ...]] = (
-    _SurchargeTier(Decimal("50"),  Decimal("399"),  Decimal("12")),
+    _SurchargeTier(Decimal("199"),  Decimal("399"),  Decimal("12")),
     _SurchargeTier(Decimal("400"), Decimal("699"),  Decimal("18")),
-    _SurchargeTier(Decimal("700"), Decimal("3000"), Decimal("30")),
+    _SurchargeTier(Decimal("700"), Decimal("5000"), Decimal("30")),
 )
 
 

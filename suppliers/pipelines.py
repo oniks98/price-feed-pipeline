@@ -105,6 +105,7 @@ from suppliers.services.validation_service import ValidationService
 from suppliers.services.sku_code_service import SkuCodeService
 from suppliers.services.text_sanitizer import TextSanitizer
 from suppliers.services.image_service import ImageService
+from suppliers.services.stock_fallback import resolve_fallback_qty
 from suppliers.constants import get_start_code
 
 RAW_CSV_ROWS_FIELD = "__raw_csv_rows__"
@@ -545,6 +546,30 @@ class SuppliersPipeline:
                 cleaned["Посилання_підрозділу"] = channel_config.subdivision_link
                 cleaned["Особисті_нотатки"] = channel_config.personal_notes
                 cleaned["Ярлик"] = channel_config.label
+
+                # ---- FALLBACK QTY (тільки канал "site" — саме з нього Rozetka/
+                # Каста/Епіцентр збирають фіди; "prom" свідомо не займаємо) ---- #
+                if channel_config.channel == "site":
+                    fallback_qty, fallback_reason = resolve_fallback_qty(
+                        item_id=cleaned["Код_товару"],
+                        subdivision_id=cleaned["Ідентифікатор_підрозділу"],
+                        price=cleaned["Ціна"],
+                        qty=cleaned["Кількість"],
+                    )
+                    cleaned["Кількість"] = fallback_qty
+                    if fallback_reason == "applied":
+                        spider.logger.info(
+                            f"🎲 FALLBACK QTY: {cleaned.get('Назва_позиції', '?')[:50]} | "
+                            f"підрозділ={cleaned['Ідентифікатор_підрозділу']} "
+                            f"ціна={cleaned['Ціна']} → qty={fallback_qty}"
+                        )
+                    elif fallback_reason in ("invalid_price", "no_band_match"):
+                        spider.logger.warning(
+                            f"⚠️ FALLBACK QTY [{fallback_reason}]: "
+                            f"{cleaned.get('Назва_позиції', '?')[:50]} | "
+                            f"підрозділ={cleaned['Ідентифікатор_підрозділу']} "
+                            f"ціна={cleaned['Ціна']!r}"
+                        )
                 
                 # ---- SPECS ------------------------------------------- #
 
