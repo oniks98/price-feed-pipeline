@@ -32,7 +32,12 @@
                                        _LP_DELETE_PHRASES (звичайний текст, escape'ується
                                        автоматично) / _LP_REPLACE_RULES.
 Щоб додати Viatec-правило          — додай до _VIATEC_DELETE_PHRASES / _VIATEC_REPLACE_RULES.
-Щоб додати Secur-правило            — додай до _SECUR_DELETE_PHRASES.
+Щоб додати Secur-правило            — додай до _SECUR_DELETE_PHRASES (видалення фраз
+                                       в sanitize(), для всіх SANITIZED_FIELDS) або
+                                       підкоригуй _SECUR_NAME_QTY_PREFIX_RE (перенесення
+                                       кількісного префікса "Набір/Набор N шт." в кінець
+                                       назви — лише для TITLE_FIELDS, застосовується
+                                       окремо в sanitize_item, див. _apply_secur_title_rules).
 
 ВАЖЛИВО: supplier-специфічні правила застосовуються лише коли викликач
 передав `supplier="lp"` / `supplier="viatec"` / `supplier="secur"` (див.
@@ -483,17 +488,78 @@ _VIATEC_WORD_DELETE_RE: re.Pattern = re.compile(
 )
 
 
-# ─── Secur supplier: промо-фрази про прошивку ──────────────────────────────
-# Видаляються повністю (разом з попереднім роздільником, як і _PROMO_ARTIFACTS).
-_SECUR_DELETE_PHRASES: list[str] = [
-    "Новые версии прошивки регулярно появляются на нашем сайте и доступны для бесплатного скачивания",
-    "Нові версії прошивки регулярно з'являються на нашому сайті і доступні для безкоштовного скачування",
-]
+# ─── Secur supplier: фрази для повного видалення (усі SANITIZED_FIELDS) ────
+# Аналог _LP_DELETE_PHRASES / _VIATEC_DELETE_PHRASES — звичайний текст,
+# екранування (re.escape) відбувається автоматично при компіляції нижче.
+# Наразі порожній: жодної secur-специфічної промо-фрази ще не виявлено.
+# Порожній список — свідомий безпечний no-op (див. guard у sanitize():
+# _SECUR_DELETE_RE == None, доки сюди не додано хоча б одну фразу).
+_SECUR_DELETE_PHRASES: list[str] = []
 
-_SECUR_DELETE_RE: re.Pattern = re.compile(
-    r'[,;\s]*(?:' + '|'.join(re.escape(p) for p in _SECUR_DELETE_PHRASES) + r')\.?\s*',
+_SECUR_DELETE_RE: re.Pattern | None = (
+    re.compile(
+        r'(?:' + '|'.join(re.escape(p) for p in _SECUR_DELETE_PHRASES) + r')',
+        re.IGNORECASE,
+    )
+    if _SECUR_DELETE_PHRASES
+    else None
+)
+
+
+# ─── Secur supplier: назва товару має починатися з виду/типу товару ────────
+# Rozetka-модерація банить товари, назва яких починається не з виду/типу
+# товару (напр. "Ключ-брелок", "Безконтактна картка"), а з кількісного
+# префікса "Набір/Набор <N> шт." (де <N> — довільна кількість: 25, 75, 100,
+# 500 тощо). Приклад:
+#   "Набір 25 шт. Безконтактна картка Tecsar Trek EM-Marine 1,6 мм біла
+#    з прорізом Tecsar 3081"
+#   → "Безконтактна картка Tecsar Trek EM-Marine 1,6 мм біла з прорізом
+#      Tecsar 3081. Набір 25 шт"
+# Префікс переноситься в кінець назви (після виду/типу товару), а не
+# видаляється — кількість у наборі важлива для покупця і має лишитись.
+#
+# Правило застосовується ЛИШЕ до полів назви (TextSanitizer.TITLE_FIELDS) і
+# ЛИШЕ коли supplier == "secur" (див. sanitize_item) — на відміну від
+# _SECUR_DELETE_PHRASES, які застосовуються в sanitize() до всіх
+# SANITIZED_FIELDS. Винесено окремо, бо стосується виключно структури
+# назви, а не очищення тексту від небажаного вмісту.
+#
+# "шт" в джерелі завжди супроводжується крапкою — ця крапка є надійним
+# роздільником між префіксом і рештою назви, тож використовується як якір.
+_SECUR_NAME_QTY_PREFIX_RE: re.Pattern = re.compile(
+    r'^(?P<prefix>(?:Набір|Набор)\s+\d+\s*шт)\.\s*(?P<rest>.+)$',
     re.IGNORECASE,
 )
+
+
+def _move_secur_qty_prefix_to_end(text: str) -> str:
+    """
+    Переносить кількісний префікс "Набір/Набор <N> шт." з початку назви
+    товару Secur в кінець (після виду/типу товару) — вимога модерації
+    Rozetka: назва має починатися з виду/типу товару.
+
+    Кількість <N> довільна (25, 75, 100, 500 тощо) — не хардкодиться,
+    визначається регексом _SECUR_NAME_QTY_PREFIX_RE.
+
+    Args:
+        text: назва товару (вже після sanitize())
+
+    Returns:
+        Назву з перенесеним у кінець кількісним префіксом. Якщо префікс не
+        знайдено на початку рядка (або решта назви порожня) — оригінал
+        повертається без змін, безпечний fallback, щоб не ламати назви
+        іншого формату чи не отримати порожню назву.
+    """
+    if not text:
+        return text
+    match = _SECUR_NAME_QTY_PREFIX_RE.match(text)
+    if not match:
+        return text
+    prefix = match.group("prefix").strip()
+    rest = match.group("rest").strip().rstrip(".").strip()
+    if not rest:
+        return text
+    return f"{rest}. {prefix}"
 
 
 class TextSanitizer:
@@ -515,6 +581,16 @@ class TextSanitizer:
     DESCRIPTION_FIELDS: tuple[str, ...] = (
         "Опис",
         "Опис_укр",
+    )
+
+    # Поля-назви, до яких (і лише до яких) додатково застосовується
+    # перенесення кількісного префікса "Набір/Набор N шт." в кінець назви
+    # (див. _move_secur_qty_prefix_to_end) — і лише коли supplier == "secur"
+    # (див. sanitize_item). Не застосовується до описів/пошукових запитів —
+    # там префікс на початку не порушує вимог модерації Rozetka.
+    TITLE_FIELDS: tuple[str, ...] = (
+        "Назва_позиції",
+        "Назва_позиції_укр",
     )
 
     @staticmethod
@@ -562,7 +638,7 @@ class TextSanitizer:
             cleaned = _VIATEC_DELETE_RE.sub("", cleaned)
             for pattern, repl in _VIATEC_REPLACE_RE:
                 cleaned = pattern.sub(repl, cleaned)
-        elif supplier == "secur":
+        elif supplier == "secur" and _SECUR_DELETE_RE is not None:
             cleaned = _SECUR_DELETE_RE.sub("", cleaned)
 
         # Загальне для ВСІХ постачальників: видалення фото/відео та розгортання посилань
@@ -609,7 +685,8 @@ class TextSanitizer:
         Args:
             item: словник полів товару (result з _clean_item)
             supplier: нормалізоване ім'я постачальника (напр. config.supplier_name) —
-                вмикає LP/Viatec-специфічні правила в sanitize().
+                вмикає LP/Viatec/Secur-специфічні правила в sanitize(), а також
+                перенесення кількісного префікса в назвах (лише supplier == "secur").
 
         Returns:
             Той самий словник з очищеними полями
@@ -619,6 +696,8 @@ class TextSanitizer:
                 item[field] = cls.sanitize(item[field], supplier=supplier)
                 if field in cls.DESCRIPTION_FIELDS:
                     item[field] = cls._apply_desc_only_rules(item[field])
+                if field in cls.TITLE_FIELDS and supplier == "secur":
+                    item[field] = cls._apply_secur_title_rules(item[field])
         return item
 
     @staticmethod
@@ -637,3 +716,23 @@ class TextSanitizer:
         if not text:
             return text
         return _DESC_ONLY_COM_RE.sub(_fix_com_word, text)
+
+    @staticmethod
+    def _apply_secur_title_rules(text: str) -> str:
+        """
+        Переносить кількісний префікс "Набір/Набор N шт." з початку назви
+        товару Secur в кінець (див. _move_secur_qty_prefix_to_end) — щоб
+        назва починалася з виду/типу товару, як цього вимагає модерація
+        Rozetka. Застосовується лише до TextSanitizer.TITLE_FIELDS і лише
+        для supplier == "secur" (див. sanitize_item).
+
+        Args:
+            text: вже очищена (після sanitize) назва товару
+
+        Returns:
+            Назву з перенесеним у кінець кількісним префіксом, або оригінал
+            без змін, якщо префікс не знайдено на початку рядка.
+        """
+        if not text:
+            return text
+        return _move_secur_qty_prefix_to_end(text)
