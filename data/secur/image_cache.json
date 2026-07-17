@@ -5373,5 +5373,20 @@
     "w": 1027,
     "h": 589,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FF9Qt8UCFfvbsIKT3jE3JP6sYZN1ffvqaqEONGWzY.png&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://content.secur.ua/products/tl9AzH3fnn2NQsVGDs6maVc5uFlqqu0kyVUpStpQ.png": {
+    "w": 462,
+    "h": 287,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2Ftl9AzH3fnn2NQsVGDs6maVc5uFlqqu0kyVUpStpQ.png&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://content.secur.ua/products/8PLkVIYYvDsbdN13fK6JhSDTiM2syFjF05nxDMsW.png": {
+    "w": 487,
+    "h": 184,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2F8PLkVIYYvDsbdN13fK6JhSDTiM2syFjF05nxDMsW.png&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://content.secur.ua/products/CnVPIZExyDHsZ4kxxtaiRuhntY2XWmOe0pkSUgQZ.png": {
+    "w": 624,
+    "h": 521,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FCnVPIZExyDHsZ4kxxtaiRuhntY2XWmOe0pkSUgQZ.png&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
