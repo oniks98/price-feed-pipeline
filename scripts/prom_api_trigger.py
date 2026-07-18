@@ -76,7 +76,6 @@ UPDATED_FIELDS = [
     "price",
     "presence",
     "quantity_in_stock",
-    "group",
     "attributes",
     ]
 
