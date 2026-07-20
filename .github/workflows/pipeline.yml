@@ -88,6 +88,7 @@ env:
 #                   data/merged.csv + merged_prev.csv
 #                   data/prom_import_status.json        ← статус останнього імпорту
 #                   data/markets/{kasta,epicenter,rozetka}_feed.xml + _prev.xml
+#                   data/markets/rozetka_stop_brands_cache.json ← fallback, якщо Google Sheets недоступний
 #
 # ДОДАВАННЯ НОВОГО ПОСТАЧАЛЬНИКА:
 #   1. Додай блок в SUPPLIER_CONFIG у scripts/update_products.py
@@ -729,7 +730,7 @@ jobs:
           sleep 900
           echo "✅ Пауза завершена, генеруємо фід"
 
-      - name: Restore *_old.csv from data-latest
+      - name: Restore *_old.csv and stop-brand cache from data-latest
         run: |
           DATA_LATEST_REMOTE="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
 
@@ -747,6 +748,15 @@ jobs:
                 echo "⚠️  ${supplier}_old.csv не знайдено в data-latest"
               fi
             done
+
+            mkdir -p data/markets
+            cache_src="data-latest-dir/data/markets/rozetka_stop_brands_cache.json"
+            if [ -f "${cache_src}" ]; then
+              cp "${cache_src}" "data/markets/rozetka_stop_brands_cache.json"
+              echo "✅ Відновлено rozetka_stop_brands_cache.json"
+            else
+              echo "⚠️  rozetka_stop_brands_cache.json не знайдено в data-latest (перший запуск?)"
+            fi
           else
             ls_remote_status=$?
             if [ "${ls_remote_status}" -ne 2 ]; then
@@ -767,7 +777,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: feed-rozetka
-          path: data/markets/rozetka_feed.xml
+          path: |
+            data/markets/rozetka_feed.xml
+            data/markets/rozetka_stop_brands_cache.json
           retention-days: 1
           if-no-files-found: warn
 
@@ -820,6 +832,14 @@ jobs:
               echo "⚠️  ${market}_feed.xml відсутній — пропускаємо"
             fi
           done
+
+          # Rozetka stop-brand cache — no _prev rotation, it's a fallback snapshot
+          # for load_stop_brands(), not a diffable feed.
+          cache_src="feeds/rozetka_stop_brands_cache.json"
+          if [ -f "${cache_src}" ]; then
+            cp "${cache_src}" "publish-dir/data/markets/rozetka_stop_brands_cache.json"
+            echo "✅ rozetka_stop_brands_cache.json оновлено"
+          fi
 
       - name: Push to data-latest (один amend)
         run: |

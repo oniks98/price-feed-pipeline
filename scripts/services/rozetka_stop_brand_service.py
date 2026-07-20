@@ -16,17 +16,21 @@ from __future__ import annotations
 
 import csv
 import html
+import json
 import re
+import time
 from collections import Counter
+from datetime import datetime, timezone
 from io import StringIO
+from pathlib import Path
 from typing import Final, Iterable
 
 import requests
 from requests import RequestException
 
 # ---------------------------------------------------------------------------
-# Google Sheets config
-# Published spreadsheet uses e/ path — URL differs from regular sheets.
+# Конфігурація Google Sheets
+# Опублікована таблиця використовує шлях e/ — URL відрізняється від звичайних таблиць.
 # ---------------------------------------------------------------------------
 
 _PUBLISHED_ID: Final[str] = (
@@ -34,15 +38,15 @@ _PUBLISHED_ID: Final[str] = (
 )
 _SHEET_GID: Final[str] = "672087803"
 
-# Multiple URL patterns for the same published sheet — tried in order as fallbacks.
-# Published sheets expose only the pub?output=csv endpoint (no /export, no gviz by default).
+# Кілька варіантів URL для однієї опублікованої таблиці — перевіряються по черзі як резервні.
+# Опубліковані таблиці надають лише ендпоінт pub?output=csv (без /export, без gviz за замовчуванням).
 STOP_BRANDS_CSV_URL: Final[str] = (
     f"https://docs.google.com/spreadsheets/d/e/{_PUBLISHED_ID}"
     f"/pub?gid={_SHEET_GID}&single=true&output=csv"
 )
 _STOP_BRANDS_CSV_URLS: Final[tuple[str, ...]] = (
     STOP_BRANDS_CSV_URL,
-    # Alternative pub format (some older GSheets versions respond to this)
+    # Альтернативний формат pub (деякі старіші версії GSheets відповідають на такий)
     (
         f"https://docs.google.com/spreadsheets/d/e/{_PUBLISHED_ID}"
         f"/pub?gid={_SHEET_GID}&output=csv"
@@ -50,10 +54,19 @@ _STOP_BRANDS_CSV_URLS: Final[tuple[str, ...]] = (
 )
 
 _REQUEST_TIMEOUT: Final[int] = 30
+_MAX_ATTEMPTS: Final[int] = 3
+_RETRY_BACKOFF_SECONDS: Final[float] = 2.0
+
+# Локальний резервний варіант, якщо всі джерела недоступні (експорт Google
+# pub/csv відомий своєю нестабільністю незалежно від повторних спроб —
+# див. докстрінг _download_csv).
+_STOP_BRANDS_CACHE_PATH: Final[Path] = (
+    Path(__file__).resolve().parents[2] / "data" / "markets" / "rozetka_stop_brands_cache.json"
+)
 
 # ---------------------------------------------------------------------------
-# Header variants that identify the "brand name" column in the sheet.
-# Matched after casefold + collapse of -, _, whitespace variants.
+# Варіанти заголовків, що ідентифікують стовпець "назва бренду" в таблиці.
+# Порівнюються після casefold і згортання варіантів -, _, пробілів.
 # ---------------------------------------------------------------------------
 
 _BRAND_COL_HEADERS: Final[frozenset[str]] = frozenset({
@@ -71,7 +84,7 @@ _BRAND_COL_HEADERS: Final[frozenset[str]] = frozenset({
     "stop brands",
 })
 
-# Prom <param> names that represent the brand field inside an <offer>.
+# Назви <param> у Prom, що відповідають полю бренду всередині <offer>.
 _PROM_BRAND_PARAM_NAMES: Final[frozenset[str]] = frozenset({
     "brand",
     "бренд",
@@ -83,7 +96,7 @@ _PROM_BRAND_PARAM_NAMES: Final[frozenset[str]] = frozenset({
 })
 
 # ---------------------------------------------------------------------------
-# Compiled regexes — module-level, compiled once.
+# Скомпільовані регулярні вирази — на рівні модуля, компілюються один раз.
 # ---------------------------------------------------------------------------
 
 _OFFER_RE: Final[re.Pattern[str]] = re.compile(
@@ -104,18 +117,18 @@ _CDATA_RE: Final[re.Pattern[str]] = re.compile(
 )
 _HTML_TAG_RE: Final[re.Pattern[str]] = re.compile(r"<[^>]+>")
 
-# Splits composite brand values like "Samsung / LG", "Bosch, Siemens", "A + B".
+# Розбиває складені значення бренду на кшталт "Samsung / LG", "Bosch, Siemens", "A + B".
 _BRAND_SPLIT_RE: Final[re.Pattern[str]] = re.compile(
     r"\s*(?:[,;/|]|\s+\+\s+)\s*"
 )
 
 
 # ---------------------------------------------------------------------------
-# Text helpers
+# Допоміжні функції для роботи з текстом
 # ---------------------------------------------------------------------------
 
 def _clean_text(value: str) -> str:
-    """Strip CDATA wrappers, HTML tags, HTML entities, and collapse whitespace."""
+    """Прибирає обгортки CDATA, HTML-теги, HTML-сутності та згортає пробіли."""
     value = _CDATA_RE.sub(lambda m: m.group(1), value)
     value = _HTML_TAG_RE.sub("", value)
     value = html.unescape(value)
@@ -124,12 +137,12 @@ def _clean_text(value: str) -> str:
 
 
 def _normalize_brand(value: str) -> str:
-    """Casefold + clean — used as dict key for brand matching."""
+    """Casefold + очищення — використовується як ключ словника для зіставлення брендів."""
     return _clean_text(value).casefold()
 
 
 def _header_key(value: str) -> str:
-    """Normalize a header cell for comparison against _BRAND_COL_HEADERS."""
+    """Нормалізує клітинку заголовка для порівняння з _BRAND_COL_HEADERS."""
     value = _normalize_brand(value)
     value = value.replace("_", " ").replace("-", " ")
     return re.sub(r"\s+", " ", value).strip()
@@ -141,16 +154,38 @@ def _looks_like_html(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# CSV download & parsing
+# Завантаження та парсинг CSV
 # ---------------------------------------------------------------------------
 
 def _download_csv(url: str) -> str:
-    response = requests.get(url, timeout=_REQUEST_TIMEOUT)
-    response.raise_for_status()
-    csv_text = response.content.decode("utf-8-sig")
-    if _looks_like_html(csv_text):
-        raise RuntimeError("Google Sheets повернув HTML замість CSV")
-    return csv_text
+    """Завантажує CSV, повторюючи спроби при тимчасових мережевих помилках.
+
+    Ендпоінт опублікованої таблиці Google інколи обриває з'єднання
+    посеред відповіді або відповідає повільно під навантаженням
+    ("Response ended prematurely", таймаути читання) — це не проблеми
+    URL чи конфігурації, тож варто повторити спробу перед переходом
+    до наступного варіанта URL.
+    """
+    last_exc: RequestException | None = None
+    for attempt in range(1, _MAX_ATTEMPTS + 1):
+        try:
+            response = requests.get(url, timeout=_REQUEST_TIMEOUT)
+            response.raise_for_status()
+            csv_text = response.content.decode("utf-8-sig")
+            if _looks_like_html(csv_text):
+                raise RuntimeError("Google Sheets повернув HTML замість CSV")
+            return csv_text
+        except RequestException as exc:
+            last_exc = exc
+            if attempt < _MAX_ATTEMPTS:
+                wait = _RETRY_BACKOFF_SECONDS * attempt
+                print(
+                    f"⚠️  Спроба {attempt}/{_MAX_ATTEMPTS} завантажити {url} "
+                    f"невдала ({exc}), повтор через {wait:.0f}с"
+                )
+                time.sleep(wait)
+    assert last_exc is not None
+    raise last_exc
 
 
 def _rows_from_csv(csv_text: str) -> list[list[str]]:
@@ -163,15 +198,49 @@ def _rows_from_csv(csv_text: str) -> list[list[str]]:
 
 
 # ---------------------------------------------------------------------------
-# Column detection & brand extraction
+# Локальний резервний кеш
+# Зберігає останній успішно завантажений список, щоб запуск не блокувався,
+# коли всі живі джерела одночасно недоступні (чому таке трапляється навіть
+# з повторними спробами — див. докстрінг _download_csv).
+# ---------------------------------------------------------------------------
+
+def _save_stop_brands_cache(brands: frozenset[str]) -> None:
+    """Запис за принципом best-effort — помилка кешу ніколи не має зупиняти запуск."""
+    payload = {
+        "cached_at": datetime.now(timezone.utc).isoformat(),
+        "brands": sorted(brands),
+    }
+    try:
+        _STOP_BRANDS_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _STOP_BRANDS_CACHE_PATH.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        print(f"⚠️  Rozetka стоп-бренди: не вдалося зберегти кеш ({exc})")
+
+
+def _load_cached_stop_brands() -> tuple[frozenset[str], str] | None:
+    """Читає останній кешований список. За будь-якої проблеми повертає None, ніколи не кидає виняток."""
+    try:
+        payload = json.loads(_STOP_BRANDS_CACHE_PATH.read_text(encoding="utf-8"))
+        brands = frozenset(payload["brands"])
+        cached_at = str(payload.get("cached_at", "?"))
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        return None
+    return (brands, cached_at) if brands else None
+
+
+# ---------------------------------------------------------------------------
+# Визначення стовпця та вилучення брендів
 # ---------------------------------------------------------------------------
 
 def _find_brand_column(rows: list[list[str]]) -> tuple[int, int] | None:
     """
-    Returns (header_row_idx, col_idx) of the "Назва бренду / ТМ" column.
+    Повертає (header_row_idx, col_idx) стовпця "Назва бренду / ТМ".
 
-    Searches the first 10 rows to allow for title/subtitle rows above the header.
-    Returns None if the column is not found.
+    Шукає в перших 10 рядках, щоб урахувати можливі рядки заголовка/підзаголовка
+    над самим заголовком таблиці. Повертає None, якщо стовпець не знайдено.
     """
     for row_idx, row in enumerate(rows[:10]):
         for col_idx, cell in enumerate(row):
@@ -186,10 +255,10 @@ def _iter_brand_values(
     col_idx: int,
 ) -> Iterable[str]:
     """
-    Yields non-empty brand strings from col_idx, starting after header_row_idx.
+    Повертає (yield) непорожні рядки брендів зі col_idx, починаючи після header_row_idx.
 
-    Rows above the header (title/subtitle rows) are intentionally skipped
-    so that they are never mistaken for brand names.
+    Рядки над заголовком (рядки з назвою/підзаголовком) свідомо пропускаються,
+    щоб їх ніколи не сплутати з назвами брендів.
     """
     for row in rows[header_row_idx + 1 :]:
         if col_idx >= len(row):
@@ -200,22 +269,29 @@ def _iter_brand_values(
 
 
 # ---------------------------------------------------------------------------
-# Public: load stop brands
+# Публічна функція: завантаження стоп-брендів
 # ---------------------------------------------------------------------------
 
 def load_stop_brands(url: str | None = None) -> frozenset[str]:
     """
-    Downloads stop-brand names from the public Google Sheet CSV export.
+    Завантажує назви стоп-брендів із публічного CSV-експорту Google Таблиці.
+
+    Якщо всі живі URL недоступні, повертає останній кешований на диску список
+    (див. _STOP_BRANDS_CACHE_PATH) — експорт Google pub/csv відомий своєю
+    нестабільністю незалежно від повторних спроб (див. докстрінг _download_csv).
 
     Args:
-        url: Override URL for testing; production uses _STOP_BRANDS_CSV_URLS.
+        url: Перевизначення URL для тестів; у продакшені використовується
+             _STOP_BRANDS_CSV_URLS. Передача url вимикає дисковий кеш (читання й запис).
 
     Returns:
-        Frozenset of raw (pre-normalization) brand name strings.
+        Frozenset із сирих (до нормалізації) рядків назв брендів.
 
     Raises:
-        RuntimeError: If all URLs fail or the brand column is not found.
+        RuntimeError: якщо всі URL недоступні, стовпець бренду не знайдено
+            і немає придатного кешу.
     """
+    use_cache = url is None  # тестові перевизначення ніколи не торкаються дискового кешу
     errors: list[str] = []
     for csv_url in ((url,) if url else _STOP_BRANDS_CSV_URLS):
         try:
@@ -237,24 +313,38 @@ def load_stop_brands(url: str | None = None) -> frozenset[str]:
         brands = frozenset(_iter_brand_values(rows, header_row_idx, col_idx))
         if brands:
             print(f"🚫 Rozetka стоп-бренди: завантажено {len(brands)}")
+            if use_cache:
+                _save_stop_brands_cache(brands)
             return brands
 
         errors.append(f"{csv_url}: список порожній або нечитабельний")
 
+    if use_cache:
+        cached = _load_cached_stop_brands()
+        if cached is not None:
+            cached_brands, cached_at = cached
+            print(
+                f"⚠️  Rozetka стоп-бренди: усі джерела недоступні, "
+                f"використано кеш від {cached_at} ({len(cached_brands)} брендів)"
+            )
+            return cached_brands
+
     raise RuntimeError(
-        "Не вдалося завантажити стоп-бренди Rozetka:\n" + "\n".join(errors)
+        "Не вдалося завантажити стоп-бренди Rozetka (кеш також недоступний):\n"
+        + "\n".join(errors)
     )
 
 
 # ---------------------------------------------------------------------------
-# Brand matching helpers
+# Допоміжні функції для зіставлення брендів
 # ---------------------------------------------------------------------------
 
 def _stop_brand_index(stop_brands: Iterable[str]) -> dict[str, str]:
     """
-    Builds a {normalized_brand: display_brand} lookup dict.
+    Будує словник пошуку {normalized_brand: display_brand}.
 
-    Uses setdefault to keep the first encountered display form on duplicates.
+    Використовує setdefault, щоб зберігати першу зустрінуту форму
+    відображення при дублікатах.
     """
     index: dict[str, str] = {}
     for brand in stop_brands:
@@ -266,11 +356,11 @@ def _stop_brand_index(stop_brands: Iterable[str]) -> dict[str, str]:
 
 def _brand_candidates(body: str) -> list[str]:
     """
-    Extracts candidate brand strings from a single <offer> body:
-      1. <vendor> tag value (primary source in Rozetka/Prom feeds)
-      2. <param name="Бренд|brand|..."> values (secondary / fallback)
+    Витягує кандидатів у назви бренду з тіла одного <offer>:
+      1. значення тегу <vendor> (основне джерело у фідах Rozetka/Prom)
+      2. значення <param name="Бренд|brand|..."> (вторинне / резервне)
 
-    Returns a list of non-empty cleaned strings (preserves order: vendor first).
+    Повертає список непорожніх очищених рядків (зберігає порядок: спочатку vendor).
     """
     candidates: list[str] = []
 
@@ -291,11 +381,12 @@ def _matched_stop_brand(
     stop_index: dict[str, str],
 ) -> str | None:
     """
-    Returns the display name of the first stop brand matched in candidates,
-    or None if no match.
+    Повертає відображувану назву першого стоп-бренду, знайденого серед
+    кандидатів, або None, якщо збігів немає.
 
-    Each candidate is checked both whole and split on separators (/, ,, ;, |, +)
-    to handle composite brand strings like "Bosch / Siemens".
+    Кожен кандидат перевіряється як цілком, так і розбитим за роздільниками
+    (/, ,, ;, |, +) — для обробки складених рядків бренду на кшталт
+    "Bosch / Siemens".
     """
     for candidate in candidates:
         for token in (candidate, *_BRAND_SPLIT_RE.split(candidate)):
@@ -306,7 +397,7 @@ def _matched_stop_brand(
 
 
 # ---------------------------------------------------------------------------
-# Public: filter XML feed
+# Публічна функція: фільтрація XML-фіда
 # ---------------------------------------------------------------------------
 
 def filter_stop_brand_offers(
@@ -314,17 +405,18 @@ def filter_stop_brand_offers(
     stop_brands: Iterable[str] | None = None,
 ) -> str:
     """
-    Removes <offer> elements whose vendor/brand matches the stop-brand list.
+    Видаляє елементи <offer>, чий vendor/бренд збігається зі списком стоп-брендів.
 
     Args:
-        xml:         Full XML feed string.
-        stop_brands: Override brand list for tests; production loads from Google Sheet.
+        xml:         Повний рядок XML-фіда.
+        stop_brands: Перевизначення списку брендів для тестів; у продакшені
+                     завантажується з Google Таблиці.
 
     Returns:
-        XML with matching offers removed (empty string per removed offer).
+        XML з видаленими відповідними offer (порожній рядок замість кожного видаленого).
 
     Raises:
-        RuntimeError: If the stop-brand list is empty after normalization.
+        RuntimeError: якщо список стоп-брендів порожній після нормалізації.
     """
     raw_stop_brands = (
         load_stop_brands() if stop_brands is None else frozenset(stop_brands)

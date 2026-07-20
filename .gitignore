@@ -21,6 +21,7 @@ data/markets/epicenter_feed.xml
 data/markets/epicenter_feed_prev.xml
 data/markets/rozetka_feed.xml
 data/markets/rozetka_feed_prev.xml
+data/markets/rozetka_stop_brands_cache.json
 data/markets/merchant_feed.xml
 data/viatec/viatec_old.csv
 data/secur/secur_old.csv
