@@ -6,16 +6,18 @@ Rozetka вимагає, щоб <name> (назва) та <name_ua> (UA-назва
 товарів (варіанти виконання, кольору, модифікації) можуть мати однакову
 назву — Rozetka відхиляє такі оффери з помилкою «Назва ... не унікальне.».
 
-Сервіс не намагається вигадати "правильну" унікальну назву — це вимагало б
-знання товарної специфіки. Замість цього для кожного офера, чиє нормалізоване
-значення <name> або <name_ua> повторюється у фіді, в кінець значення дописується
-" (ID)", де ID — атрибут id тега <offer> (той самий "ID з прайсу продавця",
-що видно у звіті валідації Rozetka).
+Дублікат шукається НЕЗАЛЕЖНО для кожного тегу (<name> і <name_ua> — це різні
+помилки в звіті Rozetka, зустрічаються як разом, так і окремо). Але якщо для
+конкретного офера дублюється хоча б один з двох тегів, суфікс " (ID)"
+дописується ОБОМ тегам цього офера (тим, що присутні), а не лише тому, що
+формально дублюється. Це навмисно: RU- та UA-назва одного товару — це той
+самий офер у двох мовах, і якщо вони розходяться (один із суфіксом, інший —
+без), Rozetka додатково скаржиться, що назви товару в різних мовних версіях
+не збігаються.
 
-<name> та <name_ua> дедуплікуються НЕЗАЛЕЖНО один від одного — в звіті Rozetka
-це різні помилки, що зустрічаються як разом, так і окремо (див. приклад
-з реального звіту: частина офферів мала не унікальними обидва теги,
-частина — лише один з них).
+Сервіс не намагається вигадати "правильну" унікальну назву — це вимагало б
+знання товарної специфіки. Замість цього ID — атрибут id тега <offer>
+(той самий "ID з прайсу продавця", що видно у звіті валідації Rozetka).
 
 Використання в generate_rozetka_feed.py:
     from services.rozetka_unique_name_service import deduplicate_offer_names
@@ -40,14 +42,11 @@ _OFFER_RE: Final[re.Pattern[str]] = re.compile(
 _CDATA_RE: Final[re.Pattern[str]] = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.DOTALL)
 _HTML_TAG_RE: Final[re.Pattern[str]] = re.compile(r"<[^>]+>")
 
-# Теги, чия унікальність вимагається Rozetka — дедуплікуються незалежно один від одного.
-# УВАГА: тег назви — саме <name>, а НЕ <n> (у деяких коментарях по проєкту
-# помилково фігурує "<n>" — це не відповідає реальній структурі фіду).
+# Теги, чия унікальність вимагається Rozetka.
 _NAME_TAGS: Final[tuple[str, ...]] = ("name", "name_ua")
-
-
-def _tag_re(tag: str) -> re.Pattern[str]:
-    return re.compile(rf"<{tag}>(.*?)</{tag}>", re.DOTALL)
+_TAG_PATTERNS: Final[dict[str, re.Pattern[str]]] = {
+    tag: re.compile(rf"<{tag}>(.*?)</{tag}>", re.DOTALL) for tag in _NAME_TAGS
+}
 
 
 # ---------------------------------------------------------------------------
@@ -69,9 +68,7 @@ def _normalize(value: str) -> str:
 
 
 def _append_suffix(raw_value: str, offer_id: str) -> str:
-    """
-    Дописує " (ID)" в кінець значення тегу, зберігаючи CDATA-обгортку, якщо вона є.
-    """
+    """Дописує " (ID)" в кінець значення тегу, зберігаючи CDATA-обгортку, якщо вона є."""
     suffix = f" ({offer_id})"
     cdata_match = _CDATA_RE.fullmatch(raw_value.strip())
     if cdata_match:
@@ -80,62 +77,52 @@ def _append_suffix(raw_value: str, offer_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Core: dedupe одного тегу по всьому фіду (два незалежні проходи)
+# Прохід 1 — знайти дубльовані нормалізовані значення для кожного тегу окремо
 # ---------------------------------------------------------------------------
 
-def _dedupe_tag(xml: str, tag: str) -> tuple[str, int, int]:
+def _find_duplicated_values(xml: str, tag: str) -> set[str]:
+    """Повертає множину нормалізованих значень тегу `tag`, що зустрічаються
+    у фіді більше одного разу. Оффери без тега або з порожнім значенням
+    пропускаються — сервіс ніколи не падає через один товар.
     """
-    Дедуплікує значення одного тегу (<name> або <name_ua>) по всьому фіду.
-
-    Прохід 1 — рахує частоту нормалізованих значень.
-    Прохід 2 — усім офферам з дубльованим значенням (включно з першим —
-    щоб результат не залежав від порядку офферів у XML) дописує " (ID)".
-
-    Оффери без тега або з порожнім значенням пропускаються — сервіс
-    ніколи не падає через один товар.
-
-    Returns:
-        (оновлений_xml, кількість_офферів_з_суфіксом, кількість_дубльованих_значень)
-    """
-    tag_re = _tag_re(tag)
-
+    tag_re = _TAG_PATTERNS[tag]
     counts: Counter[str] = Counter()
 
-    def _count_offer(m: re.Match[str]) -> str:
-        tag_match = tag_re.search(m.group(3))
-        if tag_match:
-            normalized = _normalize(tag_match.group(1))
-            if normalized:
-                counts[normalized] += 1
-        return m.group(0)
-
-    _OFFER_RE.sub(_count_offer, xml)
-
-    duplicated_values = {value for value, count in counts.items() if count > 1}
-    if not duplicated_values:
-        return xml, 0, 0
-
-    appended = 0
-
-    def _fix_offer(m: re.Match[str]) -> str:
-        nonlocal appended
-        offer_id, tail_attrs, body = m.group(1), m.group(2), m.group(3)
-
-        tag_match = tag_re.search(body)
+    for offer_match in _OFFER_RE.finditer(xml):
+        tag_match = tag_re.search(offer_match.group(3))
         if not tag_match:
-            return m.group(0)
-
+            continue
         normalized = _normalize(tag_match.group(1))
-        if normalized not in duplicated_values:
-            return m.group(0)
+        if normalized:
+            counts[normalized] += 1
 
+    return {value for value, count in counts.items() if count > 1}
+
+
+# ---------------------------------------------------------------------------
+# Прохід 2 — застосувати суфікс до ОБОХ тегів офера, якщо хоч один дублюється
+# ---------------------------------------------------------------------------
+
+def _offer_tag_matches(body: str) -> dict[str, re.Match[str]]:
+    """Повертає знайдені в тілі офера збіги для кожного з `_NAME_TAGS`, що присутній."""
+    matches: dict[str, re.Match[str]] = {}
+    for tag, tag_re in _TAG_PATTERNS.items():
+        tag_match = tag_re.search(body)
+        if tag_match:
+            matches[tag] = tag_match
+    return matches
+
+
+def _apply_suffix_to_offer(body: str, offer_id: str, matches: dict[str, re.Match[str]]) -> str:
+    """Дописує " (ID)" до значень усіх переданих тегів у тілі офера.
+
+    Правки застосовуються від останньої позиції до першої, щоб зсув
+    довжини рядка після однієї заміни не ламав офсети іншої.
+    """
+    for tag_match in sorted(matches.values(), key=lambda m: m.start(1), reverse=True):
         new_value = _append_suffix(tag_match.group(1), offer_id)
         body = body[: tag_match.start(1)] + new_value + body[tag_match.end(1):]
-        appended += 1
-        return f'<offer id="{offer_id}"{tail_attrs}>{body}</offer>'
-
-    result = _OFFER_RE.sub(_fix_offer, xml)
-    return result, appended, len(duplicated_values)
+    return body
 
 
 # ---------------------------------------------------------------------------
@@ -146,15 +133,46 @@ def deduplicate_offer_names(xml: str) -> str:
     """
     Робить <name> та <name_ua> унікальними в межах фіду — вимога Rozetka.
 
-    Для кожного тега — незалежний прохід: якщо нормалізоване значення
-    (без CDATA/HTML/entities, casefold) зустрічається у фіді більше 1 разу,
-    до значення КОЖНОГО офера з цим значенням (включно з першим) дописується
-    " (ID)", де ID — id офера. Суфікс отримують усі, а не лише "другий і далі",
-    щоб результат не залежав від порядку офферів у XML і всі дублікати у фіді
-    виглядали єдинообразно.
+    Дублікат нормалізованого значення шукається незалежно для кожного тегу.
+    Але якщо для офера дублюється хоча б один з двох тегів, суфікс " (ID)"
+    дописується ОБОМ тегам цього офера (тим, що присутні) — щоб RU- та
+    UA-назва товару завжди лишались парними і не виглядали як різні
+    найменування одного й того ж товару.
     """
+    duplicated_by_tag = {tag: _find_duplicated_values(xml, tag) for tag in _NAME_TAGS}
+
+    if not any(duplicated_by_tag.values()):
+        for tag in _NAME_TAGS:
+            print(f"🔁 Rozetka унікальність <{tag}>: дублікатів не знайдено")
+        return xml
+
+    appended_by_tag: Counter[str] = Counter()
+
+    def _fix_offer(m: re.Match[str]) -> str:
+        offer_id, tail_attrs, body = m.group(1), m.group(2), m.group(3)
+
+        matches = _offer_tag_matches(body)
+        if not matches:
+            return m.group(0)
+
+        needs_suffix = any(
+            _normalize(tag_match.group(1)) in duplicated_by_tag[tag]
+            for tag, tag_match in matches.items()
+        )
+        if not needs_suffix:
+            return m.group(0)
+
+        new_body = _apply_suffix_to_offer(body, offer_id, matches)
+        for tag in matches:
+            appended_by_tag[tag] += 1
+
+        return f'<offer id="{offer_id}"{tail_attrs}>{new_body}</offer>'
+
+    result = _OFFER_RE.sub(_fix_offer, xml)
+
     for tag in _NAME_TAGS:
-        xml, appended, dup_count = _dedupe_tag(xml, tag)
+        appended = appended_by_tag[tag]
+        dup_count = len(duplicated_by_tag[tag])
         if appended:
             print(
                 f"🔁 Rozetka унікальність <{tag}>: {appended} товарів отримали суфікс (ID) "
@@ -163,4 +181,4 @@ def deduplicate_offer_names(xml: str) -> str:
         else:
             print(f"🔁 Rozetka унікальність <{tag}>: дублікатів не знайдено")
 
-    return xml
+    return result
