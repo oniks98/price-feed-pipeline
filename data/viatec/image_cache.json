@@ -31808,5 +31808,25 @@
     "w": 1000,
     "h": 1000,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/2/PS7FP.webp": {
+    "w": 424,
+    "h": 424,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FPS7FP.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2024-01/3/bfcdf200-6439-11ea-96ae-afbb9487bd32.png.webp": {
+    "w": 300,
+    "h": 300,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2024-01%2F3%2Fbfcdf200-6439-11ea-96ae-afbb9487bd32.png.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/ge-f120-2h2.webp": {
+    "w": 892,
+    "h": 892,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fge-f120-2h2.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/CINLINELEHCS816-6-kit.webp": {
+    "w": 426,
+    "h": 426,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FCINLINELEHCS816-6-kit.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
