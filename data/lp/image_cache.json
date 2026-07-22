@@ -10893,5 +10893,20 @@
     "w": 1280,
     "h": 1280,
     "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/1/15/d55ec7f8c1f917d65574b492289d7.jpg": {
+    "w": 1280,
+    "h": 1280,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/2/a4/abe5a3eeff7433157b7c2483aa0e7.jpg": {
+    "w": 1280,
+    "h": 1280,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/a/a1/7791f8f98a55a606d3fac9f789a4d.jpg": {
+    "w": 1280,
+    "h": 1280,
+    "transform_url": null
   }
 }
