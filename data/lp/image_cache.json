@@ -11103,5 +11103,10 @@
     "w": 1280,
     "h": 1280,
     "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/c/02/4d9b9f25e0efcfb6d3b00d2d46a27.jpg": {
+    "w": 320,
+    "h": 320,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fapi.b2b.logicpower.ua%2Fstatic%2Fattachments%2Fc%2F02%2F4d9b9f25e0efcfb6d3b00d2d46a27.jpg&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
