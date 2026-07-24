@@ -11228,5 +11228,55 @@
     "w": 1024,
     "h": 1024,
     "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/0/2c/2126ad6d13e2f940a546938237969.jpg": {
+    "w": 1024,
+    "h": 1024,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/4/a1/768bd7b6d7f2d1d0877ede0bf543f.jpg": {
+    "w": 1024,
+    "h": 1024,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/c/ce/2fb1fe8ffc2da3685294cce76ba08.jpg": {
+    "w": 1024,
+    "h": 1024,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/5/05/7cc4d51109f992b65a551f8693f2c.jpg": {
+    "w": 1024,
+    "h": 1024,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/8/c0/a83b19cb1055abfcfc8e0df41c365.jpg": {
+    "w": 1024,
+    "h": 1024,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/9/df/59d708011207664defcd0a32e495d.jpg": {
+    "w": 1024,
+    "h": 1024,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/3/62/116b81669315b8096ad14d0b2cb26.jpg": {
+    "w": 1024,
+    "h": 1024,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/f/a3/7940d325c968a094726ad24cf8225.jpg": {
+    "w": 1024,
+    "h": 1024,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/9/f0/a2edc4fbc29676f4f83943e69ce76.jpg": {
+    "w": 1024,
+    "h": 1024,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/4/b5/09c530bf8addab330b8fe881c2771.jpg": {
+    "w": 1024,
+    "h": 1024,
+    "transform_url": null
   }
 }
