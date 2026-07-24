@@ -10,7 +10,8 @@ Prom.ua відхиляє товари з кількістю характерис
 
 Обов'язкові характеристики (_PROTECTED_NAMES) ніколи не відкидаються,
 навіть якщо загальний список перевищує ліміт.
-Вони додаються pipeline автоматично через SpecsEnricher.
+Вони додаються pipeline автоматично через SpecsEnricher та RequiredGuaranteeService
+(для категорій з REQUIRED_GUARANTEE_CATEGORIES, див. required_guarantee.py).
 
 ДВОШАРОВА АРХІТЕКТУРА ОБМЕЖЕННЯ (реалізована в pipelines.py):
 
@@ -39,6 +40,7 @@ _PROTECTED_NAMES: frozenset[str] = frozenset({
     "стан",
     "компанія-виробник",
     "країна-виробник",
+    "гарантійний термін",
 })
 
 

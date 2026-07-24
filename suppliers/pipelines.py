@@ -100,6 +100,7 @@ from suppliers.services.prom_csv_schema import PromCsvSchema
 from suppliers.services.specs_enricher import SpecsEnricher
 from suppliers.services.spec_length_handler import SpecificationLengthHandler
 from suppliers.services.spec_limit_handler import SpecLimitService, PROM_HARD_LIMIT, PROM_CSV_SPECS_LIMIT
+from suppliers.services.required_guarantee import RequiredGuaranteeService
 from suppliers.services.field_processor import FieldProcessor
 from suppliers.services.validation_service import ValidationService
 from suppliers.services.sku_code_service import SkuCodeService
@@ -290,6 +291,7 @@ class SuppliersPipeline:
             "filtered_no_price": 0,
             "filtered_no_stock": 0,
             "filtered_no_sku": 0,
+            "guarantee_defaults": {},
         }
 
     def _init_services(self, config: SupplierConfig, spider):
@@ -609,6 +611,9 @@ class SuppliersPipeline:
                 # ---- POSTPROCESS SPECS ------------------------------- #
                 
                 category_id = channel_config.subdivision_id
+                specs, guarantee_defaulted = RequiredGuaranteeService.ensure_guarantee(specs, category_id)
+                if guarantee_defaulted:
+                    self._inc_guarantee(output_file, category_id)
                 specs = self.field_processor.process_specs_weight(specs, category_id, spider)
                 specs = self.field_processor.process_specs_load_capacity(specs, spider)
                 specs = self.field_processor.process_specs_hdd_capacity(specs, spider)
@@ -860,6 +865,11 @@ class SuppliersPipeline:
     def _inc(self, file, key):
         self.stats[file][key] += 1
 
+    def _inc_guarantee(self, file: str, category_id: str) -> None:
+        """Лічильник дефолтної гарантії (6 міс) по категоріях — для підсумкового логу в close_spider."""
+        bucket = self.stats[file]["guarantee_defaults"]
+        bucket[category_id] = bucket.get(category_id, 0) + 1
+
     def close_spider(self, spider):
         # Guard: Scrapy може викликати close_spider повторно при скасуванні.
         # Перевіряємо одразу, щоб уникнути double-close файлів і double-save.
@@ -890,3 +900,4 @@ class SuppliersPipeline:
                 f"NO_STOCK={s['filtered_no_stock']} "
                 f"NO_SKU={s['filtered_no_sku']}"
             )
+            RequiredGuaranteeService.log_summary(s.get("guarantee_defaults", {}), spider.logger)

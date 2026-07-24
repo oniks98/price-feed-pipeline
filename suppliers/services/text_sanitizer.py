@@ -38,6 +38,13 @@
                                        кількісного префікса "Набір/Набор N шт." в кінець
                                        назви — лише для TITLE_FIELDS, застосовується
                                        окремо в sanitize_item, див. _apply_secur_title_rules).
+Щоб додати правило лише для ОПИСІВ
+(Опис/Опис_укр, для ВСІХ постачальників)   — додай regex-правило поруч із
+                                       _DESC_ONLY_COM_RE / _WARRANTY_PERIOD_RE та
+                                       підключи виклик у _apply_desc_only_rules
+                                       (застосовується ПІСЛЯ sanitize(), лише до
+                                       TextSanitizer.DESCRIPTION_FIELDS — характеристик
+                                       товару не зачіпає).
 
 ВАЖЛИВО: supplier-специфічні правила застосовуються лише коли викликач
 передав `supplier="lp"` / `supplier="viatec"` / `supplier="secur"` (див.
@@ -211,6 +218,29 @@ def _fix_com_word(match: re.Match) -> str:
     if all(ch in _CYRILLIC_COM_LOOKALIKES for ch in word):
         return word
     return "".join(_CYRILLIC_COM_LOOKALIKES.get(ch, ch) for ch in word) + "-"
+
+
+# ─── Загальне для ВСІХ постачальників, але Лише в ОПИСАх: гарантійний строк ──
+# У вільному тексті опису іноді дублюється речення/фраза "Гарантія – 6 міс."
+# (укр.) або "Гарантия – 18 мес." (рос.), що повторює структуроване поле
+# характеристик "Гарантія" — таке дублювання в описі зайве і видаляється.
+# ВАЖЛИВО: характеристики товару — окреме поле поза TextSanitizer.
+# SANITIZED_FIELDS, це правило їх у принципі не зачіпає; застосовується лише
+# до TextSanitizer.DESCRIPTION_FIELDS через _apply_desc_only_rules (див.
+# sanitize_item), так само як і COM-правило вище.
+#
+# Кількість місяців довільна (6, 12, 18, 24 тощо) — \d+, без хардкоду.
+# Дефіс/тире між "Гарантія" і числом варіюється в джерелах (звичайний "-",
+# короткий "–" U+2013, довгий "—" U+2014) — усі три враховані.
+# "міс"/"мес" — укр./рос. скорочення слова "місяців"/"месяцев", крапка після
+# скорочення опціональна. Провідний [,;\s]* / кінцевий \.?\s* — той самий
+# підхід, що й у _PROMO_ARTIFACTS_RE / _VIATEC_DELETE_RE — щоб не лишати
+# "осиротілих" роздільників там, де фраза йшла в переліку через кому чи
+# крапку з комою.
+_WARRANTY_PERIOD_RE: re.Pattern = re.compile(
+    r'[,;\s]*Гарант(?:ія|ия)\s*[-–—]\s*\d+\s*(?:міс|мес)\.?\s*',
+    re.IGNORECASE,
+)
 
 
 # ─── Загальне для ВСІХ постачальників: посилання та фото/відео у описах ───────────
@@ -703,19 +733,35 @@ class TextSanitizer:
     @staticmethod
     def _apply_desc_only_rules(text: str) -> str:
         """
-        Застосовує правило "COM" → "COM-" (див. _DESC_ONLY_COM_RE / _fix_com_word)
-        до полів опису. Case-insensitive, з нормалізацією кириличних омографів
-        С/О/М. Однакове для ВСІХ постачальників.
+        Застосовує правила, що діють лише для полів опису (TextSanitizer.
+        DESCRIPTION_FIELDS), однакові для ВСІХ постачальників:
+          1. "COM" → "COM-" (див. _DESC_ONLY_COM_RE / _fix_com_word) —
+             case-insensitive, з нормалізацією кириличних омографів С/О/М.
+          2. Видалення гарантійного строку "Гарантія – N міс." / "Гарантия –
+             N мес." (див. _WARRANTY_PERIOD_RE) — дублює структуроване поле
+             характеристик "Гарантія", яке це правило НЕ зачіпає (окреме
+             поле поза SANITIZED_FIELDS, сюди взагалі не потрапляє).
+
+        Після видалення гарантійного строку прибираються ті самі артефакти
+        (пробіл перед розділовим знаком, подвійна пунктуація, відсутній
+        пробіл після крапки/коми між реченнями, подвійні пробіли), що й
+        наприкінці sanitize() — бо це видалення відбувається вже ПІСЛЯ того,
+        як sanitize() відпрацював свою постобробку.
 
         Args:
             text: вже очищений (після sanitize) текст опису
 
         Returns:
-            Текст з застосованим COM-правилом
+            Текст з застосованими COM- та warranty-правилами
         """
         if not text:
             return text
-        return _DESC_ONLY_COM_RE.sub(_fix_com_word, text)
+        cleaned = _DESC_ONLY_COM_RE.sub(_fix_com_word, text)
+        cleaned = _WARRANTY_PERIOD_RE.sub("", cleaned)
+        cleaned = _SPACE_BEFORE_PUNCT_RE.sub(r'\1', cleaned)
+        cleaned = _DUPLICATE_PUNCT_RE.sub(r'\1', cleaned)
+        cleaned = _MISSING_SPACE_AFTER_PUNCT_RE.sub(r'\1 ', cleaned)
+        return re.sub(r' {2,}', ' ', cleaned).strip()
 
     @staticmethod
     def _apply_secur_title_rules(text: str) -> str:
