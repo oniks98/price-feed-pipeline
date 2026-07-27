@@ -33113,5 +33113,25 @@
     "w": 456,
     "h": 456,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2024-09%2FWM-80F-01.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/%D0%94%D0%B6%D0%BC%D1%96%D0%BB%D1%8C_Front.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F%25D0%2594%25D0%25B6%25D0%25BC%25D1%2596%25D0%25BB%25D1%258C_Front.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/%D0%94%D0%B6%D0%BC%D1%96%D0%BB%D1%8C_Front_Light.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F%25D0%2594%25D0%25B6%25D0%25BC%25D1%2596%25D0%25BB%25D1%258C_Front_Light.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/%D0%94%D0%B6%D0%BC%D1%96%D0%BB%D1%8C_Side.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F%25D0%2594%25D0%25B6%25D0%25BC%25D1%2596%25D0%25BB%25D1%258C_Side.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/%D0%94%D0%B6%D0%BC%D1%96%D0%BB%D1%8C_Back.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F%25D0%2594%25D0%25B6%25D0%25BC%25D1%2596%25D0%25BB%25D1%258C_Back.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
