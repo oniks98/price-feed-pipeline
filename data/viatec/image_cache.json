@@ -33018,5 +33018,45 @@
     "w": 352,
     "h": 301,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F1_0_01_25_11022_1164018417.jpg&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/DH-PFB220C.jpg": {
+    "w": 352,
+    "h": 301,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2FDH-PFB220C.jpg&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/am-multi%2B.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2Fam-multi%252B.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/art-w-30w.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fart-w-30w.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/art-w-30w1.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/art-w-30w3.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/videx-15w-5000k-black.webp": {
+    "w": 794,
+    "h": 794,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fvidex-15w-5000k-black.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/videx-15w-5000k-black1.webp": {
+    "w": 962,
+    "h": 962,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fvidex-15w-5000k-black1.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/videx-15w-5000k-black2.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
   }
 }
