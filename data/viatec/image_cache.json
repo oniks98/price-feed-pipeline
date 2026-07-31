@@ -33733,5 +33733,35 @@
     "w": 1000,
     "h": 1000,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2025-04%2FDHI-LM27-F4002.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-08/600742000.webp": {
+    "w": 638,
+    "h": 638,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2023-08%2F600742000.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/2018-03-12/2502800s_51.webp": {
+    "w": 954,
+    "h": 954,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2F2018-03-12%2F2502800s_51.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2024-11/rtd-18-ltx-bl-30-601720.webp": {
+    "w": 800,
+    "h": 800,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2024-11%2Frtd-18-ltx-bl-30-601720.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2024-11/rtd-18-ltx-bl-30-6017201.webp": {
+    "w": 800,
+    "h": 800,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-11/rtd-18-ltx-bl-30-6017202.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2024-11%2Frtd-18-ltx-bl-30-6017202.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2024-11/rtd-18-ltx-bl-30-6017203.webp": {
+    "w": 800,
+    "h": 800,
+    "transform_url": null
   }
 }
