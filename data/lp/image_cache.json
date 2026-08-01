@@ -11323,5 +11323,15 @@
     "w": 1280,
     "h": 1280,
     "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/4/3a/8cff22298fa8edb734444fea0c719.jpg": {
+    "w": 1024,
+    "h": 1024,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/1/f2/93a87feeb10a4b9fbad07831b45d5.jpg": {
+    "w": 1024,
+    "h": 1024,
+    "transform_url": null
   }
 }
