@@ -76,7 +76,6 @@ UPDATED_FIELDS = [
     "price",
     "presence",
     "quantity_in_stock",
-    "attributes",
     ]
 
 REQUEST_TIMEOUT = 30   # сек на HTTP запит

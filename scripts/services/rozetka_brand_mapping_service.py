@@ -46,6 +46,7 @@ from typing import Final
 _BRAND_CORRECTIONS: Final[dict[str, tuple[str, str]]] = {
     "nvc": ("Anker", "Китай"),
     "kpl": ("Anker", "Китай"),
+    "psu": ("Kraft", "Китай"),
     "cinlinele": ("Anker", "Китай"),
     "oem": ("Anker", "Китай"),
     "telstream": ("Anker", "Китай"),
