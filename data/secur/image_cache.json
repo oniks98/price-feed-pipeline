@@ -5573,5 +5573,15 @@
     "w": 673,
     "h": 903,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FBKf1pglGfsArcxOW5XpIa2m4zqjXfqQzftuKwvz6.png&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://content.secur.ua/products/NR1vNeHvdAxOmfwhtwbl9BcmtC25brDknpXev6Xr.jpg": {
+    "w": 2560,
+    "h": 2560,
+    "transform_url": null
+  },
+  "https://content.secur.ua/products/Hpu0WHjrJ4MgKW1VrL2GYFpNtk6r44Qe2eWLmOhE.png": {
+    "w": 564,
+    "h": 851,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FHpu0WHjrJ4MgKW1VrL2GYFpNtk6r44Qe2eWLmOhE.png&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
