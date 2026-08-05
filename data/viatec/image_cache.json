@@ -34178,5 +34178,30 @@
     "w": 1000,
     "h": 1000,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FUXG-Max1.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/st4on-s4dcs3-124.webp": {
+    "w": 383,
+    "h": 383,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fst4on-s4dcs3-124.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/DS-1260ZJ-b.jpg": {
+    "w": 352,
+    "h": 301,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2FDS-1260ZJ-b.jpg&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/DS-KD9203-E6.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2FDS-KD9203-E6.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-05/RG-NBS5100-24GT4SFP-P.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2023-05%2FRG-NBS5100-24GT4SFP-P.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-05/RG-NBS5100-24GT4SFP-P1.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2023-05%2FRG-NBS5100-24GT4SFP-P1.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
