@@ -34553,5 +34553,20 @@
     "w": 636,
     "h": 636,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Feserver-600h500h637-sh-g-v-sklo-cho2.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/poc11.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fpoc11.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/trnxlfpdbz.webp": {
+    "w": 988,
+    "h": 988,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Ftrnxlfpdbz.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/trnxppl11.webp": {
+    "w": 988,
+    "h": 988,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Ftrnxppl11.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
