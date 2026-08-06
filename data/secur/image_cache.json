@@ -5593,5 +5593,20 @@
     "w": 479,
     "h": 312,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FzG3jk91yCMkwhHyG87pteeJmrD1twpwLIL4Ev7ZZ.png&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://content.secur.ua/products/wts_b_360_0009.jpeg": {
+    "w": 1440,
+    "h": 1440,
+    "transform_url": null
+  },
+  "https://content.secur.ua/products/CkJxNb4y2l3pGXYDfs5SLzpGbz2zJEFwkndx3Ank.jpg": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://content.secur.ua/products/cuQU8A4LPtR1HXEfbMpKpNB06tbXAEKvmwnEw5HT.png": {
+    "w": 2048,
+    "h": 2048,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FcuQU8A4LPtR1HXEfbMpKpNB06tbXAEKvmwnEw5HT.png&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
