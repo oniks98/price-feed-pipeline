@@ -5608,5 +5608,15 @@
     "w": 2048,
     "h": 2048,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FcuQU8A4LPtR1HXEfbMpKpNB06tbXAEKvmwnEw5HT.png&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://content.secur.ua/products/_ajax_hub_6__4.jpg": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://content.secur.ua/products/Ch7kytNWuIfseKX17FRSmsDkl8TFvxGlMqwFdqoV.jpg": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
   }
 }
