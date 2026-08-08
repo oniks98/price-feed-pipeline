@@ -14,8 +14,14 @@
        - немає category rule (coef_uncategorized) або немає бази (coef_no_base):
            Ціна = base_price * coefficient   (як і раніше, без змін)
   4. Округлити вгору до цілої гривні (ceil_uah).
-  5. Якщо отримана ціна потрапляє у діапазон
-     SURCHARGE_PRICE_MIN..SURCHARGE_PRICE_MAX — додати SURCHARGE_AMOUNT.
+  5. Лише після кроків 1–4 (усіх коефіцієнтів із CSV та округлення) для ціни
+     у діапазоні 250..30 000 грн визначити найбільшу з фактичної
+     та об'ємної ваги (L × W × H / 4 000), якщо всі сторони ≤ 70 см:
+        < 2 кг → +90 грн, < 10 кг → +135 грн, ≤ 30 кг → +200 грн.
+     Якщо є фактична вага, але габарити неповні — використати фактичну вагу
+     (за умови, що жодна відома сторона не перевищує 70 см). Якщо немає ані
+     ваги, ані габаритів — для ціни до 6 000 грн додати fallback +100 грн та
+     вивести ID офера у зведенні.
 
 CSV-схема коефіцієнтів (роздільник «;», кодування utf-8-sig):
   A  prom_category_id
@@ -39,13 +45,14 @@ CSV-схема коефіцієнтів (роздільник «;», кодув�
 from __future__ import annotations
 
 import csv
+from html import unescape
 import logging
 import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 from pathlib import Path
-from typing import Final
+from typing import Callable, Final
 
 from ._base import (
     ArticlePrices,
@@ -66,18 +73,87 @@ from ._base import (
 _ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 COEFFICIENTS_PATH: Final[Path] = _ROOT / "data" / "markets" / "epicenter_coefficients.csv"
 DEFAULT_LOG_PATH: Final[Path] = _ROOT / "epicenter_default_id.log"
+DEFAULT_MARKUP_LOG_PATH: Final[Path] = _ROOT / "epicenter_default_markup_id.log"
 _CSV_DELIMITER: Final[str] = ";"
 _CSV_ENCODING: Final[str] = "utf-8-sig"
 
 
 # ---------------------------------------------------------------------------
-# Надбавка до ціни після множення на коефіцієнт
-# Застосовується якщо ціна ∈ [SURCHARGE_PRICE_MIN, SURCHARGE_PRICE_MAX]
+# Надбавка до ціни після множення на коефіцієнт.
+#
+# Відправлення допускається лише тоді, коли розрахована ціна, фактична/
+# об'ємна вага та всі габарити вкладаються в межі нижче.  Об'ємна вага
+# рахується за габаритами упаковки, бо саме вона визначає тариф доставки.
 # ---------------------------------------------------------------------------
 
-SURCHARGE_PRICE_MIN: Final[Decimal] = Decimal("199")
-SURCHARGE_PRICE_MAX: Final[Decimal] = Decimal("4999")
-SURCHARGE_AMOUNT:    Final[Decimal] = Decimal("40")
+SURCHARGE_PRICE_MIN: Final[Decimal] = Decimal("250")
+SURCHARGE_PRICE_MAX: Final[Decimal] = Decimal("30000")
+DEFAULT_SURCHARGE_PRICE_MAX: Final[Decimal] = Decimal("6000")
+MAX_DIMENSION_CM: Final[Decimal] = Decimal("70")
+MAX_EFFECTIVE_WEIGHT_KG: Final[Decimal] = Decimal("30")
+VOLUMETRIC_WEIGHT_DIVISOR: Final[Decimal] = Decimal("4000")
+
+SURCHARGE_LIGHT: Final[Decimal] = Decimal("90")
+SURCHARGE_MEDIUM: Final[Decimal] = Decimal("135")
+SURCHARGE_HEAVY: Final[Decimal] = Decimal("200")
+SURCHARGE_DEFAULT: Final[Decimal] = Decimal("100")
+
+_LIGHT_WEIGHT_LIMIT: Final[Decimal] = Decimal("2")
+_MEDIUM_WEIGHT_LIMIT: Final[Decimal] = Decimal("10")
+
+
+# Назви та одиниці з фіду постачальника.  Зіставлення назв виконується після
+# casefold(), тому варіанти регістру не створюють окремих правил.
+_WEIGHT_NAMES: Final[frozenset[str]] = frozenset({"вес", "масса", "вага", "маса"})
+_PACKAGE_DIMENSION_PREFIXES: Final[tuple[str, ...]] = (
+    "розмір упаковки",
+    "размер упаковки",
+)
+_DIMENSION_PREFIXES: Final[tuple[str, ...]] = ("розміри", "размеры")
+_DIMENSION_AXES: Final[dict[str, tuple[str, ...]]] = {
+    "height": ("висота", "высота"),
+    "length": ("довжина", "длина"),
+    "width": ("ширина",),
+}
+
+_PARAM_RE: Final[re.Pattern[str]] = re.compile(
+    r"<param\b(?P<attributes>[^>]*)>(?P<value>.*?)</param>",
+    flags=re.DOTALL | re.IGNORECASE,
+)
+_ATTRIBUTE_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?P<key>[\w:-]+)\s*=\s*(?:\"(?P<double>[^\"]*)\"|'(?P<single>[^']*)')",
+)
+_NUMBER_RE: Final[re.Pattern[str]] = re.compile(r"(?<![\d.,])(\d+(?:[.,]\d+)?)")
+_VALUE_UNIT_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:кг|kg|г|gr?|гр|мм|mm|см|cm|м|m)\b",
+    flags=re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class _ProductParam:
+    """Нормалізоване представлення одного XML-тегу ``param``."""
+
+    name: str
+    unit: str
+    value: str
+
+
+@dataclass(frozen=True)
+class _Dimensions:
+    """Результат пошуку габаритів у порядку їх пріоритету у фіді."""
+
+    values_cm: tuple[Decimal, Decimal, Decimal] | None
+    has_dimension_data: bool
+    exceeds_limit: bool
+
+
+@dataclass(frozen=True)
+class _SurchargeDecision:
+    """Сума надбавки та ознака fallback-правила без ваги й габаритів."""
+
+    amount: Decimal | None
+    is_default: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +182,282 @@ class EpicenterPricingTable:
 
 
 # ---------------------------------------------------------------------------
+# Вага, габарити та надбавка за доставку
+# ---------------------------------------------------------------------------
+
+def _normalise_label(value: str) -> str:
+    """Prepare a parameter name/unit for deterministic case-insensitive matching."""
+    return re.sub(r"\s+", " ", unescape(value).strip().casefold())
+
+
+def _extract_product_params(offer_body: str) -> tuple[_ProductParam, ...]:
+    """Extract only raw product parameters; malformed attributes are ignored safely."""
+    params: list[_ProductParam] = []
+    for match in _PARAM_RE.finditer(offer_body):
+        attributes: dict[str, str] = {}
+        for attribute in _ATTRIBUTE_RE.finditer(match.group("attributes")):
+            value = attribute.group("double") or attribute.group("single") or ""
+            attributes[attribute.group("key").casefold()] = unescape(value).strip()
+
+        name = attributes.get("name", "")
+        if not name:
+            continue
+        params.append(
+            _ProductParam(
+                name=name,
+                unit=attributes.get("unit", ""),
+                value=unescape(match.group("value")).strip(),
+            )
+        )
+    return tuple(params)
+
+
+def _parse_numbers(value: str) -> tuple[Decimal, ...]:
+    """Parse decimal numbers without converting malformed product text to zero."""
+    numbers: list[Decimal] = []
+    for raw_number in _NUMBER_RE.findall(value):
+        try:
+            numbers.append(Decimal(raw_number.replace(",", ".")))
+        except InvalidOperation:
+            continue
+    return tuple(numbers)
+
+
+def _normalise_unit(unit: str) -> str:
+    return re.sub(r"[.\s]", "", _normalise_label(unit))
+
+
+def _find_unit_in_text(value: str) -> str:
+    match = _VALUE_UNIT_RE.search(value)
+    return match.group(0) if match else ""
+
+
+def _unit_factor(unit: str, factors: dict[str, Decimal]) -> Decimal | None:
+    return factors.get(_normalise_unit(unit))
+
+
+_DIMENSION_UNIT_FACTORS: Final[dict[str, Decimal]] = {
+    "мм": Decimal("0.1"),
+    "mm": Decimal("0.1"),
+    "см": Decimal("1"),
+    "cm": Decimal("1"),
+    "м": Decimal("100"),
+    "m": Decimal("100"),
+}
+_WEIGHT_UNIT_FACTORS: Final[dict[str, Decimal]] = {
+    "г": Decimal("0.001"),
+    "гр": Decimal("0.001"),
+    "gr": Decimal("0.001"),
+    "g": Decimal("0.001"),
+    "кг": Decimal("1"),
+    "kg": Decimal("1"),
+}
+
+
+def _factor_for_param(
+    param: _ProductParam,
+    factors: dict[str, Decimal],
+) -> Decimal | None:
+    """Prefer the explicit XML unit, then a unit embedded in the value or name."""
+    return (
+        _unit_factor(param.unit, factors)
+        or _unit_factor(_find_unit_in_text(param.value), factors)
+        or _unit_factor(_find_unit_in_text(param.name), factors)
+    )
+
+
+def _is_weight_param(param: _ProductParam) -> bool:
+    name = _normalise_label(param.name)
+    if "брутто" in name or "brutto" in name:
+        return False
+    # ``Вес (кг)`` is a duplicate/incorrect source field in the feed and must
+    # never be interpreted as a real weight. Only the documented exact names
+    # are accepted; the unit comes from ``unit`` or the value itself.
+    return name in _WEIGHT_NAMES
+
+
+def _actual_weight_kg(params: tuple[_ProductParam, ...]) -> Decimal | None:
+    """Return the greatest valid actual weight (grams and kilograms are supported)."""
+    weights: list[Decimal] = []
+    for param in params:
+        if not _is_weight_param(param):
+            continue
+        # Unlike dimension names (for example, ``Ширина, мм``), a weight unit
+        # embedded in a parameter name is not reliable. In particular,
+        # ``Вес (кг)`` with ``unit=\"\"`` and value ``5365`` must be ignored.
+        factor = (
+            _unit_factor(param.unit, _WEIGHT_UNIT_FACTORS)
+            or _unit_factor(_find_unit_in_text(param.value), _WEIGHT_UNIT_FACTORS)
+        )
+        numbers = _parse_numbers(param.value)
+        if factor is None or not numbers:
+            continue
+        weight = numbers[0] * factor
+        if weight >= 0:
+            weights.append(weight)
+    return max(weights, default=None)
+
+
+def _is_package_dimensions_param(param: _ProductParam) -> bool:
+    return _normalise_label(param.name).startswith(_PACKAGE_DIMENSION_PREFIXES)
+
+
+def _is_dimensions_param(param: _ProductParam) -> bool:
+    name = _normalise_label(param.name)
+    return name.startswith(_DIMENSION_PREFIXES)
+
+
+def _parse_composite_dimensions(param: _ProductParam) -> tuple[Decimal, Decimal, Decimal] | None:
+    """Parse ``L × W × H`` or ``ØD × H`` dimensions from one parameter."""
+    factor = _factor_for_param(param, _DIMENSION_UNIT_FACTORS)
+    numbers = _parse_numbers(param.value)
+    if factor is None:
+        return None
+
+    has_diameter = "ø" in param.value.casefold() or "⌀" in param.value
+    if has_diameter and len(numbers) >= 2:
+        dimensions = (numbers[0], numbers[0], numbers[1])
+    elif len(numbers) >= 3:
+        dimensions = (numbers[0], numbers[1], numbers[2])
+    else:
+        return None
+
+    converted = (
+        dimensions[0] * factor,
+        dimensions[1] * factor,
+        dimensions[2] * factor,
+    )
+    if any(value <= 0 for value in converted):
+        return None
+    return converted
+
+
+def _find_composite_dimensions(
+    params: tuple[_ProductParam, ...],
+    matcher: Callable[[_ProductParam], bool],
+) -> _Dimensions:
+    """Find the first valid dimension tuple for one priority class of parameters."""
+    saw_candidate = False
+    for param in params:
+        if not matcher(param):
+            continue
+        saw_candidate = True
+        values = _parse_composite_dimensions(param)
+        if values is None:
+            continue
+        return _Dimensions(
+            values_cm=values,
+            has_dimension_data=True,
+            exceeds_limit=max(values) > MAX_DIMENSION_CM,
+        )
+    return _Dimensions(values_cm=None, has_dimension_data=saw_candidate, exceeds_limit=False)
+
+
+def _dimension_axis(param: _ProductParam) -> str | None:
+    name = _normalise_label(param.name)
+    for axis, aliases in _DIMENSION_AXES.items():
+        if any(name.startswith(alias) for alias in aliases):
+            return axis
+    return None
+
+
+def _parse_single_dimension(param: _ProductParam) -> Decimal | None:
+    factor = _factor_for_param(param, _DIMENSION_UNIT_FACTORS)
+    numbers = _parse_numbers(param.value)
+    if factor is None or not numbers:
+        return None
+    value = numbers[0] * factor
+    return value if value > 0 else None
+
+
+def _find_separate_dimensions(params: tuple[_ProductParam, ...]) -> _Dimensions:
+    values: dict[str, Decimal] = {}
+    saw_candidate = False
+    for param in params:
+        axis = _dimension_axis(param)
+        if axis is None:
+            continue
+        saw_candidate = True
+        value = _parse_single_dimension(param)
+        if value is not None and axis not in values:
+            values[axis] = value
+
+    if len(values) != len(_DIMENSION_AXES):
+        return _Dimensions(
+            values_cm=None,
+            has_dimension_data=saw_candidate,
+            exceeds_limit=any(value > MAX_DIMENSION_CM for value in values.values()),
+        )
+
+    dimensions = (values["length"], values["width"], values["height"])
+    return _Dimensions(
+        values_cm=dimensions,
+        has_dimension_data=True,
+        exceeds_limit=max(dimensions) > MAX_DIMENSION_CM,
+    )
+
+
+def _dimensions_cm(params: tuple[_ProductParam, ...]) -> _Dimensions:
+    """Use shipping package dimensions, then general dimensions, then separate sides."""
+    package_dimensions = _find_composite_dimensions(params, _is_package_dimensions_param)
+    if package_dimensions.has_dimension_data:
+        return package_dimensions
+
+    general_dimensions = _find_composite_dimensions(params, _is_dimensions_param)
+    if general_dimensions.has_dimension_data:
+        return general_dimensions
+
+    return _find_separate_dimensions(params)
+
+
+def _surcharge_for_weight(weight: Decimal) -> _SurchargeDecision:
+    """Map the greatest actual/volumetric weight to one delivery surcharge."""
+    if weight > MAX_EFFECTIVE_WEIGHT_KG:
+        return _SurchargeDecision(amount=None)
+    if weight < _LIGHT_WEIGHT_LIMIT:
+        return _SurchargeDecision(amount=SURCHARGE_LIGHT)
+    if weight < _MEDIUM_WEIGHT_LIMIT:
+        return _SurchargeDecision(amount=SURCHARGE_MEDIUM)
+    return _SurchargeDecision(amount=SURCHARGE_HEAVY)
+
+
+def _surcharge_for_offer(price: Decimal, offer_body: str) -> _SurchargeDecision:
+    """Select a delivery surcharge after the channel price has been calculated."""
+    if not SURCHARGE_PRICE_MIN <= price <= SURCHARGE_PRICE_MAX:
+        return _SurchargeDecision(amount=None)
+
+    params = _extract_product_params(offer_body)
+    actual_weight = _actual_weight_kg(params)
+    dimensions = _dimensions_cm(params)
+
+    # A known side above 70 cm disqualifies the offer even when the other sides
+    # are absent.  Shipping-package dimensions take precedence over product ones.
+    if dimensions.exceeds_limit:
+        return _SurchargeDecision(amount=None)
+
+    if dimensions.values_cm is None:
+        # A valid actual weight is sufficient when volumetric weight cannot be
+        # calculated. A known side over 70 cm was rejected above.
+        if actual_weight is not None:
+            return _surcharge_for_weight(actual_weight)
+
+        # With neither weight nor all three dimensions, use the +100 fallback.
+        # A partial small dimension (for example, only length=90 mm) does not
+        # prevent this fallback.
+        if price <= DEFAULT_SURCHARGE_PRICE_MAX:
+            return _SurchargeDecision(amount=SURCHARGE_DEFAULT, is_default=True)
+        return _SurchargeDecision(amount=None)
+
+    volumetric_weight = (
+        dimensions.values_cm[0] * dimensions.values_cm[1] * dimensions.values_cm[2]
+    ) / VOLUMETRIC_WEIGHT_DIVISOR
+    effective_weight = max(
+        value for value in (actual_weight, volumetric_weight) if value is not None
+    )
+    return _surcharge_for_weight(effective_weight)
+
+
+# ---------------------------------------------------------------------------
 # Логер
 # ---------------------------------------------------------------------------
 
@@ -125,6 +477,21 @@ def _build_logger() -> logging.Logger:
     handler.setFormatter(logging.Formatter("%(message)s"))
     logger.addHandler(handler)
     return logger
+
+
+def _write_default_markup_offer_ids(offer_ids: list[str]) -> None:
+    """Overwrite the fallback-markup ID log so it never contains stale offers."""
+    ids = ", ".join(offer_ids) if offer_ids else "—"
+    try:
+        DEFAULT_MARKUP_LOG_PATH.write_text(
+            f"Offer IDs з націнкою за замовчуванням: {ids}\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        print(
+            "⚠️  Epicenter: не вдалося записати ID товарів з націнкою за "
+            f"замовчуванням у {DEFAULT_MARKUP_LOG_PATH.name}: {exc}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +572,13 @@ def apply_prices(
     log = _build_logger()
     no_rule_offer_ids: list[str] = []
     missing_coef_categories: dict[tuple[str, str], int] = {}   # (category_id, supplier) -> кількість офферів
+    surcharge_counts: dict[Decimal, int] = {
+        SURCHARGE_LIGHT: 0,
+        SURCHARGE_DEFAULT: 0,
+        SURCHARGE_MEDIUM: 0,
+        SURCHARGE_HEAVY: 0,
+    }
+    default_surcharge_offer_ids: list[str] = []
 
     def on_offer(match: re.Match) -> str:
         offer_id: str = match.group(1)
@@ -282,9 +656,16 @@ def apply_prices(
                     # ціну цього офера тимчасово залишаємо без змін.
                     return price_match.group(0)
 
-                # Крок 5: надбавка після округлення
-                if SURCHARGE_PRICE_MIN <= new_price <= SURCHARGE_PRICE_MAX:
-                    new_price += SURCHARGE_AMOUNT
+                # Крок 5: надбавка лише після повного розрахунку за
+                # коефіцієнтами CSV та округлення. Вагу й габарити читаємо з
+                # початкового тіла офера, тому інші XML-трансформації не
+                # впливають на детермінований вибір тарифу.
+                surcharge = _surcharge_for_offer(new_price, body)
+                if surcharge.amount is not None:
+                    new_price += surcharge.amount
+                    surcharge_counts[surcharge.amount] += 1
+                    if surcharge.is_default:
+                        default_surcharge_offer_ids.append(offer_id)
 
                 if reason:
                     log.info(
@@ -330,6 +711,16 @@ def apply_prices(
     )
     if stats.converted_prices:
         print(f"Epicenter currency conversions: {stats.converted_prices}")
+
+    print("Epicenter surcharges:")
+    for amount, label in (
+        (SURCHARGE_LIGHT, ""),
+        (SURCHARGE_DEFAULT, " (за замовчуванням)"),
+        (SURCHARGE_MEDIUM, ""),
+        (SURCHARGE_HEAVY, ""),
+    ):
+        print(f"{surcharge_counts[amount]} товарів з націнкою {amount} грн{label}")
+    _write_default_markup_offer_ids(default_surcharge_offer_ids)
 
     if stats.price_exceptions:
         print(f"⚠️  Epicenter: {stats.price_exceptions} оферів з винятком при розрахунку ціни (ціна з вхідного XML залишена без змін) — деталі: {DEFAULT_LOG_PATH.name}")

@@ -1,402 +1,69 @@
-посмотри также логику в C:\FullStack\PriceFeedPipeline\scripts\services\epicenter_attr_service.py
+Необходимо переделать и усложнить наценку в
+C:\FullStack\PriceFeedPipeline\scripts\services\pricing_rules\epicenter.py
 
-она мне кажется запутанной.
+сейчас вот так:
 
-Вот как я вижу :
+# Надбавка до ціни після множення на коефіцієнт
 
-Епицентр требует глобально 8 attr_code - обязательно для каждого товара, т.е. проверка по set_codes вообще не нужна.
+# Застосовується якщо ціна ∈ [SURCHARGE_PRICE_MIN, SURCHARGE_PRICE_MAX]
 
-Вот эти attr_code с attr_type float:
+# ---------------------------------------------------------------------------
 
-height
-length
-width
-weight
-ratio
+SURCHARGE_PRICE_MIN: Final[Decimal] = Decimal("199")
+SURCHARGE_PRICE_MAX: Final[Decimal] = Decimal("4999")
+SURCHARGE_AMOUNT: Final[Decimal] = Decimal("40")
 
-для них такой алгоритм:
+Задача:
+Необходимо добавить несколько условий:
+Берем только такие товары для наценки :
 
-смотрим prom_param_name и пишем опцию из промовского фида, если в prom_param_name пусто, то по дефолту берем опцию option_name_uk
+1.  в диапазоне цены от 250грн до 30000 (включительно)
+2.  с любой стороной (высота или длина или ширина) максимально до 70см (включительно)
+3.  до 30 кг (включительно) фактической или объемной -берем большее значение в условие.
+4.  Расчет объемной массы по формуле :
+    Об'ємна вага (кг) = Довжина (см) × Ширина (см) × Висота (см) / 4 000
 
-и еще attr_code с attr_type select:
+Расчет наценки по полученной максимальной массе ( фактической или объемной) :
 
-measure country_of_origin
+1. от 0 до 1,999кг + 90грн к цене товара
+2. от 2кг до 9,999кг + 135 грн к цене товара
+3. от 10кг до 30кг + 200грн к цене товара
+4. Если в товаре нет фактической массы и нет размеров для вычисления объемной массы , то делаем по умолчанию в диапазоне цены от 250грн до 6000грн наценку +100грн
 
-brand
-для них такой алгоритм:
+Теперь посмотрим что может прийти в хар-ках товара для вычисления (можешь посмотреть фид https://oniks.org.ua/rozetka_feed.xml?rozetka_hash_tag=33ec12f81c283cc0524764696220b10c&product_ids=&label_ids=&languages=uk%2Cru&group_ids=2222437%2C2222561%2C2234751%2C4320349%2C4325742%2C4325743%2C10015559%2C22818554%2C45720479%2C127351905%2C139094517%2C152104228%2C152208563%2C152208591%2C152208632&nested_group_ids=2222437%2C2222561%2C2234751%2C4320349%2C4325742%2C4325743%2C10015559%2C22818554%2C45720479%2C127351905%2C139094517%2C152104228%2C152208563%2C152208591%2C152208632):
 
-смотрим prom_param_name и prom_option_name и пишем опцию из option_name_uk, если в prom_param_name или prom_option_name пусто, то по дефолту берем опцию default_option_code и соответственно ее значение из option_name_uk.
+1. по <price> берем только нужные товары в диапазоне условия 1.
+2. Возможные значения масса:
+<param name="Вес" unit="г">320</param> - сначала надо перекинуть в кг и потом уже сравнивать с объемной массой - выбрать большую массу и в условие наценки.
 
-Для всех НЕ глобальных attr_code алгортимы абсолютно такие же самые , но только теперь самое 1-е условие :
+<param name="Вес" unit="кг">2.6</param> - сравнивать с объемной массой - выбрать большую массу и в условие наценки.
 
-смотрим теперь set_codes и по нему уже берем все его attr_code с с attr_type float / int / text / string или select / multiselect, т.е. ключ обязательно (set_codes, attr_code)
+<param name="Вага брутто" unit="">2.6</param> не рассматриваем - не заполнен unit="" и эта хар-ка дубль  <param name="Вес" unit="кг">2.6</param>
 
-вот замечания
-Если идти до конца по твоей логике, я бы вообще убрал старую модель с:
+<param name="Масса" unit="">34 кг</param> -сравнивать с объемной массой - выбрать большую массу и в условие наценки.
 
-option_map
-set_option_map
-numeric_map
-set_numeric_map
-defaults
-numeric_defaults
-attr_defaults
-float_defaults
-blocked_option_params
+3. Возможные размеры :
+   1.после того как нашли фактическую массу (вес) в товаре надо сравнить с объемной массой , поэтому ищем в товаре в 1-ю очередь:
+   <param name="Розмір упаковки (Ш х В х Г)" unit="">170 x 160 x 170 мм</param> - если unit="" пустой, то смотрим в значении , если есть мм , то переводим в см и смотрим любую сторону 70см , если больше - сразу откидываем товар, если меньше, то считаем объемную массу по формуле
+   Об'ємна вага (кг) = Довжина (см) × Ширина (см) × Висота (см) / 4 000
+   и сравниваем с фактической массой и большеее значение закидываем в условвие для наценки.
 
-и сделал 4 независимых справочника.
+   2.Если не нашли Розмір упаковки , то смотрим
+   <param name="Розміри" unit="">Ø 138.3 × 115.4 мм</param> - здесь сначала диаметр Ø определяем как ширину=138.3 и длину=138.3 и также мм переводим в см и и смотрим любую сторону 70см и потом формула объемной массы.
+   или <param name="Розміри (д/ш/в), мм" unit="">850*265*210</param>
+   <param name="Розміри" unit="">520 x 310 x 1010 мм</param> - тут аналогично
+   3. Анализируем также отдельные размеры, если нет Розмір упаковки и Розміри, переводим в см при необходимости:
+   <param name="Высота" unit="мм">310</param> - переводим в см
+   <param name="Длина" unit="мм">1010</param>- переводим в см
+   <param name="Ширина" unit="мм">520</param>- переводим в см
+   <param name="Ширина, мм" unit="">265</param>- переводим в см
+   <param name="Висота, мм" unit="">210</param>- переводим в см
+    <param name="Довжина, мм" unit="">850</param>- переводим в см
 
-Модель данных
-@dataclass(frozen=True)
-class FloatRule:
-attr_code: str
-attr_name: str
-attr_type: str
-prom_param_name: str
-default_value: str
+   и потом смотрим 70см , если меньше , то вычисляем объемную массу для сравнения с фактической и большее значение в условие для наценки.
 
-@dataclass(frozen=True)
-class SelectRule:
-attr_code: str
-attr_name: str
-prom_param_name: str
-default_option_code: str
-options: dict[str, AttrOption]
-
-@dataclass(frozen=True)
-class CategoryAttrRules:
-set_code: str
-
-    global_float_rules: dict[str, FloatRule]
-    global_select_rules: dict[str, SelectRule]
-
-    category_float_rules: dict[str, FloatRule]
-    category_select_rules: dict[str, SelectRule]
-
-Загрузка Excel
-
-Читаем лист один раз.
-
-Глобальные float
-global_float_rules: dict[str, FloatRule] = {}
-
-Для:
-
-height
-length
-width
-weight
-ratio
-
-сохраняем:
-
-global_float_rules[attr_code] = FloatRule(
-attr_code=attr_code,
-attr_name=attr_name,
-attr_type=attr_type,
-prom_param_name=first_prom_alias,
-default_value=option_name_uk,
-)
-Глобальные select
-global_select_rules: dict[str, SelectRule] = {}
-
-Для:
-
-measure
-country_of_origin
-brand
-
-собираем:
-
-global_select_rules[attr_code]
-
-со всеми вариантами:
-
-option_code -> AttrOption
-
-и дефолтом:
-
-default_option_code
-Категорийные float
-category_float_rules: dict[str, dict[str, FloatRule]]
-
-где ключ:
-
-(set_code, attr_code)
-
-по сути:
-
-category_float_rules[set_code][attr_code]
-Категорийные select
-category_select_rules: dict[str, dict[str, SelectRule]]
-
-где:
-
-category_select_rules[set_code][attr_code]
-Использование
-Глобальные float
-for rule in rules.global_float_rules.values():
-
-    if rule.prom_param_name:
-        value = prom_params.get(rule.prom_param_name)
-    else:
-        value = rule.default_value
-
-    if value:
-        emit(rule.attr_code, value)
-
-Глобальные select
-for rule in rules.global_select_rules.values():
-
-    if rule.prom_param_name:
-
-        prom_value = prom_params.get(rule.prom_param_name)
-
-        if prom_value and prom_value in rule.options:
-            emit(
-                rule.attr_code,
-                rule.options[prom_value].option_code,
-            )
-            continue
-
-    emit(
-        rule.attr_code,
-        rule.default_option_code,
-    )
-
-Категорийные float
-for rule in rules.category_float_rules.values():
-
-    if rule.prom_param_name:
-        value = prom_params.get(rule.prom_param_name)
-    else:
-        value = rule.default_value
-
-    if value:
-        emit(rule.attr_code, value)
-
-Категорийные select
-for rule in rules.category_select_rules.values():
-
-    if rule.prom_param_name:
-
-        prom_value = prom_params.get(rule.prom_param_name)
-
-        if prom_value and prom_value in rule.options:
-            emit(
-                rule.attr_code,
-                rule.options[prom_value].option_code,
-            )
-            continue
-
-    emit(
-        rule.attr_code,
-        rule.default_option_code,
-    )
-
-В результате \_load_indexes() сократится примерно в 3–4 раза:
-
-не нужны key_index и set_key_index;
-не нужны pending_defaults;
-не нужны numeric_defaults;
-не нужны float_defaults;
-не нужны attr_defaults;
-не нужны blocked_option_params;
-не нужны объединения global+set в get_category_attr_rules().
-
-Фактически останется только:
-
-прочитать строку;
-определить global или set-scoped;
-положить правило в нужный словарь;
-вернуть готовый объект без дополнительной сборки.
-хорошо пиши полностью код для скрипта
-
-Я бы не рекомендовал просто вставлять "полностью переписанный" файл без проверки остальных потребителей сервиса.
-
-Сейчас CategoryAttrRules используется где-то дальше в генераторе Эпицентра. Если я полностью уберу:
-
-option_map
-numeric_map
-select_defaults
-numeric_defaults
-system_select_default()
-global_select_default()
-
-то почти наверняка сломается код, который вызывает этот сервис.
-
-Нужно увидеть как минимум:
-
-epicenter_feed_generator.py
-либо код, где используется
-get_category_attr_rules()
-
-Потому что сейчас есть два варианта:
-
-Вариант 1
-
-Оставляем старый интерфейс:
-
-CategoryAttrRules
-
-и только переписываем внутреннюю загрузку Excel.
-
-Тогда замена будет безопасной.
-
-Вариант 2
-
-Делаем правильную новую архитектуру:
-
-global_float_rules
-global_select_rules
-category_float_rules
-category_select_rules
-
-и переписываем также генератор Эпицентра.
-
-Это уже будет новый контракт сервиса.
-
-Сейчас я вижу только epicenter_attr_service.py, поэтому не могу написать рабочую финальную версию без риска сломать половину проекта.
-
-Покажи файл, где используется:
-
-get_category_attr_rules(set_code)
-
-или сам epicenter_feed_generator.py.
-
-Тогда можно будет полностью переписать сервис и сразу адаптировать потребителя под новую логику без несовместимостей.
-
-Вставленный код(1).py
-Python
-
-Теперь видно, что генератор завязан на старый контракт очень глубоко.
-
-Если переписывать сервис полностью, то придется переписать и минимум эти места:
-
-resolve_attr_value()
-
-использует:
-
-rules.global_non_option_defaults
-rules.system_select_default()
-
-Шаг 6c использует:
-
-rules.option_map
-rules.numeric_map
-
-Шаг 7 использует:
-
-rules.select_defaults
-
-Шаг 7c использует:
-
-rules.numeric_defaults
-
-Шаг 8 использует:
-
-rules.global_select_default()
-rules.global_non_option_defaults
-
-То есть это уже не рефакторинг сервиса, а новая архитектура генерации атрибутов.
-
-Я бы сделал так.
-
-Новый CategoryAttrRules
-@dataclass(frozen=True)
-class FloatRule:
-attr_code: str
-attr_name: str
-attr_type: str
-prom_param_name: str
-default_value: str
-
-@dataclass(frozen=True)
-class SelectRule:
-attr_code: str
-attr_name: str
-prom_param_name: str
-default_option_code: str
-options: dict[str, AttrOption]
-
-@dataclass(frozen=True)
-class CategoryAttrRules:
-set_code: str
-
-    global_float_rules: dict[str, FloatRule]
-    global_select_rules: dict[str, SelectRule]
-
-    category_float_rules: dict[str, FloatRule]
-    category_select_rules: dict[str, SelectRule]
-
-После этого удалить полностью
-
-из сервиса:
-
-option_map
-set_option_map
-
-numeric_map
-set_numeric_map
-
-defaults
-attr_defaults
-
-numeric_defaults
-float_defaults
-
-blocked_option_params
-set_option_param_names
-Генератор переписать
-
-Удалить полностью шаги:
-
-6c
-7
-7b
-7c
-
-Вместо них сделать
-
-process_category_float_rules()
-process_category_select_rules()
-
-Например вместо:
-
-for prom_name, prom_value in prom_params.items():
-
-с кучей проверок:
-
-option_map
-numeric_map
-select_defaults
-numeric_defaults
-
-делать напрямую:
-
-for rule in rules.category_float_rules.values():
-
-и
-
-for rule in rules.category_select_rules.values():
-
-Тогда весь блок:
-
-# 6c
-
-# 7
-
-# 7b
-
-# 7c
-
-примерно из 150 строк превращается в 40–50 строк.
-
-Но я бы не писал сейчас "полный готовый файл", потому что это уже изменение сразу двух модулей:
-
-epicenter_attr_service.py
-generate_epicenter_feed.py
-
-и нужно ещё понимать структуру листа Опції атрибутів, чтобы корректно собрать новый индекс.
-
-На основании только кода сервиса и генератора можно спроектировать архитектуру, но не гарантировать рабочую реализацию без самого Excel-файла. Сейчас главный риск — неверно угадать, как именно выглядят строки для brand, country_of_origin, measure, multiselect и категорийных select-ов в epicenter_mappings.xlsx.
+Добавить логирование , чтобы после отработки генератора C:\FullStack\PriceFeedPipeline\scripts\generate_epicenter_feed.py в терминале было , например
+50 Товаров с наценкой 90грн
+56 Товаров с наценкой 100грн ( по умолчанию) - вот тут желательно еще список в строку id товаров, чтобы я мог посмотреть товар и добавить ему в хар-ку Вес, чтобы таких товаров было потом минимальное кол-во
+10 Товаров с наценкой 135грн
+4 Товаров с наценкой 200грн
