@@ -34,3 +34,5 @@ data/lp/import_products.csv
 *.log
 error_*.png
 prom_noindex_fatal_hrefs.json
+
+task.md
