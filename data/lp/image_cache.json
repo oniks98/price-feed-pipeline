@@ -11553,5 +11553,25 @@
     "w": 1279,
     "h": 1280,
     "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/1/ef/ebe0a104965dc76270576157f0ec3.jpg": {
+    "w": 903,
+    "h": 583,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/4/b5/24966fa52a3445df71a7ef95c799c.jpg": {
+    "w": 341,
+    "h": 416,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fapi.b2b.logicpower.ua%2Fstatic%2Fattachments%2F4%2Fb5%2F24966fa52a3445df71a7ef95c799c.jpg&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/3/18/657a7dfa096ed49b3a54a8b33f213.jpg": {
+    "w": 800,
+    "h": 800,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/d/66/8249d805cae48481e7fd1b169dfab.jpg": {
+    "w": 356,
+    "h": 386,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fapi.b2b.logicpower.ua%2Fstatic%2Fattachments%2Fd%2F66%2F8249d805cae48481e7fd1b169dfab.jpg&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
