@@ -35723,5 +35723,40 @@
     "w": 1000,
     "h": 1000,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/2/VLC-09BRC60-120.webp": {
+    "w": 860,
+    "h": 860,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FVLC-09BRC60-120.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/VLC-09BRC60-1201.webp": {
+    "w": 1003,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FVLC-09BRC60-1201.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/VLC-09BRC60-1203.webp": {
+    "w": 860,
+    "h": 860,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FVLC-09BRC60-1203.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/VLC-09BRC60-1204.webp": {
+    "w": 903,
+    "h": 903,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FVLC-09BRC60-1204.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/VLC-09BRC60-1205.webp": {
+    "w": 588,
+    "h": 588,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FVLC-09BRC60-1205.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/MUSTPH19-6048EXP.webp": {
+    "w": 460,
+    "h": 460,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FMUSTPH19-6048EXP.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/MUSTPH19-6048EXP1.webp": {
+    "w": 429,
+    "h": 429,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FMUSTPH19-6048EXP1.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
