@@ -35998,5 +35998,20 @@
     "w": 1000,
     "h": 1000,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2024-09%2FN1008WKPDB1W19A1.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2025-02/DH-SD-H2C-0400B152266.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2025-02%2FDH-SD-H2C-0400B152266.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/2018-01-02/DH-SD-H2C-0400B1.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2F2018-01-02%2FDH-SD-H2C-0400B1.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/2018-01-02/DH-SD-H2C-0400B2.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2F2018-01-02%2FDH-SD-H2C-0400B2.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
