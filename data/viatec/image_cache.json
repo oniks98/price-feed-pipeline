@@ -36373,5 +36373,30 @@
     "w": 352,
     "h": 301,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2FDS-1005KI.jpg&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/DS-1280ZJ-DM8(1).jpg": {
+    "w": null,
+    "h": null,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/FOSSiBOTF1200.webp": {
+    "w": 472,
+    "h": 472,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FFOSSiBOTF1200.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/FOSSiBOTF12001.webp": {
+    "w": 411,
+    "h": 411,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FFOSSiBOTF12001.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/FOSSiBOTF12003.webp": {
+    "w": 423,
+    "h": 423,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FFOSSiBOTF12003.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/FOSSiBOTF12002.webp": {
+    "w": 455,
+    "h": 455,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FFOSSiBOTF12002.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
