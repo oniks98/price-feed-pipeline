@@ -214,6 +214,53 @@ class FieldProcessor:
         # Якщо одиниць немає - залишаємо як є
         return value
 
+    @staticmethod
+    def _preserve_gross_weight(spec: dict, spider) -> None:
+        """
+        «Вага брутто»/«Вес брутто»/«gross weight»: значення зберігається
+        AS-IS (без конвертації в required_unit категорії), одиниця
+        переноситься в назву характеристики.
+
+        Визначення вихідної одиниці — той самий пріоритет, що і для
+        звичайної ваги нижче: суфікс у value ("0.8 кг") → поле unit.
+        Формат незрозумілий → spec лишається raw pass-through, як прийшов
+        від постачальника.
+
+        "0.8 кг" (value), unit=""  → name="... (кг)", value="0.8",  unit=""
+        "400 г"  (value), unit=""  → name="... (г)",  value="400",  unit=""
+        "0.8"    (value), unit="кг" → name="... (кг)", value="0.8",  unit=""
+        """
+        raw_value = spec.get('value', '').strip()
+        raw_unit = spec.get('unit', '').strip().lower()
+        raw_name = spec.get('name', '').strip()
+
+        if raw_value.endswith(' кг'):
+            source_unit = 'кг'
+            numeric_part = raw_value[:-3].strip()
+        elif raw_value.endswith(' г'):
+            source_unit = 'г'
+            numeric_part = raw_value[:-2].strip()
+        elif raw_unit in ('г', 'кг'):
+            source_unit = raw_unit
+            numeric_part = raw_value
+        else:
+            spider.logger.warning(
+                f"⚠️ Незрозумілий формат брутто-ваги: value={raw_value!r} unit={raw_unit!r}"
+            )
+            return
+
+        normalized = ValidationService.sanitize_prom_numeric(numeric_part, decimals=3, decimal_sep='.')
+        if not normalized:
+            return
+
+        spec['name'] = f"{raw_name} ({source_unit})"
+        spec['value'] = normalized
+        spec['unit'] = ''
+
+        spider.logger.debug(
+            f"⚖️ Брутто-вага збережена як є: {raw_name!r} → {spec['name']!r} = {spec['value']}"
+        )
+
     def process_specs_weight(self, specs_list: list, category_id: str, spider) -> list:
         """
         SMART постобробка ваги в характеристиках.
@@ -243,6 +290,9 @@ class FieldProcessor:
             'вага', 'вага брутто', 'вага нетто',
             'weight', 'gross weight', 'net weight'
         ]
+        # «Брутто»/gross-вага винесена в окрему гілку нижче (_preserve_gross_weight) —
+        # тут лишається лише для довідки, фактично перехоплюється раніше циклу.
+        gross_weight_names = ['вага брутто', 'вес брутто', 'gross weight']
 
         # Канонічні (без коми в назві) Prom-характеристики "Вага", які вже
         # присутні в specs_list — типово результат AttributeMapper.
@@ -275,6 +325,18 @@ class FieldProcessor:
             base_name = base_name.strip()
             name_suffix = name_suffix.strip()
             embedded_unit = name_suffix if name_suffix in ('г', 'кг') else ''
+
+            # «Вага брутто»/«Вес брутто»/«gross weight» — НЕ підлягає SMART-
+            # конвертації в required_unit категорії (на відміну від «Вага»/
+            # «Вага нетто» нижче). Rozetka (rozetka_dimensions_service.py)
+            # завжди хоче кг для «Вага в упаковці», а джерело може дати як
+            # кг, так і г — тому зберігаємо СИРЕ число без арифметики і
+            # переносимо одиницю в саму назву характеристики ("Вага брутто
+            # (кг)" / "Вага брутто (г)"), бо unit="" не завжди доживає до
+            # фінального фіда (Prom іноді губить атрибут при експорті).
+            if base_name in gross_weight_names:
+                self._preserve_gross_weight(spec, spider)
+                continue
 
             if base_name not in weight_names:
                 continue
@@ -558,19 +620,33 @@ class FieldProcessor:
             
             if not spec_value:
                 continue
+
+            # «Вага брутто (кг)» / «Вага брутто (г)»: одиницю "запечено" в
+            # назву FieldProcessor._preserve_gross_weight (spec['unit']
+            # там навмисно порожній). Знімаємо суфікс перед звіркою з
+            # weight_keys і використовуємо його як одиницю, якщо власне
+            # поле unit порожнє — щоб ця характеристика й далі коректно
+            # заповнювала базову колонку "Вага,кг".
+            base_spec_name = spec_name
+            name_unit_suffix = ''
+            suffix_match = re.match(r'^(.*?)\s*\((кг|г)\)$', spec_name)
+            if suffix_match:
+                base_spec_name = suffix_match.group(1).strip()
+                name_unit_suffix = suffix_match.group(2)
+            effective_unit = spec_unit or name_unit_suffix
             
             # 1. ВАГА: колонка AS (Вага,кг) ЗАВЖДИ в кілограмах
-            if spec_name in weight_keys:
+            if base_spec_name in weight_keys:
                 # Для цих полів Prom.ua приймає тільки крапку як десятковий розділювач;
                 # decimals=2 — max 2 знаки після крапки (роздільник тисяч завжди має 3)
-                if spec_unit == 'кг':
+                if effective_unit == 'кг':
                     normalized = ValidationService.sanitize_prom_numeric(spec_value, decimals=2, decimal_sep='.')
                     if normalized:
                         dimensions["Вага,кг"] = normalized
                         spider.logger.debug(f"⚖️ Габарит вага: {spec_value} кг → {normalized}")
                 
                 # Якщо одиниця грами - конвертуємо г → кг
-                elif spec_unit == 'г':
+                elif effective_unit == 'г':
                     try:
                         grams = float(spec_value.replace(',', '.'))
                         kg = grams / 1000
