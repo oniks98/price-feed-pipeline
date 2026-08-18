@@ -25,8 +25,8 @@
 24;"https://secur.ua/ajax/zaxist-vid-vtorgnennia/sireny/status=1;instalation-syrene=useredini-13961";prom;prom_;"0,989";1.21;148391021;Ajax;300402;https://prom.ua/Sireny-signalnye;"S, Sprom, noindex";;Вага;г;;50;484;Кімнатні сирени;Тип устройства;;Кімнатні сирени
 25;https://secur.ua/ajax/zaxist-vid-vtorgnennia/trivozni-knopki/status=1;site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;302308;https://prom.ua/Trevozhnye-knopki-i-knopki-vyhoda;S;;Вага;г;;50;485;Кнопка тривожної сигналізації;Тип устройства;;Кнопка тривожної сигналізації
 26;https://secur.ua/ajax/zaxist-vid-vtorgnennia/trivozni-knopki/status=1;prom;prom_;"0,989";1.15;148391021;Ajax;302308;https://prom.ua/Trevozhnye-knopki-i-knopki-vyhoda;"S, Sprom, noindex";;Вага;г;;50;485;Кнопка тривожної сигналізації;Тип устройства;;Кнопка тривожної сигналізації
-27;https://secur.ua/ajax/zaxist-vid-vtorgnennia/kartki/status=1;site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;301310;https://prom.ua/Identifikatory;S;;Вага;г;;50;534;Карти;Тип устройства;;Карта доступу
-28;https://secur.ua/ajax/zaxist-vid-vtorgnennia/kartki/status=1;prom;prom_;"0,989";1.15;148391021;Ajax;301310;https://prom.ua/Identifikatory;"S, Sprom, noindex";;Вага;г;;50;534;Карти;Тип устройства;;Карта доступу
+27;https://secur.ua/ajax/zaxist-vid-vtorgnennia/kartki/status=1;site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;301310;https://prom.ua/Identifikatory;S;;Вага;кг;;50;534;Карти;Тип устройства;;Карта доступу
+28;https://secur.ua/ajax/zaxist-vid-vtorgnennia/kartki/status=1;prom;prom_;"0,989";1.15;148391021;Ajax;301310;https://prom.ua/Identifikatory;"S, Sprom, noindex";;Вага;кг;;50;534;Карти;Тип устройства;;Карта доступу
 29;https://secur.ua/ajax/zaxist-vid-vtorgnennia/breloki/status=1;site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;302307;https://prom.ua/Brelki-pulty-dlya-ohrannyh-sistem;S;;Вага;г;;50;486;Брелоки;Тип устройства;;Брелок
 30;https://secur.ua/ajax/zaxist-vid-vtorgnennia/breloki/status=1;prom;prom_;"0,989";1.19;148391021;Ajax;302307;https://prom.ua/Brelki-pulty-dlya-ohrannyh-sistem;"S, Sprom, noindex";;Вага;г;;50;486;Брелоки;Тип устройства;;Брелок
 31;https://secur.ua/ajax/zaxist-vid-vtorgnennia/klaviatury/status=1;site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;301305;https://prom.ua/Klaviatury-kodonabornye;S;;Вага;г;;50;487;Клавіатура для сигналізації;Тип устройства;;Клавіатура для сигналізації
@@ -57,12 +57,12 @@
 56;https://secur.ua/ajax/komfort-ta-produktivnist/zagluski/status=1;prom;prom_;"0,989";1.20;148391021;Ajax;53004;https://prom.ua/Rozetki-elektricheskie;"S, Sprom, noindex";;Вага;г;;50;751;Заглушки;Тип устройства;;Заглушки
 57;https://secur.ua/ajax/korpusi-dummybox/status=1;site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;302309;https://prom.ua/Koroba-i-korpusa-dlya-ohrannyh-sistem;S;;Вага;г;;50;729;Корпуси DummyBox;Тип устройства;;Корпуси DummyBox
 58;https://secur.ua/ajax/korpusi-dummybox/status=1;prom;prom_;"0,989";1.18;148391021;Ajax;302309;https://prom.ua/Koroba-i-korpusa-dlya-ohrannyh-sistem;"S, Sprom, noindex";;Вага;г;;50;729;Корпуси DummyBox;Тип устройства;;Корпуси DummyBox
-59;https://secur.ua/ajax/elektrozivlennia-ajax/umnye-rozetki-i-rele/status=1;site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;14190901;https://prom.ua/Rele-napryazheniya;S;;Вага;г;;50;391;Реле і розумні розетки;Тип устройства;;Реле і розумні розетки
-60;https://secur.ua/ajax/elektrozivlennia-ajax/umnye-rozetki-i-rele/status=1;prom;prom_;"0,989";1.21;148391021;Ajax;14190901;https://prom.ua/Rele-napryazheniya;"S, Sprom, noindex";;Вага;г;;50;391;Реле і розумні розетки;Тип устройства;;Реле і розумні розетки
-61;"https://secur.ua/ajax/elektrozivlennia-ajax/jelektropitanie-ajax/status=1;type-bat-f=batareika-6197";site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;1507;https://prom.ua/Batarejki;S;;Вага;г;;50;624;Батарейки;Тип устройства;;Батарейки
-62;"https://secur.ua/ajax/elektrozivlennia-ajax/jelektropitanie-ajax/status=1;type-bat-f=batareika-6197";prom;prom_;"0,989";1.25;148391021;Ajax;1507;https://prom.ua/Batarejki;"S, Sprom, noindex";;Вага;г;;50;624;Батарейки;Тип устройства;;Батарейки
-63;"https://secur.ua/ajax/elektrozivlennia-ajax/jelektropitanie-ajax/status=1;type-bat-f=plata-bloku-zivlennia";site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;14191103;https://prom.ua/Promyshlennye-istochniki-pitaniya;S;;Вага;г;;50;392;Електроживлення;Тип устройства;;Електроживлення
-64;"https://secur.ua/ajax/elektrozivlennia-ajax/jelektropitanie-ajax/status=1;type-bat-f=plata-bloku-zivlennia";prom;prom_;"0,989";1.18;148391021;Ajax;14191103;https://prom.ua/Promyshlennye-istochniki-pitaniya;"S, Sprom, noindex";;Вага;г;;50;392;Електроживлення;Тип устройства;;Електроживлення
+59;https://secur.ua/ajax/elektrozivlennia-ajax/umnye-rozetki-i-rele/status=1;site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;14190901;https://prom.ua/Rele-napryazheniya;S;;Вага;кг;;50;391;Реле і розумні розетки;Тип устройства;;Реле і розумні розетки
+60;https://secur.ua/ajax/elektrozivlennia-ajax/umnye-rozetki-i-rele/status=1;prom;prom_;"0,989";1.21;148391021;Ajax;14190901;https://prom.ua/Rele-napryazheniya;"S, Sprom, noindex";;Вага;кг;;50;391;Реле і розумні розетки;Тип устройства;;Реле і розумні розетки
+61;"https://secur.ua/ajax/elektrozivlennia-ajax/jelektropitanie-ajax/status=1;type-bat-f=batareika-6197";site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;1507;https://prom.ua/Batarejki;S;;Вага;кг;;50;624;Батарейки;Тип устройства;;Батарейки
+62;"https://secur.ua/ajax/elektrozivlennia-ajax/jelektropitanie-ajax/status=1;type-bat-f=batareika-6197";prom;prom_;"0,989";1.25;148391021;Ajax;1507;https://prom.ua/Batarejki;"S, Sprom, noindex";;Вага;кг;;50;624;Батарейки;Тип устройства;;Батарейки
+63;"https://secur.ua/ajax/elektrozivlennia-ajax/jelektropitanie-ajax/status=1;type-bat-f=plata-bloku-zivlennia";site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;14191103;https://prom.ua/Promyshlennye-istochniki-pitaniya;S;;Вага;кг;;50;392;Електроживлення;Тип устройства;;Електроживлення
+64;"https://secur.ua/ajax/elektrozivlennia-ajax/jelektropitanie-ajax/status=1;type-bat-f=plata-bloku-zivlennia";prom;prom_;"0,989";1.18;148391021;Ajax;14191103;https://prom.ua/Promyshlennye-istochniki-pitaniya;"S, Sprom, noindex";;Вага;кг;;50;392;Електроживлення;Тип устройства;;Електроживлення
 65;https://secur.ua/ajax/aksessuary-dlja-signalizacii-ajax/status=1;site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;302306;https://prom.ua/Ohrannye-sistemy-i-signalizatsii;S;;Вага;г;;50;394;Аксесуари для продукції Ajax;Тип устройства;;Комплектуючі Ajax
 66;https://secur.ua/ajax/aksessuary-dlja-signalizacii-ajax/status=1;prom;prom_;"0,989";1.22;148391021;Ajax;302306;https://prom.ua/Ohrannye-sistemy-i-signalizatsii;"S, Sprom, noindex";;Вага;г;;50;394;Аксесуари для продукції Ajax;Тип устройства;;Комплектуючі Ajax
 67;https://secur.ua/ajax/pozezna-bezpeka/ppkp-ajax/status=1;site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;302303;https://prom.ua/Priemno-kontrolnye-pribory-i-pribory-upravleniya;S;;Вага;г;;50;754;Хаби;Тип устройства;;Бездротові пожежні централі
@@ -75,16 +75,16 @@
 74;https://secur.ua/ajax/pozezna-bezpeka/spovishhuvaci/status=1;prom;prom_;"0,989";1.15;148391021;Ajax;300921;https://prom.ua/Pozharnye-izveschateli;"S, Sprom, noindex";;Вага;г;;50;483;Вуличні сирени;Тип устройства;;Вуличні пожарні сирени
 75;"https://secur.ua/domofon/videodzvinki/status=1;brand=ajax";site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;3029;https://prom.ua/Domofony-videodomofony;S;;Вага;г;;50;593;Відеодзвінки;Тип устройства;;Відеодзвінки
 76;"https://secur.ua/domofon/videodzvinki/status=1;brand=ajax";prom;prom_;"0,989";1.22;148391021;Ajax;3029;https://prom.ua/Domofony-videodomofony;"S, Sprom, noindex";;Вага;г;;50;593;Відеодзвінки;Тип устройства;;Відеодзвінки
-77;"https://secur.ua/jelektropitanie/akumuliatori/status=1;brand=ajax";site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;5280501;https://prom.ua/Akkumulyatornye-bloki;S;;Вага;г;;50;621;Акумулятори;Тип устройства;;Акумулятори Ajax
-78;"https://secur.ua/jelektropitanie/akumuliatori/status=1;brand=ajax";prom;prom_;"0,989";1.18;148391021;Ajax;5280501;https://prom.ua/Akkumulyatornye-bloki;"S, Sprom, noindex";;Вага;г;;50;621;Акумулятори;Тип устройства;;Акумулятори Ajax
+77;"https://secur.ua/jelektropitanie/akumuliatori/status=1;brand=ajax";site;;"0,85";"1,08";4331550;Устройства и сигнализация Ajax;5280501;https://prom.ua/Akkumulyatornye-bloki;S;;Вага;кг;;50;621;Акумулятори;Тип устройства;;Акумулятори Ajax
+78;"https://secur.ua/jelektropitanie/akumuliatori/status=1;brand=ajax";prom;prom_;"0,989";1.18;148391021;Ajax;5280501;https://prom.ua/Akkumulyatornye-bloki;"S, Sprom, noindex";;Вага;кг;;50;621;Акумулятори;Тип устройства;;Акумулятори Ajax
 79;;site;;"0,85";"1,08";8950007;Видеорегистраторы для видеонаблюдения;301101;https://prom.ua/Videoregistratory;S;;Вага;г;;52;13;Відеореєстратори;Тип устройства;;Реєстратори
 80;;prom;prom_;"0,85";1.21;140905382;Безопасность и комфорт;301101;https://prom.ua/Videoregistratory;"S, Sprom, noindex";;Вага;г;;52;13;Відеореєстратори;Тип устройства;;Реєстратори
 81;;site;;"0,85";"1,08";8950011;Видеокамеры для видеонаблюдения;301105;https://prom.ua/Kamery-videonablyudeniya;S;;Вага;г;;52;25;Відеокамери;Тип устройства;;Камери
 82;;prom;prom_;"0,85";1.23;140905382;Безопасность и комфорт;301105;https://prom.ua/Kamery-videonablyudeniya;"S, Sprom, noindex";;Вага;г;;52;25;Відеокамери;Тип устройства;;Камери
 83;;site;;"0,85";"1,08";4321341;Комплектующие для видеонаблюдения;301112;https://prom.ua/Kozhuhi-i-kronshtejny;S;;Вага;г;;52;50;Кронштейни;Тип устройства;;Кронштейни для камер
 84;;prom;prom_;"0,85";1.21;140905382;Безопасность и комфорт;301112;https://prom.ua/Kozhuhi-i-kronshtejny;"S, Sprom, noindex";;Вага;г;;52;50;Кронштейни;Тип устройства;;Кронштейни для камер
-85;;site;;"0,85";"1,08";4321341;Комплектующие для видеонаблюдения;5092913;https://prom.ua/Korobki-montazhnye;S;;Вага;г;;52;49;Монтажні коробки;Тип устройства;;Розподільні коробки для камер
-86;;prom;prom_;"0,85";1.21;140905382;Безопасность и комфорт;5092913;https://prom.ua/Korobki-montazhnye;"S, Sprom, noindex";;Вага;г;;52;49;Монтажні коробки;Тип устройства;;Розподільні коробки для камер
+85;;site;;"0,85";"1,08";4321341;Комплектующие для видеонаблюдения;5092913;https://prom.ua/Korobki-montazhnye;S;;Вага;кг;;52;49;Монтажні коробки;Тип устройства;;Розподільні коробки для камер
+86;;prom;prom_;"0,85";1.21;140905382;Безопасность и комфорт;5092913;https://prom.ua/Korobki-montazhnye;"S, Sprom, noindex";;Вага;кг;;52;49;Монтажні коробки;Тип устройства;;Розподільні коробки для камер
 87;;site;;"0,85";"1,08";90906797;Тепловизоры;153709;https://prom.ua/Termometry-pirometry-teplovizory;S;;Вага;г;;52;61;Моніторинг температури тіла;Тип устройства;;моніторинг температури тіла
 88;;prom;prom_;"0,85";1.21;140905382;Безопасность и комфорт;153709;https://prom.ua/Termometry-pirometry-teplovizory;"S, Sprom, noindex";;Вага;г;;52;61;Моніторинг температури тіла;Тип устройства;;моніторинг температури тіла
 89;;site;;"0,85";"1,08";4321341;Комплектующие для видеонаблюдения;301110;https://prom.ua/Pulty-dlya-sistem-videonablyudeniya;S;;Вага;г;;52;43;Пульти керування (PTZ);Тип устройства;;Пульти управління
@@ -113,32 +113,32 @@
 112;;prom;prom_;"0,85";1.21;140905382;Безопасность и комфорт;301101;https://prom.ua/Videoregistratory;"S, Sprom, noindex";;Вага;г;;52;55;ДОК-станції для нагрудних видеореєстраторів;Тип устройства;;ДОК-станції для нагрудних видеореєстраторів
 113;;site;;"0,85";"1,08";16703618;Комплектующие для контроля доступа;3030;https://prom.ua/Sistemy-kontrolya-dostupa;S;;Вага;г;;52;97;Аксесуари для замків;Тип устройства;;Комплектуючі для замків
 114;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;3030;https://prom.ua/Sistemy-kontrolya-dostupa;"S, Sprom, noindex";;Вага;г;;52;97;Аксесуари для замків;Тип устройства;;Комплектуючі для замків
-115;;site;;"0,85";"1,08";127628160;Карты и ключи для домофона;301310;https://prom.ua/Identifikatory;S;;Вага;г;;52;84;Картки і брелоки;Тип устройства;;Картки і брелоки
-116;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;301310;https://prom.ua/Identifikatory;"S, Sprom, noindex";;Вага;г;;52;84;Картки і брелоки;Тип устройства;;Картки і брелоки
+115;;site;;"0,85";"1,08";127628160;Карты и ключи для домофона;301310;https://prom.ua/Identifikatory;S;;Вага;кг;;52;84;Картки і брелоки;Тип устройства;;Картки і брелоки
+116;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;301310;https://prom.ua/Identifikatory;"S, Sprom, noindex";;Вага;кг;;52;84;Картки і брелоки;Тип устройства;;Картки і брелоки
 117;;site;;"0,85";"1,08";127628170;Кнопки выхода;302308;https://prom.ua/Trevozhnye-knopki-i-knopki-vyhoda;S;;Вага;г;;52;85;Кнопки виходу;Тип устройства;;Кнопки виходу Tecsar
 118;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;302308;https://prom.ua/Trevozhnye-knopki-i-knopki-vyhoda;"S, Sprom, noindex";;Вага;г;;52;85;Кнопки виходу;Тип устройства;;Кнопки виходу Tecsar
-119;;site;;"0,85";"1,08";90997501;Замки;301010;https://prom.ua/Mehanicheskie-zamki;S;;Вага;г;;52;78;Електрозамки;Тип устройства;;електромеханічний
-120;;prom;prom_;"0,85";1.21;140905382;Безопасность и комфорт;301010;https://prom.ua/Mehanicheskie-zamki;"S, Sprom, noindex";;Вага;г;;52;78;Електрозамки;Тип устройства;;електромеханічний
-121;;site;;"0,85";"1,08";127351950;Блоки питания;14191103;https://prom.ua/Promyshlennye-istochniki-pitaniya;S;;Вага;г;;52;675;Блоки живлення для відеоспостереження;Тип устройства;;Блоки живлення для відеоспостереження
-122;;prom;prom_;"0,85";1.18;140905382;Безопасность и комфорт;14191103;https://prom.ua/Promyshlennye-istochniki-pitaniya;"S, Sprom, noindex";;Вага;г;;52;675;Блоки живлення для відеоспостереження;Тип устройства;;Блоки живлення для відеоспостереження
-123;;site;;"0,85";"1,08";17012111;Кабель;7190605;https://prom.ua/Kabel-telefonnyj;S;;Вага;г;;52;337;Сигнальний кабель;Тип устройства;;Сигнальний
-124;;prom;prom_;"0,85";1.16;140905382;Безопасность и комфорт;7190605;https://prom.ua/Kabel-telefonnyj;"S, Sprom, noindex";;Вага;г;;52;337;Сигнальний кабель;Тип устройства;;Сигнальний
-125;;site;;"0,85";"1,08";152088624;Дверные доводчики;15380311;https://prom.ua/Dovodchiki-dverej;S;;Вага;г;;52;86;Доводчики на двері (дотягувач);;;
-126;;prom;prom_;"0,85";1.19;140905382;Безопасность и комфорт;15380311;https://prom.ua/Dovodchiki-dverej;"S, Sprom, noindex";;Вага;г;;52;86;Доводчики на двері (дотягувач);;;
-127;;site;;"0,85";"1,08";152088176;Турникеты;301301;https://prom.ua/Turnikety;S;;Вага;г;;52;135;Повно-ростові турнікети;Тип устройства;;Повно-ростові турнікети
-128;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;301301;https://prom.ua/Turnikety;"S, Sprom, noindex";;Вага;г;;52;135;Повно-ростові турнікети;Тип устройства;;Повно-ростові турнікети
-129;;site;;"0,85";"1,08";152088176;Турникеты;301301;https://prom.ua/Turnikety;S;;Вага;г;;52;136;Турнікети-триподи;Тип устройства;;Турнікети-триподи
-130;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;301301;https://prom.ua/Turnikety;"S, Sprom, noindex";;Вага;г;;52;136;Турнікети-триподи;Тип устройства;;Турнікети-триподи
-131;;site;;"0,85";"1,08";152088176;Турникеты;301301;https://prom.ua/Turnikety;S;;Вага;г;;52;137;Турнікети Freeway;Тип устройства;;Турнікети Freeway
-132;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;301301;https://prom.ua/Turnikety;"S, Sprom, noindex";;Вага;г;;52;137;Турнікети Freeway;Тип устройства;;Турнікети Freeway
-133;;site;;"0,85";"1,08";90997501;Замки;301010;https://prom.ua/Mehanicheskie-zamki;S;;Вага;г;;52;89;Біометричні замки;Тип устройства;;Біометричні замки
-134;;prom;prom_;"0,85";1.21;140905382;Безопасность и комфорт;301010;https://prom.ua/Mehanicheskie-zamki;"S, Sprom, noindex";;Вага;г;;52;89;Біометричні замки;Тип устройства;;Біометричні замки
+119;;site;;"0,85";"1,08";90997501;Замки;301010;https://prom.ua/Mehanicheskie-zamki;S;;Вага;кг;;52;78;Електрозамки;Тип устройства;;електромеханічний
+120;;prom;prom_;"0,85";1.21;140905382;Безопасность и комфорт;301010;https://prom.ua/Mehanicheskie-zamki;"S, Sprom, noindex";;Вага;кг;;52;78;Електрозамки;Тип устройства;;електромеханічний
+121;;site;;"0,85";"1,08";127351950;Блоки питания;14191103;https://prom.ua/Promyshlennye-istochniki-pitaniya;S;;Вага;кг;;52;675;Блоки живлення для відеоспостереження;Тип устройства;;Блоки живлення для відеоспостереження
+122;;prom;prom_;"0,85";1.18;140905382;Безопасность и комфорт;14191103;https://prom.ua/Promyshlennye-istochniki-pitaniya;"S, Sprom, noindex";;Вага;кг;;52;675;Блоки живлення для відеоспостереження;Тип устройства;;Блоки живлення для відеоспостереження
+123;;site;;"0,85";"1,08";17012111;Кабель;7190605;https://prom.ua/Kabel-telefonnyj;S;;Вага;кг;;52;337;Сигнальний кабель;Тип устройства;;Сигнальний
+124;;prom;prom_;"0,85";1.16;140905382;Безопасность и комфорт;7190605;https://prom.ua/Kabel-telefonnyj;"S, Sprom, noindex";;Вага;кг;;52;337;Сигнальний кабель;Тип устройства;;Сигнальний
+125;;site;;"0,85";"1,08";152088624;Дверные доводчики;15380311;https://prom.ua/Dovodchiki-dverej;S;;Вага;кг;;52;86;Доводчики на двері (дотягувач);;;
+126;;prom;prom_;"0,85";1.19;140905382;Безопасность и комфорт;15380311;https://prom.ua/Dovodchiki-dverej;"S, Sprom, noindex";;Вага;кг;;52;86;Доводчики на двері (дотягувач);;;
+127;;site;;"0,85";"1,08";152088176;Турникеты;301301;https://prom.ua/Turnikety;S;;Вага;кг;;52;135;Повно-ростові турнікети;Тип устройства;;Повно-ростові турнікети
+128;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;301301;https://prom.ua/Turnikety;"S, Sprom, noindex";;Вага;кг;;52;135;Повно-ростові турнікети;Тип устройства;;Повно-ростові турнікети
+129;;site;;"0,85";"1,08";152088176;Турникеты;301301;https://prom.ua/Turnikety;S;;Вага;кг;;52;136;Турнікети-триподи;Тип устройства;;Турнікети-триподи
+130;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;301301;https://prom.ua/Turnikety;"S, Sprom, noindex";;Вага;кг;;52;136;Турнікети-триподи;Тип устройства;;Турнікети-триподи
+131;;site;;"0,85";"1,08";152088176;Турникеты;301301;https://prom.ua/Turnikety;S;;Вага;кг;;52;137;Турнікети Freeway;Тип устройства;;Турнікети Freeway
+132;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;301301;https://prom.ua/Turnikety;"S, Sprom, noindex";;Вага;кг;;52;137;Турнікети Freeway;Тип устройства;;Турнікети Freeway
+133;;site;;"0,85";"1,08";90997501;Замки;301010;https://prom.ua/Mehanicheskie-zamki;S;;Вага;кг;;52;89;Біометричні замки;Тип устройства;;Біометричні замки
+134;;prom;prom_;"0,85";1.21;140905382;Безопасность и комфорт;301010;https://prom.ua/Mehanicheskie-zamki;"S, Sprom, noindex";;Вага;кг;;52;89;Біометричні замки;Тип устройства;;Біометричні замки
 135;;site;;"0,85";"1,08";16703618;Комплектующие для контроля доступа;3030;https://prom.ua/Sistemy-kontrolya-dostupa;S;;Вага;г;;52;90;Аксесуари СКУД;Тип устройства;;Комплектуючі для СККД
 136;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;3030;https://prom.ua/Sistemy-kontrolya-dostupa;"S, Sprom, noindex";;Вага;г;;52;90;Аксесуари СКУД;Тип устройства;;Комплектуючі для СККД
-137;;site;;"0,85";"1,08";152209799;Металодетекторы;50505;https://prom.ua/Metallodetektory;S;;Вага;г;;52;315;Арочні металошукачі;Тип устройства;;Арочні металошукачі
-138;;prom;prom_;"0,85";1.22;140905382;Безопасность и комфорт;50505;https://prom.ua/Metallodetektory;"S, Sprom, noindex";;Вага;г;;52;315;Арочні металошукачі;Тип устройства;;Арочні металошукачі
-139;;site;;"0,85";"1,08";152209799;Металодетекторы;50505;https://prom.ua/Metallodetektory;S;;Вага;г;;52;316;Ручні металошукачі;Тип устройства;;Ручні металошукачі
-140;;prom;prom_;"0,85";1.22;140905382;Безопасность и комфорт;50505;https://prom.ua/Metallodetektory;"S, Sprom, noindex";;Вага;г;;52;316;Ручні металошукачі;Тип устройства;;Ручні металошукачі
+137;;site;;"0,85";"1,08";152209799;Металодетекторы;50505;https://prom.ua/Metallodetektory;S;;Вага;кг;;52;315;Арочні металошукачі;Тип устройства;;Арочні металошукачі
+138;;prom;prom_;"0,85";1.22;140905382;Безопасность и комфорт;50505;https://prom.ua/Metallodetektory;"S, Sprom, noindex";;Вага;кг;;52;315;Арочні металошукачі;Тип устройства;;Арочні металошукачі
+139;;site;;"0,85";"1,08";152209799;Металодетекторы;50505;https://prom.ua/Metallodetektory;S;;Вага;кг;;52;316;Ручні металошукачі;Тип устройства;;Ручні металошукачі
+140;;prom;prom_;"0,85";1.22;140905382;Безопасность и комфорт;50505;https://prom.ua/Metallodetektory;"S, Sprom, noindex";;Вага;кг;;52;316;Ручні металошукачі;Тип устройства;;Ручні металошукачі
 141;;site;;"0,85";"1,08";127628176;Контроллеры;301312;https://prom.ua/Kontrollery;S;;Вага;г;;52;320;Контролери біометричні;;;
 142;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;301312;https://prom.ua/Kontrollery;"S, Sprom, noindex";;Вага;г;;52;320;Контролери біометричні;;;
 143;;site;;"0,85";"1,08";127628166;Терминалы;3030;https://prom.ua/Sistemy-kontrolya-dostupa;S;;Вага;г;;52;321;Термінали обліку робочого часу;Тип устройства;;Термінали обліку робочого часу
@@ -149,27 +149,27 @@
 148;;prom;prom_;"0,85";1.17;140905382;Безопасность и комфорт;50928;https://prom.ua/Oborudovanie-dlya-pitaniya-po-ethernet;"S, Sprom, noindex";;Вага;г;;52;302;Пристрої PoE;;;
 149;;site;;"0,85";"1,08";152091016;Охранные датчики;302302;https://prom.ua/Ohrannye-izveschateli;S;;Вага;г;;52;479;Охорона периметра;Тип устройства;;Охорона периметра
 150;;prom;prom_;"0,85";1.18;140905382;Безопасность и комфорт;302302;https://prom.ua/Ohrannye-izveschateli;"S, Sprom, noindex";;Вага;г;;52;479;Охорона периметра;Тип устройства;;Охорона периметра
-151;;site;;"0,85";"1,08";151114178;Зарядные станции;500901;https://prom.ua/Zaryadnye-stantsii;S;;Вага;г;;52;209;Зарядні станції;;;
-152;;prom;prom_;"0,85";1.20;140905382;Безопасность и комфорт;500901;https://prom.ua/Zaryadnye-stantsii;"S, Sprom, noindex";;Вага;г;;52;209;Зарядні станції;;;
-153;;site;;"0,85";"1,08";152133408;Модульное оборудование;14190906;https://prom.ua/Rele-differentsialnye;S;;Вага;г;;52;650;Автоматичні вимикачі;Тип устройства;;Автоматичні вимикачі
-154;;prom;prom_;"0,85";1.22;140905382;Безопасность и комфорт;14190906;https://prom.ua/Rele-differentsialnye;"S, Sprom, noindex";;Вага;г;;52;650;Автоматичні вимикачі;Тип устройства;;Автоматичні вимикачі
-155;;site;;"0,85";"1,08";152133408;Модульное оборудование;14190906;https://prom.ua/Rele-differentsialnye;S;;Вага;г;;52;651;Реле напруги;Тип устройства;;Реле напруги
-156;;prom;prom_;"0,85";1.22;140905382;Безопасность и комфорт;14190906;https://prom.ua/Rele-differentsialnye;"S, Sprom, noindex";;Вага;г;;52;651;Реле напруги;Тип устройства;;Реле напруги
+151;;site;;"0,85";"1,08";151114178;Зарядные станции;500901;https://prom.ua/Zaryadnye-stantsii;S;;Вага;кг;;52;209;Зарядні станції;;;
+152;;prom;prom_;"0,85";1.20;140905382;Безопасность и комфорт;500901;https://prom.ua/Zaryadnye-stantsii;"S, Sprom, noindex";;Вага;кг;;52;209;Зарядні станції;;;
+153;;site;;"0,85";"1,08";152133408;Модульное оборудование;14190906;https://prom.ua/Rele-differentsialnye;S;;Вага;кг;;52;650;Автоматичні вимикачі;Тип устройства;;Автоматичні вимикачі
+154;;prom;prom_;"0,85";1.22;140905382;Безопасность и комфорт;14190906;https://prom.ua/Rele-differentsialnye;"S, Sprom, noindex";;Вага;кг;;52;650;Автоматичні вимикачі;Тип устройства;;Автоматичні вимикачі
+155;;site;;"0,85";"1,08";152133408;Модульное оборудование;14190906;https://prom.ua/Rele-differentsialnye;S;;Вага;кг;;52;651;Реле напруги;Тип устройства;;Реле напруги
+156;;prom;prom_;"0,85";1.22;140905382;Безопасность и комфорт;14190906;https://prom.ua/Rele-differentsialnye;"S, Sprom, noindex";;Вага;кг;;52;651;Реле напруги;Тип устройства;;Реле напруги
 157;;site;;"0,85";"1,08";4321341;Комплектующие для видеонаблюдения;301106;https://prom.ua/Obektivy-dlya-kamer-videonablyudeniya;S;;Вага;г;;52;42;Об'єктиви;Тип устройства;;Об'єктиви
 158;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;301106;https://prom.ua/Obektivy-dlya-kamer-videonablyudeniya;"S, Sprom, noindex";;Вага;г;;52;42;Об'єктиви;Тип устройства;;Об'єктиви
 159;;site;;"0,85";"1,08";152481182;Мониторы;706;https://prom.ua/Monitory;S;;Вага;г;;52;219;Монітори;Тип устройства;;Монітори
 160;;prom;prom_;"0,85";1.19;140905382;Безопасность и комфорт;706;https://prom.ua/Monitory;"S, Sprom, noindex";;Вага;г;;52;219;Монітори;;;
 161;;site;;"0,85";"1,08";152481185;Планшеты;70105;https://prom.ua/Planshetnye-netbuki;S;;Вага;г;;52;607;Планшети;;;
 162;;prom;prom_;"0,85";1.17;140905382;Безопасность и комфорт;70105;https://prom.ua/Planshetnye-netbuki;"S, Sprom, noindex";;Вага;г;;52;607;Планшети;;;
-163;;site;;"0,85";"1,08";127351973;Свинцовые аккумуляторы;5280501;https://prom.ua/Akkumulyatornye-bloki;S;;Вага;г;;52;621;Акумулятори;Тип устройства;;Свинцеві акумулятори
-164;;prom;prom_;"0,85";1.18;140905382;Безопасность и комфорт;5280501;https://prom.ua/Akkumulyatornye-bloki;"S, Sprom, noindex";;Вага;г;;52;621;Акумулятори;Тип устройства;;Свинцеві акумулятори
+163;;site;;"0,85";"1,08";127351973;Свинцовые аккумуляторы;5280501;https://prom.ua/Akkumulyatornye-bloki;S;;Вага;кг;;52;621;Акумулятори;Тип устройства;;Свинцеві акумулятори
+164;;prom;prom_;"0,85";1.18;140905382;Безопасность и комфорт;5280501;https://prom.ua/Akkumulyatornye-bloki;"S, Sprom, noindex";;Вага;кг;;52;621;Акумулятори;Тип устройства;;Свинцеві акумулятори
 165;;site;;"0,85";"1,08";152481294;Сетевые хранилища;70807;https://prom.ua/Setevye-nakopiteli;S;;Вага;г;;52;225;Мережеві сховища;;;
 166;;prom;prom_;"0,85";1.18;140905382;Безопасность и комфорт;70807;https://prom.ua/Setevye-nakopiteli;"S, Sprom, noindex";;Вага;г;;52;225;Мережеві сховища;;;
 167;;site;;"0,85";"1,08";152483771;Фотоловушки;180312;https://prom.ua/Fotolovushki-kamery-dlya-ohoty;S;;Вага;г;;52;596;Фотопастки;;;
 168;;prom;prom_;"0,85";1.19;140905382;Безопасность и комфорт;180312;https://prom.ua/Fotolovushki-kamery-dlya-ohoty;"S, Sprom, noindex";;Вага;г;;52;596;Фотопастки;;;
-169;;site;;"0,85";"1,08";152481192;Системы парковки;135605;https://prom.ua/Shlagbaumy;S;;Вага;г;;52;147;Автоматичні шлагбауми;Тип устройства;;Шлагбауми
-170;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;135605;https://prom.ua/Shlagbaumy;"S, Sprom, noindex";;Вага;г;;52;147;Автоматичні шлагбауми;Тип устройства;;Шлагбауми
-171;;site;;"0,85";"1,08";152481192;Системы парковки;301501;https://prom.ua/Dorozhnye-ograzhdeniya;S;;Вага;г;;52;148;Бар'єри;Тип устройства;;Блокувальник паркувального місця
-172;;prom;prom_;"0,85";1.22;140905382;Безопасность и комфорт;301501;https://prom.ua/Dorozhnye-ograzhdeniya;"S, Sprom, noindex";;Вага;г;;52;148;Бар'єри;Тип устройства;;Блокувальник паркувального місця
-173;;site;;"0,85";"1,08";152481192;Системы парковки;13560901;https://prom.ua/Aksessuary-dlya-vorot-i-shagbaumov;S;;Вага;г;;52;606;Аксесуари до шлагбаумів;Тип устройства;;Комплектуючі до шлагбаумів
-174;;prom;prom_;"0,85";1.16;140905382;Безопасность и комфорт;13560901;https://prom.ua/Aksessuary-dlya-vorot-i-shagbaumov;"S, Sprom, noindex";;Вага;г;;52;606;Аксесуари до шлагбаумів;Тип устройства;;Комплектуючі до шлагбаумів
+169;;site;;"0,85";"1,08";152481192;Системы парковки;135605;https://prom.ua/Shlagbaumy;S;;Вага;кг;;52;147;Автоматичні шлагбауми;Тип устройства;;Шлагбауми
+170;;prom;prom_;"0,85";1.15;140905382;Безопасность и комфорт;135605;https://prom.ua/Shlagbaumy;"S, Sprom, noindex";;Вага;кг;;52;147;Автоматичні шлагбауми;Тип устройства;;Шлагбауми
+171;;site;;"0,85";"1,08";152481192;Системы парковки;301501;https://prom.ua/Dorozhnye-ograzhdeniya;S;;Вага;кг;;52;148;Бар'єри;Тип устройства;;Блокувальник паркувального місця
+172;;prom;prom_;"0,85";1.22;140905382;Безопасность и комфорт;301501;https://prom.ua/Dorozhnye-ograzhdeniya;"S, Sprom, noindex";;Вага;кг;;52;148;Бар'єри;Тип устройства;;Блокувальник паркувального місця
+173;;site;;"0,85";"1,08";152481192;Системы парковки;13560901;https://prom.ua/Aksessuary-dlya-vorot-i-shagbaumov;S;;Вага;кг;;52;606;Аксесуари до шлагбаумів;Тип устройства;;Комплектуючі до шлагбаумів
+174;;prom;prom_;"0,85";1.16;140905382;Безопасность и комфорт;13560901;https://prom.ua/Aksessuary-dlya-vorot-i-shagbaumov;"S, Sprom, noindex";;Вага;кг;;52;606;Аксесуари до шлагбаумів;Тип устройства;;Комплектуючі до шлагбаумів
