@@ -27,7 +27,7 @@ class FieldProcessor:
         Ініціалізація з опціональним завантаженням конфігурації категорій.
         
         Args:
-            category_config_path: шлях до viatec_category_dealer.csv
+            category_config_path: шлях до viatec_category.csv
         """
         self.category_weight_units = {}  # {category_id: 'г' or 'кг'}
         
@@ -40,6 +40,7 @@ class FieldProcessor:
 
         ПРИЧИНА використання csv.reader замість csv.DictReader:
         viatec_category.csv містить дублікати заголовків:
+          col 12: Назва_Характеристики             → "Вага"
           col 13: Одиниця_виміру_Характеристики → "г"/"кг"  ← нам потрібна ця
           col 16: Одиниця_виміру_Характеристики → ""         ← DictReader брав цю
         DictReader при дублікатах зберігає ОСТАННЄ значення → завжди "".
@@ -50,21 +51,32 @@ class FieldProcessor:
           1:  Линк категории поставщика
           2:  channel
           8:  Ідентифікатор_підрозділу
+          12: Назва_Характеристики                 ← лише "Вага"
           13: Одиниця_виміру_Характеристики  ← одиниця ваги ("г"/"кг")
+
+        Один і той самий Ідентифікатор_підрозділу може бути в кількох
+        supplier-категоріях, але портал має для нього одну одиницю ваги.
+        Конфлікт у CSV є критичною помилкою конфігурації: не дозволяємо
+        останньому рядку непомітно перезаписати коректне значення.
         """
         IDX_CHANNEL     = 2
         IDX_CAT_ID      = 8
+        IDX_WEIGHT_NAME = 12
         IDX_WEIGHT_UNIT = 13
+        WEIGHT_NAMES = frozenset({"вага", "вес", "weight"})
+        WEIGHT_UNITS = frozenset({"г", "кг"})
 
         path = Path(path)
         try:
+            configured_units: dict[str, str] = {}
+            source_lines: dict[str, int] = {}
             with open(path, encoding="utf-8-sig") as f:
                 reader = csv.reader(f, delimiter=";")
                 headers = next(reader, None)
                 if headers is None:
                     return
 
-                for row in reader:
+                for row_number, row in enumerate(reader, start=2):
                     if not row or all(c.strip() == "" for c in row):
                         continue
 
@@ -74,10 +86,28 @@ class FieldProcessor:
                         continue
 
                     category_id = row[IDX_CAT_ID].strip() if len(row) > IDX_CAT_ID else ""
-                    weight_unit = row[IDX_WEIGHT_UNIT].strip() if len(row) > IDX_WEIGHT_UNIT else ""
+                    weight_name = row[IDX_WEIGHT_NAME].strip().casefold() if len(row) > IDX_WEIGHT_NAME else ""
+                    weight_unit = row[IDX_WEIGHT_UNIT].strip().casefold() if len(row) > IDX_WEIGHT_UNIT else ""
 
-                    if category_id and weight_unit:
-                        self.category_weight_units[category_id] = weight_unit
+                    if weight_name not in WEIGHT_NAMES or weight_unit not in WEIGHT_UNITS:
+                        continue
+
+                    if not category_id:
+                        continue
+
+                    previous_unit = configured_units.get(category_id)
+                    if previous_unit is not None and previous_unit != weight_unit:
+                        previous_line = source_lines[category_id]
+                        raise ValueError(
+                            "Конфлікт одиниць ваги в category config: "
+                            f"підрозділ={category_id}, рядки {previous_line} ({previous_unit}) "
+                            f"і {row_number} ({weight_unit})"
+                        )
+
+                    configured_units[category_id] = weight_unit
+                    source_lines[category_id] = row_number
+
+            self.category_weight_units = configured_units
 
             g_cats  = [k for k, v in self.category_weight_units.items() if v == "г"]
             kg_cats = [k for k, v in self.category_weight_units.items() if v == "кг"]
@@ -94,6 +124,8 @@ class FieldProcessor:
 
         except FileNotFoundError:
             print(f"⚠️ FieldProcessor: CSV файл не знайдено: {path}")
+        except ValueError:
+            raise
         except Exception as e:
             print(f"❌ FieldProcessor: Помилка завантаження category_config: {e}")
 
@@ -131,8 +163,8 @@ class FieldProcessor:
         spider.logger.info(f"🔍 Available units: {list(self.category_weight_units.items())[:5]}...")
         
         # Витягуємо число і одиницю з value
-        match_g = re.match(r'([0-9\.]+)\s*г$', value)
-        match_kg = re.match(r'([0-9\.]+)\s*кг$', value)
+        match_g = re.match(r'([0-9]+(?:[.,][0-9]+)?)\s*г$', value)
+        match_kg = re.match(r'([0-9]+(?:[.,][0-9]+)?)\s*кг$', value)
         
         if match_g:
             grams = float(match_g.group(1).replace(',', '.'))
