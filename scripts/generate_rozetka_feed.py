@@ -47,6 +47,7 @@ from services.rozetka_category_service import (
     resolve_category,
 )
 from services.rozetka_category_leaf_service import validate_used_categories
+from services.rozetka_dimensions_service import apply_package_dimensions
 from services.rozetka_text_sanitizer_service import sanitize_rozetka_text
 
 _logger = logging.getLogger(__name__)
@@ -292,6 +293,7 @@ def main() -> None:
     updated_xml = filter_stop_brand_offers(updated_xml)
     updated_xml = deduplicate_offer_names(updated_xml)  # <name>/<name_ua> мають бути унікальними для Rozetka
     updated_xml = sanitize_rozetka_text(updated_xml)  # sale-мітки в назвах, емодзі та «причина уцінки» в описах
+    updated_xml = apply_package_dimensions(updated_xml)  # Ширина/Глибина/Висота/Вага в упаковці — з характеристик того ж офера
 
     # --- Розетка-специфічне очищення та трансформація XML ---
     # replace_category_ids повертає (xml, used_entries) — entries потрібні для <categories> блоку
