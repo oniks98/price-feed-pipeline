@@ -17,9 +17,11 @@ import csv
 import re
 from decimal import Decimal
 from pathlib import Path
+from typing import Protocol
 from urllib.parse import urljoin
 import os
 from dotenv import load_dotenv
+from parsel import Selector, SelectorList
 from suppliers.spiders.base import ViatecBaseSpider, BaseDealerSpider
 from suppliers.services.category_specs_enricher import CategorySpecsEnricher
 from suppliers.services.viatec_feed_service import ViatecFeedService
@@ -77,6 +79,61 @@ def _parse_card_price_usd(raw: str | None) -> str:
 
 def _parse_card_rrp_uah(raw: str | None) -> str:
     return _parse_card_price_usd(raw)
+
+
+def _extract_bn_price_raw(price_block: Selector) -> str:
+    """
+    Дістає сирий текст ціни "по б/г" з <p class="categories__item-bn-price">.
+
+    Розмітка сайту вже змінювалась:
+      - стара: <span class="color-main bold">28.00 у.о.</span><span>ціна по б/г</span>
+      - нова:  28.00 у.о.<span>ціна по б/г</span><i class="ic-alert-circle"></i>
+               (число тепер прямий текстовий вузол <p>, без обгортки в span)
+
+    Пробуємо старий селектор першим (щоб не ламати кейси зі старою
+    розміткою, якщо вона десь лишилась), інакше беремо прямі текстові
+    вузли самого <p> — вони не заходять у вкладені <span>/<i>.
+    """
+    legacy = price_block.css("span.color-main.bold::text").get("")
+    if _compact_text(legacy):
+        return legacy
+    return " ".join(price_block.xpath("./text()").getall())
+
+
+def _extract_dealer_price_usd(price_blocks: SelectorList) -> str:
+    """Повертає першу коректну дилерську ціну з блоків ``ціна по б/г``.
+
+    Один і той самий блок використовують картки каталогу та сторінка товару.
+    На сторінці товару викликач передає тільки блок ``card-header__card-price``:
+    це не дає взяти ціну зі списку рекомендованих товарів нижче.
+    """
+    for price_block in price_blocks:
+        raw_price = _extract_bn_price_raw(price_block)
+        price = _parse_card_price_usd(raw_price)
+        if price:
+            return price
+    return ""
+
+
+class _CssSelectable(Protocol):
+    """Мінімальний контракт Scrapy/Parsel-об'єктів для CSS-пошуку."""
+
+    def css(self, query: str) -> SelectorList: ...
+
+
+def _extract_rrp_uah(scope: _CssSelectable) -> str:
+    """Дістає РРЦ з картки каталогу або повної сторінки товару.
+
+    Сайт змінює utility-класи навколо РРЦ, але текстова мітка ``РРЦ``
+    лишається стабільною. Завдяки єдиному методу обидва шляхи парсингу
+    повертають однакове значення.
+    """
+    for rrp_node in scope.css("p"):
+        rrp_text = _compact_text(" ".join(rrp_node.css("::text").getall()))
+        if "РРЦ" not in rrp_text:
+            continue
+        return _parse_card_rrp_uah(rrp_text)
+    return ""
 
 
 class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
@@ -590,9 +647,16 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
             specs_list     = response.meta.get("specifications_list", [])
 
             supplier_sku  = (response.css("span.card-header__card-articul-text-value::text").get() or "").strip()
-            price_raw     = (response.css("div.card-header__card-price-new::text").get() or "").strip().replace("&nbsp;", "").replace(" ", "")
-            price         = self._clean_price(price_raw) if price_raw else ""
-            price_rrp_uah = self._parse_rrp_uah(response)
+            # Новий шаблон Viatec зберігає дилерську ціну як прямий текст
+            # <p class="categories__item-bn-price"> у card-header__card-price.
+            # Обмежуємо пошук header-блоком, аби не взяти ціну рекомендацій.
+            price = _extract_dealer_price_usd(
+                response.css(
+                    "div.card-header__card-price "
+                    "p.categories__item-bn-price"
+                )
+            )
+            price_rrp_uah = _extract_rrp_uah(response)
 
             gallery_images = response.css('a[data-fancybox*="gallery"]::attr(href)').getall()
             if not gallery_images:
@@ -681,22 +745,13 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
             if not link:
                 continue
 
-            price = ""
-            for price_block in card.css("p.categories__item-bn-price"):
-                price_text = _compact_text(" ".join(price_block.css("::text").getall()))
-                if "ціна по б/г" not in price_text:
-                    continue
-                raw_price = price_block.css("span.color-main.bold::text").get("")
-                price = _parse_card_price_usd(raw_price)
-                break
+            price_blocks = card.css("p.categories__item-bn-price")
+            price = _extract_dealer_price_usd(price_blocks)
+            if price_blocks and not price:
+                price_text = _compact_text(" ".join(price_blocks[0].css("::text").getall()))
+                self.logger.debug(f"⚠️ Не розпізнано ціну б/г у блоці: {price_text!r}")
 
-            price_rrp_uah = ""
-            for rrp_node in card.css("p.color-gray-80.font-0-8, p.font-0-8"):
-                rrp_text = _compact_text(" ".join(rrp_node.css("::text").getall()))
-                if "РРЦ" not in rrp_text:
-                    continue
-                price_rrp_uah = _parse_card_rrp_uah(rrp_text)
-                break
+            price_rrp_uah = _extract_rrp_uah(card)
 
             availability = _compact_text(
                 " ".join(
@@ -874,26 +929,6 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         if len(row) > target_len:
             return row[:target_len]
         return row
-
-    def _parse_rrp_uah(self, response) -> str:
-        """
-        Парсить ціну РРЦ в гривнях зі сторінки товару.
-
-        Шукає тег виду:
-            <p class="font-0-9 color-gray-80 mb-1">2 099.00 грн (РРЦ)</p>
-
-        Повертає очищену числову рядок (напр. "2099.00") або "" якщо не знайдено.
-        Використовується каналом prom як базова ціна у UAH.
-        """
-        for para in response.css("p.font-0-9.color-gray-80.mb-1"):
-            raw = "".join(para.css("::text").getall())
-            if "РРЦ" not in raw:
-                continue
-            cleaned = raw.replace("\xa0", "").replace(" ", "").strip()
-            price = self._clean_price(cleaned) if cleaned else ""
-            if price:
-                return price
-        return ""
 
     def _start_next_category(self, current_index: int):
         next_index = current_index + 1
