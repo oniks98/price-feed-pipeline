@@ -32,6 +32,8 @@
                                        _LP_DELETE_PHRASES (звичайний текст, escape'ується
                                        автоматично) / _LP_REPLACE_RULES.
 Щоб додати Viatec-правило          — додай до _VIATEC_DELETE_PHRASES / _VIATEC_REPLACE_RULES.
+Щоб додати Viatec-правило лише для описів
+                                  — додай до _VIATEC_DESCRIPTION_REPLACE_RULES.
 Щоб додати Secur-правило            — додай до _SECUR_DELETE_PHRASES (видалення фраз
                                        в sanitize(), для всіх SANITIZED_FIELDS) або
                                        підкоригуй _SECUR_NAME_QTY_PREFIX_RE (перенесення
@@ -506,6 +508,19 @@ _VIATEC_REPLACE_RE: list[tuple[re.Pattern, str]] = [
     for pattern, repl in _VIATEC_REPLACE_RULES
 ]
 
+# Viatec: заголовок короткого блоку перед повним описом. Заміна діє лише на
+# поля Опис/Опис_укр: у назвах товарів і пошукових запитах цей текст не є
+# артефактом, тому там його змінювати не можна.
+_VIATEC_DESCRIPTION_REPLACE_RULES: list[tuple[str, str]] = [
+    ("Ключевые характеристики", "Описание"),
+    ("Ключові характеристики", "Опис"),
+]
+
+_VIATEC_DESCRIPTION_REPLACE_RE: list[tuple[re.Pattern, str]] = [
+    (re.compile(re.escape(pattern), re.IGNORECASE), repl)
+    for pattern, repl in _VIATEC_DESCRIPTION_REPLACE_RULES
+]
+
 # Фінальне видалення окремих слів для Viatec — після всіх інших кроків.
 # Слова видаляються цілком (не замінюються пробілом, як BANNED_WORDS) —
 # це слова без якої сенсової цінності окремо від решти тексту.
@@ -731,6 +746,8 @@ class TextSanitizer:
                 item[field] = cls.sanitize(item[field], supplier=supplier)
                 if field in cls.DESCRIPTION_FIELDS:
                     item[field] = cls._apply_desc_only_rules(item[field])
+                    if supplier == "viatec":
+                        item[field] = cls._apply_viatec_description_rules(item[field])
                 if field in cls.TITLE_FIELDS and supplier == "secur":
                     item[field] = cls._apply_secur_title_rules(item[field])
         return item
@@ -767,6 +784,13 @@ class TextSanitizer:
         cleaned = _DUPLICATE_PUNCT_RE.sub(r'\1', cleaned)
         cleaned = _MISSING_SPACE_AFTER_PUNCT_RE.sub(r'\1 ', cleaned)
         return re.sub(r' {2,}', ' ', cleaned).strip()
+
+    @staticmethod
+    def _apply_viatec_description_rules(text: str) -> str:
+        """Застосовує Viatec-специфічні заміни лише до полів опису."""
+        for pattern, replacement in _VIATEC_DESCRIPTION_REPLACE_RE:
+            text = pattern.sub(replacement, text)
+        return text
 
     @staticmethod
     def _apply_secur_title_rules(text: str) -> str:
