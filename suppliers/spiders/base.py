@@ -492,11 +492,35 @@ class ViatecBaseSpider(BaseSupplierSpider):
 
     def _extract_specifications(self, response) -> List[Dict[str, str]]:
         """
-        Витягує характеристики товару з таблиці (українські назви)
+        Витягує характеристики товару з вкладки (українські назви).
+
+        Viatec використовує два шаблони:
+          - старий: рядки ``<table><tr><th>…</th><td>…</td></tr>``;
+          - новий: ``div.card-tabs__characteristic-content-item`` з двома
+            сусідніми ``<span>`` для назви й значення.
+
+        Вкладки рендеряться сервером; JavaScript лише перемикає клас
+        ``active``, тому Scrapy може безпечно читати весь DOM відповіді.
         """
-        specs_list = []
+        specs_list: List[Dict[str, str]] = []
+
+        # Новий шаблон Viatec: кожен рядок містить два прямі <span>.
+        # Шукаємо без .active, бо стан вкладки змінюється лише в браузері.
+        spec_rows = response.css("div.card-tabs__characteristic-content-item")
+        for row in spec_rows[:60]:
+            cells = row.xpath("./span")
+            if len(cells) < 2:
+                continue
+
+            name = re.sub(r"\s+", " ", " ".join(cells[0].css("::text").getall())).strip()
+            value = re.sub(r"\s+", " ", " ".join(cells[1].css("::text").getall())).strip()
+            if name and value:
+                specs_list.append({"name": name, "value": value, "unit": ""})
+
+        if specs_list:
+            return specs_list
         
-        # Спроба 1: Активна вкладка
+        # Старий шаблон: таблиця в активній вкладці.
         spec_rows = response.css("li.card-tabs__item.active div.card-tabs__characteristic-content table tr")
         
         # Спроба 2: Будь-яка вкладка з характеристиками
