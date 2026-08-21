@@ -6,6 +6,7 @@ import scrapy
 import re
 from pathlib import Path
 from typing import Optional, Dict, List
+from parsel import Selector
 
 
 class BaseSupplierSpider(scrapy.Spider):
@@ -367,7 +368,9 @@ class ViatecBaseSpider(BaseSupplierSpider):
         3. <p class="analog-link"/><div>  → аналог-лінк + звичайний <div> з текстом
            текст</div>                       (fallthrough: p_tags є, але після фільтра
                                               порожньо → читаємо вміст <div>)
-        4. <div>текст;<br>текст</div>     → рядки через <br> (fallback)
+        4. Комплект: ``Даний набір складається з:`` + <div>-рядки
+           → назва комплектуючого та кількість, без URL/зображень
+        5. <div>текст;<br>текст</div>     → рядки через <br> (fallback)
         """
         description_container = response.css("div.card-header__card-info-text")
         if not description_container:
@@ -397,6 +400,16 @@ class ViatecBaseSpider(BaseSupplierSpider):
                 if inner:
                     inner = re.sub(r"<br\s*/?>", "<br>", inner)
                     result_parts.append(inner)
+
+                # Новий шаблон комплектів Viatec: після заголовка в <p>
+                # ідуть сусідні <div class="font-12-px ...">. У кожному
+                # містяться посилання на товар і його кількість. Витягаємо
+                # лише видимий текст, щоб URL та <img> не потрапляли у фід.
+                heading_text = re.sub(
+                    r"\s+", " ", " ".join(p.css("::text").getall())
+                ).strip().lower()
+                if "складається з" in heading_text or "состоит из" in heading_text:
+                    result_parts.extend(self._extract_kit_components(p))
 
             # Варіант 2: знайшли реальні <p> з текстом → повертаємо
             if result_parts:
@@ -431,6 +444,41 @@ class ViatecBaseSpider(BaseSupplierSpider):
 
         self.logger.debug(f"Fallback (div text+br): {len(lines)} рядків на {response.url}")
         return "<br>".join(lines)
+
+    @staticmethod
+    def _extract_kit_components(kit_heading: Selector) -> List[str]:
+        """Повертає склад комплекту з нового блоку картки Viatec.
+
+        Кожен рядок має два посилання: перше огортає зображення, друге —
+        назву товару. Беремо текст другого і сусідню кількість; HTML-посилання
+        та зображення навмисно не передаються далі.
+        """
+        component_rows = kit_heading.xpath(
+            "./following-sibling::div["
+            "contains(concat(' ', normalize-space(@class), ' '), ' font-12-px ')"
+            "]"
+        )
+        components: List[str] = []
+        for row in component_rows:
+            product_name = re.sub(
+                r"\s+", " ",
+                " ".join(
+                    row.xpath(".//a[normalize-space(string())]/text()").getall()
+                ),
+            ).strip()
+            quantity = re.sub(
+                r"\s+", " ",
+                " ".join(
+                    row.xpath(
+                        ".//a[normalize-space(string())]"
+                        "/following-sibling::div[1]//text()"
+                    ).getall()
+                ),
+            ).strip()
+            if product_name:
+                line = f"● {product_name} — {quantity}" if quantity else f"● {product_name}"
+                components.append(line)
+        return components
 
     def _extract_tab_description(self, response) -> str:
         """
