@@ -36,3 +36,6 @@ error_*.png
 prom_noindex_fatal_hrefs.json
 
 task.md
+
+data\markets\products_vchasno.xlsx
+data\markets\products_prom.xlsx
