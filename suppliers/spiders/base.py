@@ -411,6 +411,28 @@ class ViatecBaseSpider(BaseSupplierSpider):
                 if "складається з" in heading_text or "состоит из" in heading_text:
                     result_parts.extend(self._extract_kit_components(p))
 
+            # У новому шаблоні поряд із посиланням «Дивитись повні
+            # характеристики» опис може бути прямим текстовим вузлом після
+            # <p> «Ключові характеристики:», а не вкладеним у власний <p>.
+            # Такий вузол не потрапляє до циклу p_tags, через що раніше в
+            # описі лишався лише заголовок. Беремо текст поза <p>/<li>, щоб
+            # не дублювати вже оброблені абзаци та списки.
+            direct_text = re.sub(
+                r"\s+",
+                " ",
+                " ".join(
+                    description_container.xpath(
+                        ".//text()[normalize-space() "
+                        "and not(ancestor::p) "
+                        "and not(ancestor::li) "
+                        "and not(ancestor::script) "
+                        "and not(ancestor::style)]"
+                    ).getall()
+                ),
+            ).strip()
+            if direct_text:
+                result_parts.append(direct_text)
+
             # Варіант 2: знайшли реальні <p> з текстом → повертаємо
             if result_parts:
                 return "<br>".join(result_parts)

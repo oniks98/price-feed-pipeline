@@ -43,6 +43,15 @@ STATUS_QUANTITY_MAP: dict[str, str] = {
     "Закінчується":  "17",
 }
 
+FULL_CHARACTERISTICS_LINK_SELECTOR = (
+    ".card-header__charachteristics-link, "
+    ".card-header__characteristics-link"
+)
+DESCRIPTION_HEADINGS = frozenset({
+    "ключові характеристики:",
+    "ключевые характеристики:",
+})
+
 
 def _base_sku(identifier: str) -> str:
     sku = (identifier or "").strip()
@@ -51,6 +60,12 @@ def _base_sku(identifier: str) -> str:
 
 def _compact_text(value: str | None) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
+
+
+def _has_meaningful_description(value: str | None) -> bool:
+    """Відрізняє фактичний опис від порожнього рядка чи його заголовка."""
+    text = _compact_text(value)
+    return bool(text) and text.casefold() not in DESCRIPTION_HEADINGS
 
 
 def _normalize_card_availability(status_raw: str | None) -> tuple[str, str] | None:
@@ -555,6 +570,15 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
                 sku=sku,
             )
 
+        if card.get("has_full_characteristics") or self._old_entry_needs_full_description(old_entry):
+            return "request", self._schedule_product_request(
+                normalized_url=normalized_url,
+                category_info=category_info,
+                category_url=category_url,
+                priority=priority,
+                sku=sku,
+            )
+
         self.processed_products.add(normalized_url)
         self.processed_skus.add(sku)
 
@@ -768,8 +792,27 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
                 "price": price,
                 "price_rrp_uah": price_rrp_uah,
                 "availability": availability,
+                "has_full_characteristics": "1" if card.css(FULL_CHARACTERISTICS_LINK_SELECTOR) else "",
             })
         return cards
+
+    def _old_entry_needs_full_description(self, old_entry: dict) -> bool:
+        """Повертає True, якщо fast-path не може безпечно перевикористати опис."""
+        description_indexes = tuple(
+            index
+            for field_name in ("Опис", "Опис_укр")
+            if (index := self._field_index(self.old_headers, field_name)) != -1
+        )
+        if not description_indexes:
+            return False
+
+        for row in old_entry.get("rows", []):
+            if any(
+                not _has_meaningful_description(row[index] if index < len(row) else "")
+                for index in description_indexes
+            ):
+                return True
+        return False
 
     def _build_fast_rows(
         self,
