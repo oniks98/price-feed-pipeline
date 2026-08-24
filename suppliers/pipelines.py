@@ -5,8 +5,14 @@ import hashlib
 import re
 from decimal import Decimal
 from pathlib import Path
+from typing import TYPE_CHECKING, Self
+
 from itemadapter import ItemAdapter
 from scrapy.exceptions import DropItem
+
+if TYPE_CHECKING:
+    from scrapy.crawler import Crawler
+    from scrapy.spiders import Spider
 
 
 class ManufacturersDB:
@@ -189,6 +195,18 @@ class SuppliersPipeline:
     # INIT
     # ------------------------------------------------------------------ #
 
+    @classmethod
+    def from_crawler(cls, crawler: "Crawler") -> Self:
+        """Create the pipeline and retain the crawler for spider access."""
+        pipeline = cls()
+        pipeline.crawler = crawler
+        return pipeline
+
+    @property
+    def spider(self) -> "Spider":
+        """Return the active spider without relying on deprecated hook arguments."""
+        return self.crawler.spider
+
     def __init__(self):
         # CSV
         self.files: dict[str, any] = {}
@@ -226,8 +244,9 @@ class SuppliersPipeline:
     # OPEN SPIDER
     # ------------------------------------------------------------------ #
 
-    def open_spider(self, spider):
+    def open_spider(self) -> None:
         """Ініціалізація через SupplierConfig - ZERO magic, ONE source of truth"""
+        spider = self.spider
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Зберігаємо spider logger для використання в _write_row
@@ -351,7 +370,8 @@ class SuppliersPipeline:
     # PROCESS ITEM - МУЛЬТИКАНАЛЬНИЙ РЕЖИМ
     # ------------------------------------------------------------------ #
 
-    def process_item(self, item, spider):
+    def process_item(self, item):
+        spider = self.spider
         adapter = ItemAdapter(item)
         output_file = adapter.get("output_file", f"{spider.name}.csv")
 
@@ -870,7 +890,8 @@ class SuppliersPipeline:
         bucket = self.stats[file]["guarantee_defaults"]
         bucket[category_id] = bucket.get(category_id, 0) + 1
 
-    def close_spider(self, spider):
+    def close_spider(self) -> None:
+        spider = self.spider
         # Guard: Scrapy може викликати close_spider повторно при скасуванні.
         # Перевіряємо одразу, щоб уникнути double-close файлів і double-save.
         if self.stats_logged:
