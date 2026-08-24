@@ -500,7 +500,7 @@ jobs:
         with:
           name: noindex-logs-${{ github.run_number }}
           path: |
-            prom_noindex.log
+            logs/prom_noindex.log
             error_*.png
             prom_noindex_fatal_hrefs.json
           retention-days: 7
@@ -551,7 +551,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: prosale-logs-${{ github.run_number }}
-          path: prom_prosale.log
+          path: logs/prom_prosale.log
           retention-days: 7
           if-no-files-found: ignore
           compression-level: 6

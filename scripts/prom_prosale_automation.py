@@ -62,6 +62,9 @@ LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 MODAL_TIMEOUT  = 20_000   # чекання появи модалки
 CONTENT_TIMEOUT = 25_000  # чекання завантаження контенту всередині модалки
 TABLE_TIMEOUT  = 20_000
+# Prom оновлює відсортований список товарів після фільтра тегу асинхронно.
+# Не починаємо сканування, поки список не встигне перерендеритись.
+FILTER_RESULTS_WAIT_SECONDS = 40
 
 
 # =========================
@@ -337,8 +340,13 @@ def select_tag_in_dropdown(page: Page, tag_name: str) -> bool:
     # 6. Підтверджуємо вибір тегу
     save_btn = page.locator('[data-qaid="save_btn"]').first
     save_btn.click()
-    page.wait_for_timeout(800)
-    logger.info("Tag '%s' selected and confirmed", tag_name)
+    logger.info(
+        "Tag '%s' selected; waiting %ss for filtered products",
+        tag_name,
+        FILTER_RESULTS_WAIT_SECONDS,
+    )
+    page.wait_for_timeout(FILTER_RESULTS_WAIT_SECONDS * 1_000)
+    logger.info("Filtered products are ready for tag '%s'", tag_name)
     return True
 
 
@@ -348,8 +356,6 @@ def handle_products_in_modal(page: Page, campaign_name: str) -> bool:
     - є товари → dispatch_event на "Вибрати все" → "Додати до кампанії"
     - немає → закрити модалку
     """
-    page.wait_for_timeout(1_000)
-
     select_all_input = page.locator('[data-qaid="select_all"]').first
 
     if select_all_input.count() == 0:
