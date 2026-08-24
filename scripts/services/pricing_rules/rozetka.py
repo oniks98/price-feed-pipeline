@@ -46,8 +46,12 @@ whether the manual `coef` has been filled in.
 на відміну від Epicenter (один діапазон + одна сума), тут кілька діапазонів:
   50–399 грн   → +12 грн
   400–699 грн  → +18 грн
-  700–3000 грн → +30 грн
-Ціна поза цими діапазонами (< 50 або > 3000) — без надбавки.
+  700–5000 грн → +30 грн
+Ціна поза цими діапазонами (< 50 або > 5000) — без надбавки.
+
+Після цієї надбавки до ФІНАЛЬНОЇ ціни застосовується загальна націнка
+GLOBAL_MARKUP_MULTIPLIER (+1%), з округленням вгору (ceil_uah). Вибір тіру
+в SURCHARGE_TIERS відбувається до цієї націнки — вона на нього не впливає.
 """
 
 from __future__ import annotations
@@ -97,8 +101,8 @@ class _SurchargeTier:
 
 
 SURCHARGE_TIERS: Final[tuple[_SurchargeTier, ...]] = (
-    _SurchargeTier(Decimal("199"),  Decimal("399"),  Decimal("12")),
-    _SurchargeTier(Decimal("400"), Decimal("699"),  Decimal("18")),
+    _SurchargeTier(Decimal("50"), Decimal("399"), Decimal("12")),
+    _SurchargeTier(Decimal("400"), Decimal("699"), Decimal("18")),
     _SurchargeTier(Decimal("700"), Decimal("5000"), Decimal("30")),
 )
 
@@ -109,6 +113,19 @@ def _surcharge_for_price(price: Decimal) -> Decimal:
         if tier.price_min <= price <= tier.price_max:
             return tier.amount
     return Decimal("0")
+
+
+# ---------------------------------------------------------------------------
+# Загальна націнка на ВСІ фінальні ціни Rozetka — застосовується останньою,
+# вже після SURCHARGE_TIERS (на вибір тіру вище не впливає).
+# ---------------------------------------------------------------------------
+
+GLOBAL_MARKUP_MULTIPLIER: Final[Decimal] = Decimal("1.01")  # +1%
+
+
+def _apply_global_markup(price: Decimal) -> Decimal:
+    """Застосовує GLOBAL_MARKUP_MULTIPLIER (+1%) до фінальної ціни, округляючи вгору."""
+    return ceil_uah(price * GLOBAL_MARKUP_MULTIPLIER)
 
 
 # Tier constants — lower value = higher priority
@@ -488,6 +505,9 @@ def apply_prices(
                 surcharge = _surcharge_for_price(new_price)
                 if surcharge:
                     new_price += surcharge
+
+                # Загальна націнка +1% на фінальну ціну (після SURCHARGE_TIERS)
+                new_price = _apply_global_markup(new_price)
 
                 if reason:
                     log.info(
