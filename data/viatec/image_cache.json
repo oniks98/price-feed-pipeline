@@ -36808,5 +36808,10 @@
     "w": 1000,
     "h": 1000,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Flpm1210.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/DH-PFB303S.jpg": {
+    "w": 352,
+    "h": 301,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2FDH-PFB303S.jpg&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
