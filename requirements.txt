@@ -1,9 +1,9 @@
 # Core scraping
-# scrapy>=2.13 обов'язково: async def start() (заміна start_requests) підтримується тільки з 2.13+.
-# На старіших версіях start() просто не викликається — павук відкривається і одразу закривається
-# з 0 товарів, без жодної помилки (стосується всіх пауків: lp_api, viatec_dealer, secur_feed).
-scrapy>=2.13
-scrapy-playwright>=0.0.34
+# scrapy>=2.18 обов'язково: pipeline hooks без аргументу spider підтримуються
+# тільки з 2.18+. На старіших версіях Scrapy передає spider позиційним аргументом.
+# async def start() також потребує Scrapy 2.13+.
+scrapy>=2.18,<3.0
+scrapy-playwright>=0.0.45,<1.0
 
 # HTTP / parsing
 requests>=2.31

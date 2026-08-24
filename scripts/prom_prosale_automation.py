@@ -17,6 +17,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List
 
 from playwright.sync_api import Locator, Page, TimeoutError as PWTimeoutError, sync_playwright
@@ -54,7 +55,9 @@ CAMPAIGNS: List[Campaign] = [
     Campaign(name="LP CPC", tag="Lprom"),
 ]
 
-LOG_FILE = "prom_prosale.log"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+LOG_FILE = PROJECT_ROOT / "logs" / "prom_prosale.log"
+LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 MODAL_TIMEOUT  = 20_000   # чекання появи модалки
 CONTENT_TIMEOUT = 25_000  # чекання завантаження контенту всередині модалки

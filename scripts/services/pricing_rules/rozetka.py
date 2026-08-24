@@ -79,7 +79,7 @@ from ._base import (
 
 _ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 COEFFICIENTS_PATH: Final[Path] = _ROOT / "data" / "markets" / "rozetka_coefficients.csv"
-DEFAULT_LOG_PATH: Final[Path] = _ROOT / "rozetka_default_id.log"
+DEFAULT_LOG_PATH: Final[Path] = _ROOT / "logs" / "rozetka_default_id.log"
 _CSV_DELIMITER: Final[str] = ";"
 _CSV_ENCODING: Final[str] = "utf-8-sig"
 
@@ -181,6 +181,7 @@ def _build_logger() -> logging.Logger:
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
+    DEFAULT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     handler = logging.FileHandler(DEFAULT_LOG_PATH, mode="w", encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(message)s"))
     logger.addHandler(handler)
@@ -544,11 +545,11 @@ def apply_prices(
         # Prom автоматично перемістив товари у нові категорії без правил.
         # Фід згенеровано з coef_uncategorized — ціни некоректні.
         # Потрібно додати правила у rozetka_coefficients.csv.
-        # Деталі у rozetka_default_id.log
+        # Деталі у logs/rozetka_default_id.log
         ids_str = ", ".join(no_rule_offer_ids)
         errors.append(
             f"{stats.no_category_rules} товарів без правил категорії (no_category_rules). "
-            f"Додайте правила у rozetka_coefficients.csv. Деталі: rozetka_default_id.log\n"
+            f"Додайте правила у rozetka_coefficients.csv. Деталі: logs/rozetka_default_id.log\n"
             f"Offer IDs: {ids_str}"
         )
 

@@ -72,8 +72,8 @@ from ._base import (
 
 _ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 COEFFICIENTS_PATH: Final[Path] = _ROOT / "data" / "markets" / "epicenter_coefficients.csv"
-DEFAULT_LOG_PATH: Final[Path] = _ROOT / "epicenter_default_id.log"
-DEFAULT_MARKUP_LOG_PATH: Final[Path] = _ROOT / "epicenter_default_markup_id.log"
+DEFAULT_LOG_PATH: Final[Path] = _ROOT / "logs" / "epicenter_default_id.log"
+DEFAULT_MARKUP_LOG_PATH: Final[Path] = _ROOT / "logs" / "epicenter_default_markup_id.log"
 _CSV_DELIMITER: Final[str] = ";"
 _CSV_ENCODING: Final[str] = "utf-8-sig"
 
@@ -463,7 +463,7 @@ def _surcharge_for_offer(price: Decimal, offer_body: str) -> _SurchargeDecision:
 
 def _build_logger() -> logging.Logger:
     """
-    Logger that writes to epicenter_default_id.log.
+    Logger that writes to logs/epicenter_default_id.log.
     Overwrites on every run (mode='w') so the log always matches the current feed.
     """
     logger = logging.getLogger("epicenter.default_offers")
@@ -473,6 +473,7 @@ def _build_logger() -> logging.Logger:
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
+    DEFAULT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     handler = logging.FileHandler(DEFAULT_LOG_PATH, mode="w", encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(message)s"))
     logger.addHandler(handler)
@@ -483,6 +484,7 @@ def _write_default_markup_offer_ids(offer_ids: list[str]) -> None:
     """Overwrite the fallback-markup ID log so it never contains stale offers."""
     ids = ", ".join(offer_ids) if offer_ids else "—"
     try:
+        DEFAULT_MARKUP_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         DEFAULT_MARKUP_LOG_PATH.write_text(
             f"Offer IDs з націнкою за замовчуванням: {ids}\n",
             encoding="utf-8",
@@ -731,11 +733,11 @@ def apply_prices(
         # Prom автоматично перемістив товари у нові категорії без правил.
         # Фід згенеровано з coef_uncategorized — ціни некоректні.
         # Потрібно додати правила у epicenter_coefficients.csv.
-        # Деталі у epicenter_default_id.log
+        # Деталі у logs/epicenter_default_id.log
         ids_str = ", ".join(no_rule_offer_ids)
         errors.append(
             f"{stats.no_category_rules} товарів без правил категорії (no_category_rules). "
-            f"Додайте правила у epicenter_coefficients.csv. Деталі: epicenter_default_id.log\n"
+            f"Додайте правила у epicenter_coefficients.csv. Деталі: logs/epicenter_default_id.log\n"
             f"Offer IDs: {ids_str}"
         )
 

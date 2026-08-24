@@ -60,7 +60,7 @@ MARKET = "rozetka"
 
 ROOT = Path(__file__).parents[1]
 OUTPUT_PATH = ROOT / "data" / "markets" / "rozetka_feed.xml"
-LOG_PATH    = ROOT / "rozetka_default_id.log"   # пишеться services/market_pricing.py
+LOG_PATH    = ROOT / "logs" / "rozetka_default_id.log"  # пишеться pricing_rules/rozetka.py
 
 SHOP_NAME: Final[str] = "DomSys"
 

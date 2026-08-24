@@ -93,7 +93,9 @@ MAX_PASSES = 500
 MAX_ITEMS_TOTAL = 50000
 MAX_ITEMS_PER_PAGE = 150
 
-LOG_FILE = "prom_noindex.log"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+LOG_FILE = PROJECT_ROOT / "logs" / "prom_noindex.log"
+LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 FATAL_FILE = Path("prom_noindex_fatal_hrefs.json")
 
 

@@ -236,8 +236,10 @@ class SuppliersPipeline:
         self.manufacturers_db: dict[str, "ManufacturersDB"] = {}
 
         import os as _os
-        self.output_dir = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline")) / "data" / "output"
-        _anomaly_path = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline")) / "anomal_price.log"
+        _project_root = Path(_os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
+        self.output_dir = _project_root / "data" / "output"
+        _anomaly_path = _project_root / "logs" / "anomal_price.log"
+        _anomaly_path.parent.mkdir(parents=True, exist_ok=True)
         self._anomaly_log = open(_anomaly_path, "a", encoding="utf-8", buffering=1)
 
     # ------------------------------------------------------------------ #
