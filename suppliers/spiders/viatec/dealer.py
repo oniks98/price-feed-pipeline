@@ -650,7 +650,15 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
                 callback=self.parse_product_ru,
                 errback=self.parse_product_error,
                 meta={
-                    **response.meta,
+                    # Forward only spider-owned metadata. response.meta also
+                    # contains Scrapy internals (for example download_latency),
+                    # which must not be copied to a new request.
+                    "category_url":        category_url,
+                    "category_ru":         response.meta.get("category_ru", ""),
+                    "category_ua":         response.meta.get("category_ua", ""),
+                    "group_number":        response.meta.get("group_number", ""),
+                    "subdivision_id":      response.meta.get("subdivision_id", ""),
+                    "subdivision_link":    response.meta.get("subdivision_link", ""),
                     "name_ua":             name_ua,
                     "description_ua":      description_ua,
                     "specifications_list": specs_list_ua,
