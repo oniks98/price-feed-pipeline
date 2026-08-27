@@ -7,6 +7,9 @@ __pycache__/
 
 # Playwright
 pw-profile/
+prom_cookies.json
+prom_storage_state.json
+prom_storage_state_summary.json
 
 
 # Tимчасові output файли (генеруються під час run)
@@ -33,6 +36,7 @@ data/lp/import_products.csv
 # Логи
 *.log
 error_*.png
+logs/prom_noindex_diagnostics/
 prom_noindex_fatal_hrefs.json
 
 task.md

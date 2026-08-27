@@ -120,7 +120,7 @@ python scripts/kasta_export_coef.py
 
 | Скрипт                       | Опис                                                                                                                         |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `prom_export_cookies.py`     | Витягує cookies активної сесії Prom і зберігає в prom_cookies.json (запускати локально)                                      |
+| `prom_export_cookies.py`     | Експортує Playwright state активної сесії Prom (cookies + localStorage) для GitHub Actions                                    |
 | `prom_api_trigger.py`        | Тригер імпорту товарів у Prom.ua через API після git push                                                                    |
 | `prom_noindex_automation.py` | Масово виставляє noindex на вказані товари через браузер                                                                     |
 | `prom_prosale_automation.py` | Масово додає ProSale до вказаних товарів через браузер                                                                       |
@@ -132,6 +132,30 @@ python scripts/prom_api_trigger.py
 python scripts/prom_noindex_automation.py
 python scripts/prom_prosale_automation.py
 ```
+
+### Сесія Prom для GitHub Actions
+
+Після повторної авторизації в локальному Chrome відкрийте потрібний кабінет
+Prom і виконайте `python scripts/prom_export_cookies.py`. Скрипт створить
+`prom_storage_state.json`; увесь його вміст потрібно записати в GitHub Secret
+`PROM_STORAGE_STATE`. Цей стан переносить не лише cookies, а й `localStorage`
+вибраного кабінету.
+
+`PROM_COOKIES` залишений як тимчасовий fallback для старого формату. Новий
+`prom_storage_state.json` і службові файли експорту внесені в `.gitignore` і
+не повинні потрапляти в Git.
+
+Якщо Actions бачить рядки після фільтра, але за 35 секунд не знаходить тегів
+`noindex` у DOM, job завершиться помилкою замість хибного успіху. У artifact
+`noindex-logs-*` з’являться screenshot і безпечний DOM-звіт у
+`logs/prom_noindex_diagnostics/`; cookies і значення localStorage до нього не
+потрапляють.
+
+`prom_prosale_automation.py` додає товари двома шляхами: спочатку через
+«Каталог ProSale», потім контрольним шляхом через «Товари і послуги». Другий
+шлях фільтрує товари за кожною міткою, виділяє до 100 позицій на сторінці,
+виконує дію «Додати в кампанію Каталог ProSale» і обов’язково скидає
+виділення перед наступною кампанією.
 
 ---
 

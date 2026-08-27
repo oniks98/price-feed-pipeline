@@ -54,9 +54,22 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Set
+from typing import Any, List, Set
 
 from playwright.sync_api import Page, TimeoutError as PWTimeoutError, sync_playwright
+
+try:
+    from services.prom_browser_state import (
+        BrowserStateError,
+        load_prom_browser_state,
+        storage_state_summary,
+    )
+except ModuleNotFoundError:  # Supports both `python scripts/...` and `python -m scripts...`.
+    from scripts.services.prom_browser_state import (
+        BrowserStateError,
+        load_prom_browser_state,
+        storage_state_summary,
+    )
 
 
 # =========================
@@ -66,36 +79,86 @@ from playwright.sync_api import Page, TimeoutError as PWTimeoutError, sync_playw
 START_URL = "https://my.prom.ua/cms/product"
 PROFILE_DIR = "./pw-profile"
 
-# Режим запуску:
-#   Локально:          PROM_LOGIN/PROM_PASSWORD не задані → користується збережена сесія з PROFILE_DIR
-#   GitHub Actions: PROM_LOGIN/PROM_PASSWORD задані → автоматичний логін, headless=True
 import os as _os
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    """Read a boolean environment setting without silently accepting typos."""
+    raw_value = _os.environ.get(name)
+    if raw_value is None or not raw_value.strip():
+        return default
+    normalized_value = raw_value.strip().lower()
+    if normalized_value in {"1", "true", "yes", "on"}:
+        return True
+    if normalized_value in {"0", "false", "no", "off"}:
+        return False
+    raise RuntimeError(f"{name} must be a boolean value, got {raw_value!r}")
+
+
+def _env_positive_int(name: str, default: int) -> int:
+    """Read a positive integer environment setting with a clear error message."""
+    raw_value = _os.environ.get(name)
+    if raw_value is None or not raw_value.strip():
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise RuntimeError(f"{name} must be a positive integer, got {raw_value!r}") from error
+    if value <= 0:
+        raise RuntimeError(f"{name} must be a positive integer, got {raw_value!r}")
+    return value
+
+
+def _env_positive_float(name: str, default: float) -> float:
+    """Read a positive float environment setting with a clear error message."""
+    raw_value = _os.environ.get(name)
+    if raw_value is None or not raw_value.strip():
+        return default
+    try:
+        value = float(raw_value)
+    except ValueError as error:
+        raise RuntimeError(f"{name} must be a positive number, got {raw_value!r}") from error
+    if value <= 0:
+        raise RuntimeError(f"{name} must be a positive number, got {raw_value!r}")
+    return value
+
+
+# Режим запуску:
+#   Локально: користується persistent-сесією з PROFILE_DIR.
+#   GitHub Actions: пріоритет PROM_STORAGE_STATE (cookies + localStorage),
+#   далі legacy PROM_COOKIES, далі PROM_LOGIN/PROM_PASSWORD.
 PROM_LOGIN = _os.environ.get("PROM_LOGIN", "")
 PROM_PASSWORD = _os.environ.get("PROM_PASSWORD", "")
-PROM_HEADLESS = _os.environ.get("PROM_HEADLESS", "").lower() in ("1", "true", "yes")
-PROM_COOKIES_JSON = _os.environ.get("PROM_COOKIES", "")  # JSON-рядок з cookies (GitHub Secret)
+PROM_HEADLESS = _env_flag("PROM_HEADLESS")
+PROM_STORAGE_STATE_JSON = _os.environ.get("PROM_STORAGE_STATE", "")
+PROM_COOKIES_JSON = _os.environ.get("PROM_COOKIES", "")
 
-# CI_MODE=True коли є PROM_COOKIES або PROM_LOGIN+PASSWORD.
-# Пріоритет: PROM_COOKIES > PROM_LOGIN (cookies надійніші, не потребує 2FA)
-CI_MODE = bool(PROM_COOKIES_JSON or (PROM_LOGIN and PROM_PASSWORD))
+# CI_MODE=True коли є browser state, cookies або логін+пароль.
+CI_MODE = bool(PROM_STORAGE_STATE_JSON or PROM_COOKIES_JSON or (PROM_LOGIN and PROM_PASSWORD))
 
 QUEUE_TAG = "noindex"
 ERROR_TAG = "noindex_error"  # создается автоматически при первой ошибке
 
-PER_PAGE = 100
+PER_PAGE = _env_positive_int("PROM_PER_PAGE", 100)
 
-DELAY_BETWEEN_ITEMS_SEC = 0.15
-DELAY_AFTER_LIST_FILTER_MS = 650
-DELAY_BEFORE_BACK_ARROW_SEC = 2.5  # v2.6.1: задержка перед выходом через стрелку
+DELAY_BETWEEN_ITEMS_SEC = _env_positive_float("PROM_DELAY_BETWEEN_ITEMS_SEC", 0.15)
+DELAY_AFTER_LIST_FILTER_MS = _env_positive_int("PROM_DELAY_AFTER_LIST_FILTER_MS", 650)
+DELAY_BEFORE_BACK_ARROW_SEC = _env_positive_float("PROM_DELAY_BEFORE_BACK_ARROW_SEC", 2.5)
+FILTER_RENDER_TIMEOUT_MS = _env_positive_int("PROM_FILTER_RENDER_TIMEOUT_SEC", 30) * 1_000
+ACTIONABLE_WAIT_TIMEOUT_MS = _env_positive_int("PROM_ACTIONABLE_WAIT_SEC", 30) * 1_000
+ACTIONABLE_POLL_INTERVAL_MS = _env_positive_int("PROM_ACTIONABLE_POLL_MS", 1_000)
+CAPTURE_DIAGNOSTICS = _env_flag("PROM_CAPTURE_DIAGNOSTICS", default=True)
+FAIL_ON_EMPTY_ACTIONABLE = _env_flag("PROM_FAIL_ON_EMPTY_ACTIONABLE", default=CI_MODE)
 
 # safety
 MAX_PASSES = 500
 MAX_ITEMS_TOTAL = 50000
 MAX_ITEMS_PER_PAGE = 150
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(_os.environ.get("PROJECT_ROOT", Path(__file__).resolve().parents[1])).resolve()
 LOG_FILE = PROJECT_ROOT / "logs" / "prom_noindex.log"
 LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+DIAGNOSTICS_DIR = LOG_FILE.parent / "prom_noindex_diagnostics"
 FATAL_FILE = Path("prom_noindex_fatal_hrefs.json")
 
 
@@ -465,15 +528,19 @@ def apply_queue_filter(page: Page, tag_name: str) -> bool:
 
     confirm_btn.click()
 
-    # Крок 5: чекаємо появи тегів у рядках списку (Prom рендерить асинхронно)
+    # Крок 5: чекаємо появи тегів у рядках списку (Prom рендерить асинхронно).
+    # У GitHub Actions Chromium може отримати DOM раніше, ніж Prom домалює
+    # chips тегів, тому цей timeout конфігурується окремо від UI-кліків.
     try:
         page.locator(
             f'[data-qaid="product_tag"] [data-qaid="tag_name"]:text-is("{tag_name}")'
-        ).first.wait_for(state="visible", timeout=8_000)
+        ).first.wait_for(state="visible", timeout=FILTER_RENDER_TIMEOUT_MS)
     except PWTimeoutError:
-        # Fallback: фіксована пауза
-        page.wait_for_timeout(3_000)
-        logger.warning("Tag '%s' did not appear in rows after filter apply — using fallback wait", tag_name)
+        logger.warning(
+            "Tag '%s' did not appear in rows within %sms after filter apply",
+            tag_name,
+            FILTER_RENDER_TIMEOUT_MS,
+        )
 
     page.wait_for_timeout(DELAY_AFTER_LIST_FILTER_MS)
     return True
@@ -521,6 +588,159 @@ def snapshot_actionable_hrefs(page: Page, tag_name: str, fatal_hrefs: Set[str]) 
         hrefs.append(href)
 
     return hrefs
+
+
+def count_rows_with_tag(page: Page, tag_name: str) -> int:
+    """Count list rows whose current DOM actually contains the queue tag."""
+    return page.locator('[data-qaid="product_row"]').filter(
+        has=page.locator(f'[data-qaid="product_tag"] [data-qaid="tag_name"]:text-is("{tag_name}")')
+    ).count()
+
+
+def wait_for_actionable_hrefs(page: Page, tag_name: str, fatal_hrefs: Set[str]) -> List[str]:
+    """Wait for asynchronously rendered queue tags before declaring a page empty.
+
+    The list shell and its product rows can render before the tag chips.  A
+    fixed short delay therefore produces a false ``actionable=0`` in slower
+    CI workers.  Polling only happens while no actionable rows are present.
+    """
+
+    deadline = time.monotonic() + ACTIONABLE_WAIT_TIMEOUT_MS / 1_000
+    attempts = 0
+    last_rows_total = count_rows(page)
+    last_tagged_rows = count_rows_with_tag(page, tag_name)
+
+    while True:
+        hrefs = snapshot_actionable_hrefs(page, tag_name, fatal_hrefs)
+        if hrefs:
+            if attempts:
+                logger.info(
+                    "Queue tag '%s' rendered after %s poll(s): rows=%s tagged_rows=%s actionable=%s",
+                    tag_name,
+                    attempts,
+                    last_rows_total,
+                    last_tagged_rows,
+                    len(hrefs),
+                )
+            return hrefs
+
+        remaining_ms = int((deadline - time.monotonic()) * 1_000)
+        if remaining_ms <= 0:
+            logger.warning(
+                "No actionable rows after %sms: rows=%s tagged_rows=%s",
+                ACTIONABLE_WAIT_TIMEOUT_MS,
+                last_rows_total,
+                last_tagged_rows,
+            )
+            return []
+
+        attempts += 1
+        page.wait_for_timeout(min(ACTIONABLE_POLL_INTERVAL_MS, remaining_ms))
+        last_rows_total = count_rows(page)
+        last_tagged_rows = count_rows_with_tag(page, tag_name)
+
+
+def capture_list_diagnostic(
+    page: Page,
+    *,
+    reason: str,
+    tag_name: str,
+    fatal_hrefs: Set[str],
+) -> Path | None:
+    """Save a safe screenshot and DOM summary for a suspicious filtered list.
+
+    Session cookies and local-storage values are intentionally excluded.  The
+    diagnostic retains only storage keys, row tags, links and visible text so
+    it can be uploaded as a GitHub Actions artifact without leaking the
+    browser-session secret.
+    """
+
+    if not CAPTURE_DIAGNOSTICS:
+        return None
+
+    DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_name = f"{timestamp}_{reason}"
+    screenshot_path = DIAGNOSTICS_DIR / f"{base_name}.png"
+    report_path = DIAGNOSTICS_DIR / f"{base_name}.json"
+
+    screenshot_saved = False
+    try:
+        page.screenshot(path=str(screenshot_path), full_page=True)
+        screenshot_saved = True
+    except Exception as error:
+        logger.warning("Could not save noindex diagnostic screenshot: %s", error)
+
+    try:
+        dom_summary: dict[str, Any] = page.evaluate(
+            """(tagName) => {
+                const normalize = (value) => value.replace(/\\s+/g, " ").trim();
+                const rows = Array.from(document.querySelectorAll('[data-qaid="product_row"]'));
+                return {
+                    document_ready_state: document.readyState,
+                    page_text_excerpt: normalize(document.body?.innerText || "").slice(0, 6000),
+                    browser_storage_keys: {
+                        local_storage: Object.keys(localStorage).sort(),
+                        session_storage: Object.keys(sessionStorage).sort(),
+                    },
+                    rows: rows.slice(0, 100).map((row, index) => {
+                        const tags = Array.from(row.querySelectorAll('[data-qaid="tag_name"]'))
+                            .map((node) => normalize(node.textContent || ""))
+                            .filter(Boolean);
+                        const links = Array.from(row.querySelectorAll('a[href]'))
+                            .map((link) => link.getAttribute('href'))
+                            .filter(Boolean);
+                        return {
+                            index,
+                            has_requested_tag: tags.includes(tagName),
+                            tags,
+                            links,
+                            text: normalize(row.innerText || "").slice(0, 1000),
+                        };
+                    }),
+                };
+            }""",
+            tag_name,
+        )
+    except Exception as error:
+        dom_summary = {"collection_error": str(error)}
+
+    try:
+        state_summary = storage_state_summary(page.context.storage_state())
+    except Exception as error:
+        state_summary = {"collection_error": str(error)}
+
+    try:
+        page_title = page.title()
+    except Exception as error:
+        page_title = f"<unavailable: {error}>"
+    try:
+        row_count = count_rows(page)
+        tagged_row_count = count_rows_with_tag(page, tag_name)
+        actionable_hrefs = snapshot_actionable_hrefs(page, tag_name, fatal_hrefs)
+    except Exception as error:
+        row_count = None
+        tagged_row_count = None
+        actionable_hrefs = [f"<unavailable: {error}>"]
+
+    report = {
+        "reason": reason,
+        "captured_at": datetime.now().isoformat(timespec="seconds"),
+        "url": page.url,
+        "title": page_title,
+        "queue_tag": tag_name,
+        "row_count": row_count,
+        "tagged_row_count": tagged_row_count,
+        "actionable_hrefs": actionable_hrefs,
+        "fatal_href_count": len(fatal_hrefs),
+        "screenshot_saved": screenshot_saved,
+        "storage_state": state_summary,
+        "dom": dom_summary,
+    }
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    logger.warning("Saved noindex diagnostic: %s", report_path)
+    print(f"[DIAG] Діагностика списку: {report_path}")
+    return report_path
 
 
 def click_next_page(page: Page) -> bool:
@@ -1034,11 +1254,12 @@ def process_all_pages_once(page: Page, fatal_hrefs: Set[str]) -> int:
         if list_empty(page):
             break
 
-        hrefs = snapshot_actionable_hrefs(page, QUEUE_TAG, fatal_hrefs)
+        hrefs = wait_for_actionable_hrefs(page, QUEUE_TAG, fatal_hrefs)
         actionable_total += len(hrefs)
 
         rows_total = count_rows(page)
-        print(f"\n[PAGE] rows={rows_total} actionable={len(hrefs)}")
+        tagged_rows = count_rows_with_tag(page, QUEUE_TAG)
+        print(f"\n[PAGE] rows={rows_total} tagged_rows={tagged_rows} actionable={len(hrefs)}")
 
         # Если на странице есть строки, но actionable==0 — полностью "призрачная" страница
         if rows_total > 0 and len(hrefs) == 0:
@@ -1082,22 +1303,48 @@ def main() -> None:
 
     with sync_playwright() as p:
         if CI_MODE:
-            # GitHub Actions: headless Chromium, без профілю.
-            # Сесія відновлюється через cookies з PROM_COOKIES (JSON).
+            # GitHub Actions: headless Chromium without a local browser profile.
+            # Playwright storage state restores both cookies and localStorage;
+            # the legacy cookie secret remains a backwards-compatible fallback.
+            try:
+                browser_state = load_prom_browser_state(
+                    PROM_STORAGE_STATE_JSON,
+                    PROM_COOKIES_JSON,
+                )
+            except BrowserStateError as error:
+                raise RuntimeError(str(error)) from error
             browser = p.chromium.launch(
                 headless=True,
                 args=["--no-sandbox", "--disable-setuid-sandbox"],
             )
-            context = browser.new_context(viewport={"width": 1500, "height": 900})
+            context_options: dict[str, Any] = {"viewport": {"width": 1500, "height": 900}}
+            if browser_state and browser_state.storage_state:
+                context_options["storage_state"] = browser_state.storage_state
+            context = browser.new_context(**context_options)
             page = context.new_page()
 
-            if PROM_COOKIES_JSON:
-                # Імпортуємо cookies — вхід без логіну/пароля/2FA
-                import json as _json
-                cookies = _json.loads(PROM_COOKIES_JSON)
-                context.add_cookies(cookies)
-                logger.info("CI_MODE: loaded %s cookies from PROM_COOKIES", len(cookies))
-                print(f"[COOKIES] Завантажено {len(cookies)} cookies з PROM_COOKIES")
+            if browser_state and browser_state.cookies:
+                context.add_cookies(browser_state.cookies)
+                logger.info(
+                    "CI_MODE: loaded %s cookies from %s",
+                    browser_state.cookie_count,
+                    browser_state.source,
+                )
+                print(
+                    f"[COOKIES] Завантажено {browser_state.cookie_count} cookies "
+                    f"з {browser_state.source}"
+                )
+            elif browser_state and browser_state.storage_state:
+                logger.info(
+                    "CI_MODE: loaded storage state from %s: cookies=%s origins=%s",
+                    browser_state.source,
+                    browser_state.cookie_count,
+                    browser_state.origin_count,
+                )
+                print(
+                    f"[STATE] Завантажено {browser_state.cookie_count} cookies і "
+                    f"{browser_state.origin_count} origin(s) з {browser_state.source}"
+                )
             else:
                 # Fallback: логін через логін/пароль (якщо 2FA не ввімкнено)
                 login_with_credentials(page, PROM_LOGIN, PROM_PASSWORD)
@@ -1135,9 +1382,23 @@ def main() -> None:
                     break
 
                 if actionable == 0:
-                    first_page_actionable = len(snapshot_actionable_hrefs(page, QUEUE_TAG, fatal_hrefs))
+                    first_page_actionable = len(wait_for_actionable_hrefs(page, QUEUE_TAG, fatal_hrefs))
                     if first_page_actionable == 0:
-                        print("\n[INFO] Залишилися лише призраки (actionable=0). Завершую.")
+                        diagnostic_path = capture_list_diagnostic(
+                            page,
+                            reason="empty_actionable_after_fresh_reload",
+                            tag_name=QUEUE_TAG,
+                            fatal_hrefs=fatal_hrefs,
+                        )
+                        message = (
+                            "У відфільтрованому списку є рядки, але після fresh reload "
+                            "немає товарів з тегом noindex у DOM. Це не підтверджене "
+                            "завершення: перевірте storage state/обраний кабінет або artifact діагностики."
+                        )
+                        logger.error("%s diagnostic=%s", message, diagnostic_path)
+                        if FAIL_ON_EMPTY_ACTIONABLE:
+                            raise RuntimeError(message)
+                        print(f"\n[WARN] {message} Завершую через PROM_FAIL_ON_EMPTY_ACTIONABLE=false.")
                         break
 
         elapsed = time.time() - start_time

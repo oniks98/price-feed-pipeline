@@ -490,8 +490,19 @@ jobs:
       - name: Run noindex automation
         run: python scripts/prom_noindex_automation.py
         env:
+          # Preferred state: Playwright cookies + Prom origin localStorage.
+          # PROM_COOKIES stays as a migration fallback for older exports.
+          PROM_STORAGE_STATE: ${{ secrets.PROM_STORAGE_STATE }}
           PROM_COOKIES: ${{ secrets.PROM_COOKIES }}
           PROM_HEADLESS: "true"
+          # CI can render the list shell before product tag chips.  These
+          # values make that race observable rather than silently successful.
+          PROM_FILTER_RENDER_TIMEOUT_SEC: "30"
+          PROM_ACTIONABLE_WAIT_SEC: "35"
+          PROM_ACTIONABLE_POLL_MS: "1000"
+          PROM_DELAY_AFTER_LIST_FILTER_MS: "1500"
+          PROM_CAPTURE_DIAGNOSTICS: "true"
+          PROM_FAIL_ON_EMPTY_ACTIONABLE: "true"
           PROJECT_ROOT: ${{ github.workspace }}
 
       - name: Upload noindex logs
@@ -501,6 +512,7 @@ jobs:
           name: noindex-logs-${{ github.run_number }}
           path: |
             logs/prom_noindex.log
+            logs/prom_noindex_diagnostics/**
             error_*.png
             prom_noindex_fatal_hrefs.json
           retention-days: 7
@@ -542,6 +554,7 @@ jobs:
       - name: Run ProSale automation
         run: python scripts/prom_prosale_automation.py
         env:
+          PROM_STORAGE_STATE: ${{ secrets.PROM_STORAGE_STATE }}
           PROM_COOKIES: ${{ secrets.PROM_COOKIES }}
           PROM_HEADLESS: "true"
           PROJECT_ROOT: ${{ github.workspace }}
