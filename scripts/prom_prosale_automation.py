@@ -81,8 +81,6 @@ PRODUCTS_PER_PAGE = 100
 PRODUCTS_LIST_TIMEOUT = 30_000
 PRODUCTS_FILTER_RENDER_TIMEOUT = 30_000
 PRODUCTS_AFTER_FILTER_WAIT_MS = 1_500
-PRODUCTS_PAGE_CHANGE_WAIT_MS = 1_000
-MAX_PRODUCT_LIST_PAGES_PER_CAMPAIGN = 100
 
 
 # =========================
@@ -702,27 +700,8 @@ def clear_product_selection(page: Page) -> None:
         raise RuntimeError("Products remain selected after clicking 'Скинути все'")
 
 
-def click_next_products_page(page: Page) -> bool:
-    """Advance one page in the already-filtered Products and services list."""
-    next_button = page.get_by_role("button", name="Наступна →")
-    if next_button.count() == 0:
-        next_button = page.locator("text=Наступна →").first
-    if next_button.count() == 0:
-        return False
-
-    try:
-        if next_button.is_disabled():
-            return False
-    except Exception:
-        pass
-
-    next_button.click()
-    page.wait_for_timeout(PRODUCTS_PAGE_CHANGE_WAIT_MS)
-    return True
-
-
 def process_campaign_via_products_list(page: Page, campaign: Campaign) -> None:
-    """Fallback path: filter products by tag and invoke Prom's bulk campaign action."""
+    """Fallback path: add only the fresh first page through Prom's bulk action."""
     print(f"\n[→] Кампанія: {campaign.name!r} | Тег: {campaign.tag!r}")
     logger.info("Products-list fallback for campaign: %s (tag: %s)", campaign.name, campaign.tag)
 
@@ -734,35 +713,21 @@ def process_campaign_via_products_list(page: Page, campaign: Campaign) -> None:
             print(f"  [—] Немає товарів з тегом '{campaign.tag}' у Товарах і послугах")
             return
 
-        batches_added = 0
-        for page_number in range(1, MAX_PRODUCT_LIST_PAGES_PER_CAMPAIGN + 1):
-            tagged_rows = count_tagged_product_rows(page, campaign.tag)
-            if tagged_rows == 0:
-                if batches_added == 0:
-                    stats["products_list_empty"] += 1
-                    print(f"  [—] Немає товарів з тегом '{campaign.tag}' у Товарах і послугах")
-                break
+        tagged_rows = count_tagged_product_rows(page, campaign.tag)
+        if tagged_rows == 0:
+            stats["products_list_empty"] += 1
+            print(f"  [—] Немає товарів з тегом '{campaign.tag}' у Товарах і послугах")
+            return
 
-            if not select_all_filtered_products(page):
-                raise RuntimeError("'Вибрати всі товари' checkbox not found or did not activate")
+        if not select_all_filtered_products(page):
+            raise RuntimeError("'Вибрати всі товари' checkbox not found or did not activate")
 
-            add_selected_products_to_campaign(page, campaign)
-            clear_product_selection(page)
+        add_selected_products_to_campaign(page, campaign)
+        clear_product_selection(page)
 
-            batches_added += 1
-            stats["products_list_batches"] += 1
-            stats["products_list_selected"] += tagged_rows
-            print(
-                f"  [✓] Передано {tagged_rows} товарів до '{campaign.name}' "
-                f"(сторінка {page_number})"
-            )
-
-            if not click_next_products_page(page):
-                break
-        else:
-            raise RuntimeError(
-                f"MAX_PRODUCT_LIST_PAGES_PER_CAMPAIGN={MAX_PRODUCT_LIST_PAGES_PER_CAMPAIGN} reached"
-            )
+        stats["products_list_batches"] += 1
+        stats["products_list_selected"] += tagged_rows
+        print(f"  [✓] Передано {tagged_rows} товарів до '{campaign.name}'")
     except Exception as error:
         stats["products_list_errors"] += 1
         logger.error("Products-list fallback failed for '%s': %s", campaign.name, error)
