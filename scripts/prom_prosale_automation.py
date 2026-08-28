@@ -10,12 +10,14 @@
 # - ВИПРАВЛЕНО: close_modal_if_open і _close_modal теж оновлені під новий селектор.
 # - ВИПРАВЛЕНО: fLkiL.click() падав через "input intercepts pointer events".
 #   Замінено на fLkiL.dispatch_event('click') — пряма JS-подія.
+# - ВИДАЛЕНО: контрольний шлях через "Товари і послуги" (select_all_chbx так і
+#   не вдалося клікнути стабільно). Прибрано за непотрібністю — Prom полагодив
+#   баг Каталогу ProSale, який раніше інколи хибно показував "немає товарів".
 
 from __future__ import annotations
 
 import logging
 import os
-import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,7 +36,6 @@ except ModuleNotFoundError:  # Supports both `python scripts/...` and `python -m
 # =========================
 
 PROSALE_URL = "https://my.prom.ua/cms/prosale"
-PRODUCTS_URL = "https://my.prom.ua/cms/product"
 PROFILE_DIR = "./pw-profile"
 
 PROM_LOGIN = os.environ.get("PROM_LOGIN", "")
@@ -72,15 +73,7 @@ CONTENT_TIMEOUT = 25_000  # чекання завантаження контен
 TABLE_TIMEOUT  = 20_000
 # Prom оновлює відсортований список товарів після фільтра тегу асинхронно.
 # Не починаємо сканування, поки список не встигне перерендеритись.
-FILTER_RESULTS_WAIT_SECONDS = 40
-
-# Fallback path: Products and services -> filter by tag -> bulk action.
-# The primary ProSale catalogue UI remains first; this path works around cases
-# where that UI incorrectly reports no eligible products for a campaign.
-PRODUCTS_PER_PAGE = 100
-PRODUCTS_LIST_TIMEOUT = 30_000
-PRODUCTS_FILTER_RENDER_TIMEOUT = 30_000
-PRODUCTS_AFTER_FILTER_WAIT_MS = 1_500
+FILTER_RESULTS_WAIT_SECONDS = 6
 
 
 # =========================
@@ -105,10 +98,6 @@ stats = {
     "catalog_empty": 0,
     "catalog_not_found": 0,
     "catalog_errors": 0,
-    "products_list_batches": 0,
-    "products_list_selected": 0,
-    "products_list_empty": 0,
-    "products_list_errors": 0,
 }
 
 
@@ -467,278 +456,6 @@ def process_campaign_via_catalog(page: Page, campaign: Campaign) -> None:
 
 
 # =========================
-# PRODUCTS LIST FALLBACK
-# =========================
-
-def goto_products_list(page: Page) -> None:
-    """Open a fresh Products and services list, without SPA filter cache."""
-    page.goto(f"{PRODUCTS_URL}?_={int(time.time() * 1_000)}", wait_until="domcontentloaded")
-    page.wait_for_selector('[data-qaid="header_panel_title"]', timeout=PRODUCTS_LIST_TIMEOUT)
-
-
-def set_products_per_page(page: Page, per_page: int = PRODUCTS_PER_PAGE) -> None:
-    """Set the maximum supported page size before applying a tag filter."""
-    if page.locator(f'text=/по\\s*{per_page}\\s*позицій/i').count() > 0:
-        return
-
-    dropdown = page.locator('text=/по\\s*\\d+\\s*позицій/i').first
-    if dropdown.count() == 0:
-        logger.warning("Products per-page dropdown not found; continuing with the default page size")
-        return
-
-    dropdown.click()
-    page.locator(f'text=/по\\s*{per_page}\\s*позицій/i').first.click()
-    page.wait_for_timeout(500)
-
-
-def open_products_filter_popup(page: Page) -> None:
-    """Open Prom's current two-pane filter popup on Products and services."""
-    popup = page.locator("#js-filters-popup")
-    try:
-        if popup.is_visible():
-            return
-    except Exception:
-        pass
-
-    selectors = (
-        '[data-qaid="filter-btn"]',
-        '[data-qaid="filters_btn"]',
-        '[data-qaid="filter_btn"]',
-        'button[data-qaid*="filter"]',
-        '[class*="filter"][role="button"]',
-        'button:has-text("Фільтр")',
-        'button:has-text("Фильтр")',
-    )
-    last_error: Exception | None = None
-    for selector in selectors:
-        button = page.locator(selector).first
-        try:
-            button.wait_for(state="visible", timeout=4_000)
-            button.click()
-            popup.wait_for(state="visible", timeout=8_000)
-            return
-        except Exception as error:
-            last_error = error
-
-    raise RuntimeError(f"Cannot open Products filter popup. Last error: {last_error}")
-
-
-def close_products_filter_popup(page: Page) -> None:
-    try:
-        page.keyboard.press("Escape")
-        page.wait_for_timeout(200)
-    except Exception:
-        pass
-
-
-def count_tagged_product_rows(page: Page, tag_name: str) -> int:
-    """Count rows whose live DOM contains the requested tag chip."""
-    return page.locator('[data-qaid="product_row"]').filter(
-        has=page.locator(f'[data-qaid="product_tag"] [data-qaid="tag_name"]:text-is("{tag_name}")')
-    ).count()
-
-
-def wait_for_tagged_product_rows(page: Page, tag_name: str) -> int:
-    """Wait for Prom to render tag chips after the filter is applied."""
-    deadline = time.monotonic() + PRODUCTS_FILTER_RENDER_TIMEOUT / 1_000
-    while True:
-        tagged_rows = count_tagged_product_rows(page, tag_name)
-        if tagged_rows:
-            return tagged_rows
-
-        if time.monotonic() >= deadline:
-            logger.warning(
-                "No rows with tag '%s' after %sms", tag_name, PRODUCTS_FILTER_RENDER_TIMEOUT
-            )
-            return 0
-        page.wait_for_timeout(1_000)
-
-
-def apply_products_tag_filter(page: Page, tag_name: str) -> bool:
-    """Filter Products and services by a tag using the same Prom UI as noindex."""
-    open_products_filter_popup(page)
-    page.wait_for_timeout(400)
-
-    notes_item = page.locator(
-        '[data-qaid="item-block"]:has([data-qaid="item-name"]:text-is("Нотатки"))'
-    ).first
-    try:
-        notes_item.wait_for(state="visible", timeout=8_000)
-        notes_item.click()
-    except PWTimeoutError as error:
-        close_products_filter_popup(page)
-        raise RuntimeError("'Нотатки' item not found in Products filter popup") from error
-
-    page.wait_for_timeout(600)
-    tag_option = page.locator(
-        f'[data-qaid="attribute-value"]:has([data-qaid="attribute-value-name"]:text-is("{tag_name}"))'
-    ).first
-    try:
-        tag_option.wait_for(state="visible", timeout=8_000)
-    except PWTimeoutError:
-        close_products_filter_popup(page)
-        logger.info("Tag '%s' is absent in Products filter popup", tag_name)
-        return False
-
-    tag_option.scroll_into_view_if_needed()
-    tag_option.click()
-    page.wait_for_timeout(300)
-
-    apply_button = page.locator('[data-qaid="confirm_btn"]').first
-    try:
-        apply_button.wait_for(state="visible", timeout=8_000)
-    except PWTimeoutError as error:
-        close_products_filter_popup(page)
-        raise RuntimeError("'Застосувати' button not found in Products filter popup") from error
-
-    apply_button.click()
-    page.wait_for_timeout(PRODUCTS_AFTER_FILTER_WAIT_MS)
-    return wait_for_tagged_product_rows(page, tag_name) > 0
-
-
-def select_all_filtered_products(page: Page) -> bool:
-    """Select every product on the current filtered page through Prom's custom checkbox."""
-    select_all = page.locator('[data-qaid="select_all_chbx"]').first
-    if select_all.count() == 0:
-        return False
-
-    try:
-        if select_all.is_checked():
-            return True
-    except Exception:
-        pass
-
-    container = select_all.locator("xpath=parent::*").first
-    if not click_prom_checkbox(container):
-        select_all.evaluate("el => el.click()")
-    page.wait_for_timeout(400)
-
-    try:
-        return select_all.is_checked()
-    except Exception:
-        return True
-
-
-def wait_for_enabled(page: Page, locator: Locator, timeout_ms: int) -> None:
-    """Wait for an asynchronous Prom action button to become enabled."""
-    deadline = time.monotonic() + timeout_ms / 1_000
-    while time.monotonic() < deadline:
-        try:
-            if locator.is_visible() and not locator.is_disabled():
-                return
-        except Exception:
-            pass
-        page.wait_for_timeout(200)
-    raise RuntimeError("Prom action button did not become enabled")
-
-
-def add_selected_products_to_campaign(page: Page, campaign: Campaign) -> None:
-    """Use the bulk action menu to add the current selection to one campaign."""
-    selector_button = page.locator('[data-qaid="selector_button"]').first
-    selector_button.wait_for(state="visible", timeout=10_000)
-    selector_button.click()
-
-    items_list = page.locator('[data-qaid="items_list"]').first
-    items_list.wait_for(state="visible", timeout=10_000)
-    action = page.locator('[data-qaid="group_action_block"]').filter(
-        has=page.locator('[data-qaid="label"]:text-is("Додати в кампанію Каталог ProSale")')
-    ).first
-    action.wait_for(state="visible", timeout=10_000)
-
-    arrow = action.locator(".b-group-action__list-item-icon-wrapper").first
-    if arrow.count() > 0:
-        arrow.click()
-    else:
-        action.click()
-
-    second_level = page.locator('[data-qaid="second_level_drop_down"]').first
-    second_level.wait_for(state="visible", timeout=10_000)
-
-    campaign_search = second_level.locator('[data-qaid="search_tag_input"]').first
-    campaign_search.fill(campaign.name)
-    page.wait_for_timeout(400)
-
-    campaign_name = second_level.locator(
-        f'[data-qaid="add_tag_name"]:text-is("{campaign.name}")'
-    ).first
-    campaign_name.wait_for(state="visible", timeout=10_000)
-    campaign_label = campaign_name.locator("xpath=ancestor::label[1]").first
-    campaign_label.click()
-
-    save_button = second_level.locator('[data-qaid="save_btn"]').first
-    wait_for_enabled(page, save_button, timeout_ms=10_000)
-    save_button.click()
-
-    try:
-        second_level.wait_for(state="hidden", timeout=15_000)
-    except PWTimeoutError:
-        logger.warning("Bulk campaign menu stayed open after adding to '%s'", campaign.name)
-        page.keyboard.press("Escape")
-    page.wait_for_timeout(700)
-
-
-def clear_product_selection(page: Page) -> None:
-    """Clear the bulk selection before the next campaign or page is processed."""
-    select_all = page.locator('[data-qaid="select_all_chbx"]').first
-
-    def is_selection_active() -> bool:
-        try:
-            return select_all.count() > 0 and select_all.is_checked()
-        except Exception:
-            return False
-
-    reset_button = page.get_by_text(re.compile(r"кинути все", re.IGNORECASE)).first
-    if reset_button.count() > 0:
-        reset_button.click()
-        page.wait_for_timeout(500)
-    elif is_selection_active():
-        raise RuntimeError("'Скинути все' control not found while products remain selected")
-    else:
-        logger.info("Products selection was already cleared by Prom")
-
-    if is_selection_active():
-        raise RuntimeError("Products remain selected after clicking 'Скинути все'")
-
-
-def process_campaign_via_products_list(page: Page, campaign: Campaign) -> None:
-    """Fallback path: add only the fresh first page through Prom's bulk action."""
-    print(f"\n[→] Кампанія: {campaign.name!r} | Тег: {campaign.tag!r}")
-    logger.info("Products-list fallback for campaign: %s (tag: %s)", campaign.name, campaign.tag)
-
-    try:
-        goto_products_list(page)
-        set_products_per_page(page)
-        if not apply_products_tag_filter(page, campaign.tag):
-            stats["products_list_empty"] += 1
-            print(f"  [—] Немає товарів з тегом '{campaign.tag}' у Товарах і послугах")
-            return
-
-        tagged_rows = count_tagged_product_rows(page, campaign.tag)
-        if tagged_rows == 0:
-            stats["products_list_empty"] += 1
-            print(f"  [—] Немає товарів з тегом '{campaign.tag}' у Товарах і послугах")
-            return
-
-        if not select_all_filtered_products(page):
-            raise RuntimeError("'Вибрати всі товари' checkbox not found or did not activate")
-
-        add_selected_products_to_campaign(page, campaign)
-        clear_product_selection(page)
-
-        stats["products_list_batches"] += 1
-        stats["products_list_selected"] += tagged_rows
-        print(f"  [✓] Передано {tagged_rows} товарів до '{campaign.name}'")
-    except Exception as error:
-        stats["products_list_errors"] += 1
-        logger.error("Products-list fallback failed for '%s': %s", campaign.name, error)
-        print(f"  [✗] Помилка через Товари і послуги для '{campaign.name}': {error}")
-        try:
-            clear_product_selection(page)
-        except Exception as cleanup_error:
-            logger.warning("Could not clear Products selection after error: %s", cleanup_error)
-
-
-# =========================
 # MAIN
 # =========================
 
@@ -801,27 +518,15 @@ def main() -> None:
         for campaign in CAMPAIGNS:
             process_campaign_via_catalog(page, campaign)
 
-        print("\n=== Добавление через Товары и услуги ===")
-        for campaign in CAMPAIGNS:
-            process_campaign_via_products_list(page, campaign)
-
         context.close()
 
     elapsed = time.time() - start_time
     logger.info(
-        (
-            "FINISH catalog_added=%s catalog_empty=%s catalog_not_found=%s catalog_errors=%s "
-            "products_list_batches=%s products_list_selected=%s products_list_empty=%s "
-            "products_list_errors=%s time=%.0fs"
-        ),
+        "FINISH catalog_added=%s catalog_empty=%s catalog_not_found=%s catalog_errors=%s time=%.0fs",
         stats["catalog_added"],
         stats["catalog_empty"],
         stats["catalog_not_found"],
         stats["catalog_errors"],
-        stats["products_list_batches"],
-        stats["products_list_selected"],
-        stats["products_list_empty"],
-        stats["products_list_errors"],
         elapsed,
     )
 
@@ -833,11 +538,6 @@ def main() -> None:
     print(f"  [—] Кампаній без нових товарів:   {stats['catalog_empty']}")
     print(f"  [!] Кампаній не знайдено:          {stats['catalog_not_found']}")
     print(f"  [✗] Помилок:                       {stats['catalog_errors']}")
-    print("Товари і послуги (контрольний шлях):")
-    print(f"  [✓] Виконано масових додавань:     {stats['products_list_batches']}")
-    print(f"  [✓] Вибрано товарів:               {stats['products_list_selected']}")
-    print(f"  [—] Міток без товарів:             {stats['products_list_empty']}")
-    print(f"  [✗] Помилок:                       {stats['products_list_errors']}")
     print(f"[⏱] Час виконання:          {elapsed:.0f}s ({elapsed / 60:.1f} хв)")
     print(f"[📄] Лог: {LOG_FILE}")
     print("=" * 60)
