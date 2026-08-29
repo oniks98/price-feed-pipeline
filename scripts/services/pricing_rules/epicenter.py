@@ -86,7 +86,7 @@ _CSV_ENCODING: Final[str] = "utf-8-sig"
 # рахується за габаритами упаковки, бо саме вона визначає тариф доставки.
 # ---------------------------------------------------------------------------
 
-SURCHARGE_PRICE_MIN: Final[Decimal] = Decimal("250")
+SURCHARGE_PRICE_MIN: Final[Decimal] = Decimal("200")
 SURCHARGE_PRICE_MAX: Final[Decimal] = Decimal("30000")
 DEFAULT_SURCHARGE_PRICE_MAX: Final[Decimal] = Decimal("6000")
 MAX_DIMENSION_CM: Final[Decimal] = Decimal("70")
