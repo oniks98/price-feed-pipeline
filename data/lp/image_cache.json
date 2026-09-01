@@ -12388,5 +12388,10 @@
     "w": 1024,
     "h": 1024,
     "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/4/61/18d4a482775fcd45e9dd46faf4afd.jpg": {
+    "w": 1280,
+    "h": 1280,
+    "transform_url": null
   }
 }
