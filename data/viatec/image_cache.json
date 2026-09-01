@@ -37738,5 +37738,65 @@
     "w": 640,
     "h": 640,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/abbox.webp": {
+    "w": 600,
+    "h": 600,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/abbox1.webp": {
+    "w": 600,
+    "h": 600,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/bled1.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/bled.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/bled2.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2025-01/RG-NBS5500-12XS.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2025-01%2FRG-NBS5500-12XS.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2025-01/RG-NBS5500-12XS1.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2025-01%2FRG-NBS5500-12XS1.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2025-01/RG-NBS5500-12XS2.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2025-01%2FRG-NBS5500-12XS2.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-11/M6000-24SFP2XS.webp": {
+    "w": 990,
+    "h": 990,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2023-11%2FM6000-24SFP2XS.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-11/M6000-24GT2XS.webp": {
+    "w": 896,
+    "h": 896,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2023-11%2FM6000-24GT2XS.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-11/M6000-16SFP8GT2XS.webp": {
+    "w": 914,
+    "h": 914,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2023-11%2FM6000-16SFP8GT2XS.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2023-11/M6000-16GT8SFP2XS.webp": {
+    "w": 924,
+    "h": 924,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2023-11%2FM6000-16GT8SFP2XS.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
