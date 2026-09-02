@@ -20,7 +20,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 # ─── Константи формули ───────────────────────────────────────────────────────
 
-FORMULA_NUMERATOR: Decimal = Decimal("110")
+FORMULA_NUMERATOR: Decimal = Decimal("115")
 PLATFORM_FEE_PERCENT: Decimal = Decimal("2")
 
 
