@@ -12398,5 +12398,15 @@
     "w": 1280,
     "h": 1280,
     "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/4/e6/589a5b0f9e5a6bb1cbb8102a8eda5.jpg": {
+    "w": 1279,
+    "h": 1280,
+    "transform_url": null
+  },
+  "https://api.b2b.logicpower.ua/static/attachments/a/ed/38d87e46aabc2157f6aac2441df6f.jpg": {
+    "w": 1279,
+    "h": 1280,
+    "transform_url": null
   }
 }
