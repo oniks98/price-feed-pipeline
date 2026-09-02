@@ -5808,5 +5808,10 @@
     "w": 720,
     "h": 510,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FPtsSVFB90zrglwJ489ryaGgW8guHu0ROPiPkbUYL.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://content.secur.ua/products/wts_w_360_0009_2.jpeg": {
+    "w": 1440,
+    "h": 1440,
+    "transform_url": null
   }
 }
