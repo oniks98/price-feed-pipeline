@@ -30,7 +30,6 @@ from suppliers.services.dealer_price_service import (
     DEFAULT_USD_RATE,
 )
 from suppliers.services.channel_service import ChannelService
-from suppliers.services.stock_fallback import resolve_fallback_qty
 
 PRIORITY_PRODUCT  = 10
 PRIORITY_CATEGORY = 0
@@ -879,27 +878,6 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
                 row[wholesale_idx] = wholesale
             if url_idx != -1 and product_url:
                 row[url_idx] = product_url
-
-            # ── FALLBACK QTY (тільки канал "site" — як і в pipelines.py) ──
-            # Цей fast-path пише рядок напряму через _write_raw_row і НЕ
-            # проходить через SuppliersPipeline.process_item(), тому виклик
-            # resolve_fallback_qty() з pipeline сюди не долітає: плейсхолдер
-            # PLACEHOLDER_QTY ("1000") лишався в CSV назавжди для товарів,
-            # що потрапляють у fast-path (reuse старого рядка з viatec_old.csv).
-            if (
-                quantity_idx != -1
-                and code_idx != -1
-                and subdivision_idx != -1
-                and channel_config is not None
-                and channel_config.channel == "site"
-            ):
-                resolved_qty, _reason = resolve_fallback_qty(
-                    item_id=row[code_idx],
-                    subdivision_id=row[subdivision_idx],
-                    price=row[price_idx] if price_idx != -1 else "",
-                    qty=row[quantity_idx],
-                )
-                row[quantity_idx] = resolved_qty
 
             rows.append(row)
         return rows
