@@ -8,6 +8,7 @@
   6. Замінює Prom <categories> блок на Rozetka-категорії (тільки реально використані)
   7. Перейменовує param «Країна-виробник» → «Країна-виробник товару», знімає unit=""
   8. Зберігає результат в data/markets/rozetka_feed.xml
+  9. Пише лог підстановок Anker у mandatory-категоріях до logs/
 
 ВАЖЛИВО: Розетка забирає Prom-фід практично в оригінальному вигляді.
   - Теги XML НЕ перейменовуються і НЕ перетворюються (немає normalize_name_description_tags).
@@ -38,6 +39,9 @@ from generate_utils_feed import (
 )
 from services.market_pricing import apply_market_prices
 from services.rozetka_brand_mapping_service import remap_rozetka_vendors
+from services.rozetka_mandatory_brand_report_service import (
+    MandatoryBrandReplacementReporter,
+)
 from services.rozetka_stop_brand_service import filter_stop_brand_offers
 from services.rozetka_unique_name_service import deduplicate_offer_names
 from services.rozetka_category_service import (
@@ -286,10 +290,17 @@ def main() -> None:
     updated_xml = filter_unavailable_offers(xml)
 
     price_index = load_article_price_index(ROOT)
+    mandatory_brand_reporter = MandatoryBrandReplacementReporter()
 
     updated_xml = apply_market_prices(MARKET, updated_xml, price_index, currency_rates)
-    updated_xml = fill_missing_vendor(updated_xml)
-    updated_xml = remap_rozetka_vendors(updated_xml)  # TelStream/FARADAY/Mustang → канонічний бренд; "Без бренду" → Anker
+    updated_xml = fill_missing_vendor(
+        updated_xml,
+        on_vendor_filled=mandatory_brand_reporter.record_default_vendor,
+    )
+    updated_xml = remap_rozetka_vendors(
+        updated_xml,
+        on_replacement=mandatory_brand_reporter.record_brand_remapping,
+    )  # TelStream/FARADAY/Mustang → канонічний бренд; "Без бренду" → Anker
     updated_xml = filter_stop_brand_offers(updated_xml)
     updated_xml = deduplicate_offer_names(updated_xml)  # <name>/<name_ua> мають бути унікальними для Rozetka
     updated_xml = sanitize_rozetka_text(updated_xml)  # sale-мітки в назвах, емодзі та «причина уцінки» в описах
@@ -298,6 +309,7 @@ def main() -> None:
     # --- Розетка-специфічне очищення та трансформація XML ---
     # replace_category_ids повертає (xml, used_entries) — entries потрібні для <categories> блоку
     updated_xml, used_entries = replace_category_ids(updated_xml)
+    mandatory_brand_reporter.write_report(updated_xml)
     flush_fallback_warnings()  # зведений warning по param-fallback промахам (див. resolve_category)
     validate_used_categories(entry["category_id"] for entry in used_entries)  # логує non-leaf/unknown id, не блокує генерацію
     updated_xml = replace_prom_categories(updated_xml, used_entries)  # Prom → Rozetka <categories>

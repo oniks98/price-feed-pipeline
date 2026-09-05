@@ -9,9 +9,11 @@ URL фідів     → constants_feed_url.py
 """
 
 import csv
+import logging
 import re
 import time
 from collections import Counter
+from collections.abc import Callable
 from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
 
@@ -19,6 +21,8 @@ import requests
 from requests.exceptions import ChunkedEncodingError, ConnectionError as RequestsConnectionError
 
 from services.pricing_rules import ArticlePrices
+
+_logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Public config — змінюйте тут при додаванні нових постачальників
@@ -303,7 +307,10 @@ def replace_vendor_aliases(xml: str) -> str:
     return xml
 
 
-def fill_missing_vendor(xml: str) -> str:
+def fill_missing_vendor(
+    xml: str,
+    on_vendor_filled: Callable[[str, str], None] | None = None,
+) -> str:
     """
     Підставляє <vendor> і <country_of_origin> якщо вони відсутні або порожні.
 
@@ -315,6 +322,12 @@ def fill_missing_vendor(xml: str) -> str:
 
     Старий підхід не матчив <vendor/> через відсутність </vendor>,
     тому вставляв новий тег поруч із самозакриваючим → дублікат у XML.
+
+    Args:
+        xml: Повний XML-фід.
+        on_vendor_filled: Необов'язковий callback для діагностики. Отримує
+            ``(offer_id, reason)``, де reason — ``відсутній``, ``порожній``
+            або ``<vendor/>``. Помилка callback не впливає на генерацію фіду.
     """
     cnt_missing: int = 0      # тег відсутній повністю
     cnt_empty: int = 0        # <vendor></vendor>
@@ -330,20 +343,34 @@ def fill_missing_vendor(xml: str) -> str:
         vendor_match = _VENDOR_FULL_RE.search(body)
         vendor_value: str = (vendor_match.group(1) or "").strip() if vendor_match else ""
 
+        fill_reason: str | None = None
         if vendor_match is None:
             # Тег відсутній → вставляємо після </price>
             price_end = re.search(r"</price>", body)
             pos = price_end.end() if price_end else 0
             body = body[:pos] + f"\n<vendor>{DEFAULT_VENDOR}</vendor>" + body[pos:]
             cnt_missing += 1
+            fill_reason = "відсутній"
         elif not vendor_value:
             # <vendor/> або <vendor></vendor> → замінюємо тег in-place
             is_self_close = vendor_match.group(0).endswith("/>")
             body = body.replace(vendor_match.group(0), f"<vendor>{DEFAULT_VENDOR}</vendor>", 1)
             if is_self_close:
                 cnt_self_close += 1
+                fill_reason = "<vendor/>"
             else:
                 cnt_empty += 1
+                fill_reason = "порожній"
+
+        if fill_reason is not None and on_vendor_filled is not None:
+            try:
+                on_vendor_filled(offer_id, fill_reason)
+            except Exception:
+                _logger.warning(
+                    "fill_missing_vendor: callback помилився для offer_id=%s",
+                    offer_id,
+                    exc_info=True,
+                )
 
         # --- country_of_origin ---
         country_match = _COUNTRY_FULL_RE.search(body)

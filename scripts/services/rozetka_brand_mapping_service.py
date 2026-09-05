@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Callable
 from typing import Final
 
 # {нормалізований оригінальний бренд: (новий vendor, нова country_of_origin)}
@@ -93,7 +94,7 @@ def _normalize(value: str) -> str:
 def _correct_vendor_param(
     body: str,
     rules: dict[str, tuple[str, str]],
-) -> tuple[str, str | None]:
+) -> tuple[str, tuple[str, str] | None]:
     """
     Виправляє <param name="Компанія-виробник"> і парний <param
     name="Країна-виробник товару"> (якщо присутній) за таблицею rules.
@@ -108,7 +109,7 @@ def _correct_vendor_param(
         rules: Таблиця відповідностей — _BRAND_CORRECTIONS або override для тестів.
 
     Returns:
-        (можливо оновлений body, "original → new_vendor" якщо була заміна,
+        (можливо оновлений body, ``(original, new_vendor)`` якщо була заміна,
         інакше (body, None) без змін).
     """
     param_match = _VENDOR_PARAM_RE.search(body)
@@ -135,12 +136,13 @@ def _correct_vendor_param(
             1,
         )
 
-    return body, f"{original} → {new_vendor}"
+    return body, (original, new_vendor)
 
 
 def remap_rozetka_vendors(
     xml: str,
     corrections: dict[str, tuple[str, str]] | None = None,
+    on_replacement: Callable[[str, str, str], None] | None = None,
 ) -> str:
     """
     Замінює <vendor> (і синхронно <country_of_origin>, якщо тег присутній),
@@ -159,6 +161,8 @@ def remap_rozetka_vendors(
         xml:         Повний XML-фід.
         corrections: Override таблиці для тестів; продакшн використовує
                      _BRAND_CORRECTIONS.
+        on_replacement: Необов'язковий callback ``(offer_id, original,
+            replacement)`` для діагностики. Його помилка не впливає на фід.
 
     Returns:
         Оновлений XML.
@@ -168,7 +172,7 @@ def remap_rozetka_vendors(
 
     def _on_offer(m: re.Match[str]) -> str:
         offer_id, tail_attrs, body = m.group(1), m.group(2), m.group(3)
-        label: str | None = None
+        replacement: tuple[str, str] | None = None
 
         vendor_match = _VENDOR_RE.search(body)
         if vendor_match is not None:
@@ -188,15 +192,23 @@ def remap_rozetka_vendors(
                         1,
                     )
 
-                label = f"{original} → {new_vendor}"
+                replacement = (original, new_vendor)
 
-        body, param_label = _correct_vendor_param(body, rules)
-        label = label or param_label
+        body, param_replacement = _correct_vendor_param(body, rules)
+        replacement = replacement or param_replacement
 
-        if label is None:
+        if replacement is None:
             return m.group(0)
 
+        original, new_vendor = replacement
+        label = f"{original} → {new_vendor}"
         applied[label] += 1
+        if on_replacement is not None:
+            try:
+                on_replacement(offer_id, original, new_vendor)
+            except Exception:
+                # Звітність не є причиною зупиняти генерацію фіду.
+                pass
         return f'<offer id="{offer_id}"{tail_attrs}>{body}</offer>'
 
     result = _OFFER_RE.sub(_on_offer, xml)
