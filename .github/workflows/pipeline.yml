@@ -26,6 +26,7 @@ env:
 #                   data/prom_import_status.json        ← статус останнього імпорту
 #                   data/markets/{kasta,epicenter,rozetka}_feed.xml + _prev.xml
 #                   data/markets/rozetka_stop_brands_cache.json ← fallback, якщо Google Sheets недоступний
+#                   data/markets/rozetka_mandatory_brand_categories_cache.json ← fallback для звіту Anker
 #
 # ДОДАВАННЯ НОВОГО ПОСТАЧАЛЬНИКА:
 #   1. Додай блок в SUPPLIER_CONFIG у scripts/update_products.py
@@ -684,7 +685,7 @@ jobs:
           sleep 900
           echo "✅ Пауза завершена, генеруємо фід"
 
-      - name: Restore *_old.csv and stop-brand cache from data-latest
+      - name: Restore *_old.csv and Rozetka Google Sheets caches from data-latest
         run: |
           DATA_LATEST_REMOTE="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
 
@@ -711,6 +712,14 @@ jobs:
             else
               echo "⚠️  rozetka_stop_brands_cache.json не знайдено в data-latest (перший запуск?)"
             fi
+
+            mandatory_cache_src="data-latest-dir/data/markets/rozetka_mandatory_brand_categories_cache.json"
+            if [ -f "${mandatory_cache_src}" ]; then
+              cp "${mandatory_cache_src}" "data/markets/rozetka_mandatory_brand_categories_cache.json"
+              echo "✅ Відновлено rozetka_mandatory_brand_categories_cache.json"
+            else
+              echo "⚠️  rozetka_mandatory_brand_categories_cache.json не знайдено в data-latest (перший запуск?)"
+            fi
           else
             ls_remote_status=$?
             if [ "${ls_remote_status}" -ne 2 ]; then
@@ -734,6 +743,8 @@ jobs:
           path: |
             data/markets/rozetka_feed.xml
             data/markets/rozetka_stop_brands_cache.json
+            data/markets/rozetka_mandatory_brand_categories_cache.json
+            logs/rozetka_mandatory_brand_replacements.log
           retention-days: 1
           if-no-files-found: warn
 
@@ -793,6 +804,12 @@ jobs:
           if [ -f "${cache_src}" ]; then
             cp "${cache_src}" "publish-dir/data/markets/rozetka_stop_brands_cache.json"
             echo "✅ rozetka_stop_brands_cache.json оновлено"
+          fi
+
+          mandatory_cache_src="feeds/rozetka_mandatory_brand_categories_cache.json"
+          if [ -f "${mandatory_cache_src}" ]; then
+            cp "${mandatory_cache_src}" "publish-dir/data/markets/rozetka_mandatory_brand_categories_cache.json"
+            echo "✅ rozetka_mandatory_brand_categories_cache.json оновлено"
           fi
 
       - name: Push to data-latest (один amend)
