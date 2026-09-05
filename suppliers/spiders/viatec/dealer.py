@@ -592,6 +592,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
             dealer_uah_raw=dealer_uah_raw,
             price_rrp_uah=card.get("price_rrp_uah", ""),
             product_url=normalized_url,
+            sku=sku,
         )
 
         item = {
@@ -831,6 +832,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         dealer_uah_raw: Decimal,
         price_rrp_uah: str,
         product_url: str,
+        sku: str,
     ) -> list[list[str]]:
         identifier_idx = self._field_index(self.old_headers, "Ідентифікатор_товару")
         availability_idx = self._field_index(self.old_headers, "Наявність")
@@ -840,6 +842,7 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
         url_idx = self._field_index(self.old_headers, "Продукт_на_сайті")
         code_idx = self._field_index(self.old_headers, "Код_товару")
         subdivision_idx = self._field_index(self.old_headers, "Ідентифікатор_підрозділу")
+        vendor_idx = self._field_index(self.old_headers, "Виробник")
 
         retail_source_idx = self._field_index(self.old_headers, "Мінімальний_обсяг_замовлення")
         supplier_retail = ViatecPriceService.to_decimal(price_rrp_uah, Decimal("0"))
@@ -848,6 +851,12 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
             if supplier_retail > 0
             else ""
         )
+
+        # Фід оновлюється щоразу — доперевіряємо виробника і для fast-path.
+        # Пишемо тільки непорожній результат: RAW_CSV_ROWS_FIELD-рядки йдуть
+        # напряму в CSV (pipeline._clean_item і його fallback по назві сюди
+        # не доходять), тож порожній лукап не повинен стирати старе значення.
+        fresh_vendor = self.feed_service.get_vendor(sku) if vendor_idx != -1 else ""
 
         rows: list[list[str]] = []
         for old_row in old_entry.get("rows", []):
@@ -878,6 +887,8 @@ class ViatecDealerSpider(ViatecBaseSpider, BaseDealerSpider):
                 row[wholesale_idx] = wholesale
             if url_idx != -1 and product_url:
                 row[url_idx] = product_url
+            if vendor_idx != -1 and fresh_vendor:
+                row[vendor_idx] = fresh_vendor
 
             rows.append(row)
         return rows

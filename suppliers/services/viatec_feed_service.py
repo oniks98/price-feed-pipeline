@@ -101,9 +101,9 @@ class ViatecFeedService:
         """
         Парсить YML-фід і заповнює _vendor_map.
 
-        Структура фіду (YML-формат):
+        Структура фіду (YML-формат, фактична відповідність тегів viatec.ua):
             <offer id="..." available="...">
-                <vendorCode>АРТИКУЛ</vendorCode>
+                <barcode>АРТИКУЛ</barcode>                  ← фактичний артикул (vendorCode відсутній)
                 <vendor>Назва виробника</vendor>           ← пріоритет 1
                 <param name="Виробник">Назва</param>       ← пріоритет 2
                 ...
@@ -136,15 +136,26 @@ class ViatecFeedService:
     @staticmethod
     def _extract_sku(offer: ET.Element) -> str:
         """
-        Повертає артикул офера.
+        Повертає артикул офера — той самий ідентифікатор, що павук снімає
+        з картки товару на сайті (span.card-header__card-articul-text-value)
+        і передає в get_vendor().
 
         Перевіряє у порядку:
-          1. <vendorCode> — офіційний артикул постачальника
-          2. атрибут id=""  — внутрішній ID офера (запасний варіант)
+          1. <vendorCode> — офіційний артикул постачальника (у стандарті YML,
+             але в поточному фіді viatec.ua цього тега немає)
+          2. <barcode>    — фактичний артикул у поточному фіді viatec.ua; саме це
+             значення показано на сайті як "Артикул" і співпадає з
+             Ідентифікатор_товару в CSV
+          3. атрибут id="" — внутрішній ID офера (крайній fallback;
+             зазвичай НЕ збігається з артикулом на сайті)
         """
         vc = offer.findtext("vendorCode")
         if vc and vc.strip():
             return vc.strip()
+
+        barcode = offer.findtext("barcode")
+        if barcode and barcode.strip():
+            return barcode.strip()
 
         offer_id = offer.get("id", "").strip()
         return offer_id
