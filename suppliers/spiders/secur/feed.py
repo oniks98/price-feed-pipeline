@@ -28,8 +28,13 @@ Spider: Feed-only (Ajax + Імпорт) — без Playwright
 ЦІНИ (_resolve_price):
   retail  = <price>       (РРЦ / роздрібна)
   dealer  = <dealerPrice> (дилерська)
-  dealer > retail → WARNING, dealer = retail (захист від брудних даних)
-  dealerPrice відсутня  → dealer = retail (fallback)
+  dealer > retail          → WARNING, retail = dealer (захист від брудних даних)
+  dealerPrice відсутня     → dealer = retail (fallback)
+  price відсутня, dealer є → retail = dealer (fallback)
+  Обидві відсутні          → товар пропускається (None, None)
+  Усі fallback-випадки → рядок (сирі значення) у
+  {PROJECT_ROOT}/logs/secur_price_fallback.log:
+    offer id <id> price=<price|''>; dealerPrice=<dealer|''>; name <name>
 
 ХАРАКТЕРИСТИКИ:
   Тільки з <param> UA-фіду (УКРАЇНСЬКА мова).
@@ -53,6 +58,7 @@ import os
 import re
 from collections.abc import AsyncGenerator, Iterator
 from pathlib import Path
+from typing import TextIO
 
 import scrapy
 from scrapy.http import Response
@@ -68,6 +74,10 @@ FEED_URL_MAP: dict[str, str] = {
     "50": "https://export.secur.ua/feed/export/v2/8f60b225-2273-4456-ba5a-297f3f786120",
     "52": "https://export.secur.ua/feed/export/v2/9f69564b-341a-4878-8167-9931d2481bba",
 }
+
+# Лог dealer/retail fallback-подій _resolve_price() — dealer > retail (брудні дані)
+# та dealerPrice відсутня. Файл: {PROJECT_ROOT}/logs/{PRICE_FALLBACK_LOG_FILENAME}.
+PRICE_FALLBACK_LOG_FILENAME: str = "secur_price_fallback.log"
 
 
 class SecurFeedSpider(scrapy.Spider):
@@ -110,6 +120,7 @@ class SecurFeedSpider(scrapy.Spider):
         self.price_type = "retail"
 
         self._root = Path(os.environ.get("PROJECT_ROOT", r"C:\FullStack\PriceFeedPipeline"))
+        self._price_fallback_log: TextIO | None = self._open_price_fallback_log()
 
         self.category_mapping: dict[tuple[str, str], dict] = self._load_category_mapping()
 
@@ -411,10 +422,11 @@ class SecurFeedSpider(scrapy.Spider):
         """
         product_id = offer.xpath("@id").get()
 
-        retail_price, dealer_price = self._resolve_price(offer, feed_id)
+        retail_price, dealer_price = self._resolve_price(offer, feed_id, product_id, name_ru)
         if dealer_price is None:
             self.logger.warning(
-                f"⚠️ Пропускаємо id={product_id} (feed={feed_id}): відсутня <price>"
+                f"⚠️ Пропускаємо id={product_id} (feed={feed_id}): "
+                f"відсутні і <price>, і <dealerPrice>"
             )
             return None
 
@@ -480,8 +492,55 @@ class SecurFeedSpider(scrapy.Spider):
             "specifications_list": [],  # заповнюється після enrich у parse_ru_feed
         }
 
+    def _open_price_fallback_log(self) -> TextIO | None:
+        """
+        Відкриває {ROOT}/logs/{PRICE_FALLBACK_LOG_FILENAME} для append-запису
+        dealer/retail fallback-подій (див. _log_price_fallback / _resolve_price).
+
+        buffering=1 (лінійна буферизація) — рядок одразу на диску, без
+        втрати останніх подій при падінні процесу (resume-friendly).
+
+        Повертає None при помилці: запис тоді безпечно пропускається —
+        проблема з логом не повинна валити весь пайплайн (fallback safely).
+        """
+        log_path = self._root / "logs" / PRICE_FALLBACK_LOG_FILENAME
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            return open(log_path, "a", encoding="utf-8", buffering=1)
+        except OSError as exc:
+            self.logger.error(f"❌ Не вдалося відкрити {log_path}: {exc}")
+            return None
+
+    def _log_price_fallback(
+        self,
+        *,
+        product_id: str | None,
+        name: str,
+        retail: float | None,
+        dealer_price: float | None,
+    ) -> None:
+        """
+        Пише один рядок у {logs}/{PRICE_FALLBACK_LOG_FILENAME}:
+
+            offer id {id} price={price}; dealerPrice={dealerPrice}; name {name}
+
+        Пише СИРІ значення (як прийшли з <price>/<dealerPrice> у фіді), а не
+        скориговані — рядок відображає саме аномалію джерела.
+        Відсутнє значення (retail і/або dealer_price) → пишеться порожнім.
+        Помилка запису — не критична: логуємо і продовжуємо обробку фіду.
+        """
+        if self._price_fallback_log is None:
+            return
+        retail_display = retail if retail is not None else ""
+        dealer_display = dealer_price if dealer_price is not None else ""
+        line = f"offer id {product_id} price={retail_display}; dealerPrice={dealer_display}; name {name}\n"
+        try:
+            self._price_fallback_log.write(line)
+        except OSError as exc:
+            self.logger.error(f"❌ {PRICE_FALLBACK_LOG_FILENAME}: помилка запису: {exc}")
+
     def _resolve_price(
-        self, offer, feed_id: str
+        self, offer, feed_id: str, product_id: str | None, name: str
     ) -> tuple[float | None, float | None]:
         """
         Повертає (retail_price, dealer_price).
@@ -489,24 +548,42 @@ class SecurFeedSpider(scrapy.Spider):
         retail  = <price>       (РРЦ)
         dealer  = <dealerPrice> (дилерська)
 
-        Захист: dealerPrice > price → WARNING, dealer = retail.
-        Fallback: dealerPrice відсутня → dealer = retail.
-        Критично: price відсутня → (None, None).
+        Захист: dealerPrice > price → WARNING + рядок у
+                {logs}/{PRICE_FALLBACK_LOG_FILENAME}, retail = dealer
+                (захист від брудних даних).
+        Fallback: dealerPrice відсутня → рядок у
+                  {logs}/{PRICE_FALLBACK_LOG_FILENAME}, dealer = retail.
+        Fallback: price відсутня, dealerPrice є → рядок у
+                  {logs}/{PRICE_FALLBACK_LOG_FILENAME}, retail = dealer.
+        Критично: обидві ціни відсутні → (None, None).
         """
         retail = self._to_float(offer.xpath("price/text()").get())
-        if retail is None:
+        dealer_raw = self._to_float(offer.xpath("dealerPrice/text()").get())
+
+        if retail is None and dealer_raw is None:
             return None, None
 
-        dealer_raw = self._to_float(offer.xpath("dealerPrice/text()").get())
+        if retail is None:
+            self._log_price_fallback(
+                product_id=product_id, name=name, retail=None, dealer_price=dealer_raw
+            )
+            return dealer_raw, dealer_raw
+
         if dealer_raw is None:
+            self._log_price_fallback(
+                product_id=product_id, name=name, retail=retail, dealer_price=None
+            )
             return retail, retail
 
         if dealer_raw > retail:
             self.logger.warning(
                 f"⚠️ dealerPrice ({dealer_raw}) > price ({retail}) "
-                f"id={offer.xpath('@id').get()} feed={feed_id} — fallback до price"
+                f"id={product_id} feed={feed_id} — fallback до dealerPrice"
             )
-            return retail, retail
+            self._log_price_fallback(
+                product_id=product_id, name=name, retail=retail, dealer_price=dealer_raw
+            )
+            return dealer_raw, dealer_raw
 
         return retail, dealer_raw
 
@@ -540,6 +617,11 @@ class SecurFeedSpider(scrapy.Spider):
 
     def closed(self, reason: str) -> None:
         self.logger.info(f"🎉 {self.name} завершено. Причина: {reason}")
+        if self._price_fallback_log is not None:
+            try:
+                self._price_fallback_log.close()
+            except OSError:
+                pass
         try:
             import winsound
             for _ in range(3):
