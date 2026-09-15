@@ -45,12 +45,12 @@ from typing import Final
 # Ключі порівнюються через _normalize() (casefold + схлопування пробілів) —
 # регістр і зайві пробіли у вихідному фіді значення не мають.
 _BRAND_CORRECTIONS: Final[dict[str, tuple[str, str]]] = {
-    "nvc": ("Voltronic", "Китай"),
+    "nvc": ("Anker", "Китай"),
     "kpl": ("Anker", "Китай"),
     "psu": ("Kraft", "Китай"),
     "cinlinele": ("Anker", "Китай"),
-    "oem": ("Voltronic", "Китай"),
-    "telstream": ("Voltronic", "Китай"),
+    "oem": ("Anker", "Китай"),
+    "telstream": ("Anker", "Китай"),
     "faraday electronics": ("Faraday", "Китай"),
     "mustang energy": ("Mustang", "Китай"),
     "без бренда": ("Anker", "Китай"),
