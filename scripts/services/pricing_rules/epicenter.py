@@ -22,6 +22,9 @@
      (за умови, що жодна відома сторона не перевищує 70 см). Якщо немає ані
      ваги, ані габаритів — для ціни до 6 000 грн додати fallback +100 грн та
      вивести ID офера у зведенні.
+     Габаритом вважається лише параметр із «чистою» назвою осі (``Ширина``,
+     ``Довжина, мм``, ``Висота (см)``).  Уточнені назви на кшталт
+     ``Довжина кабелю, м`` чи ``Висота установки`` габаритами НЕ є.
 
 CSV-схема коефіцієнтів (роздільник «;», кодування utf-8-sig):
   A  prom_category_id
@@ -52,7 +55,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Final
+from typing import Callable, Final, Iterable
 
 from ._base import (
     ArticlePrices,
@@ -254,15 +257,48 @@ _WEIGHT_UNIT_FACTORS: Final[dict[str, Decimal]] = {
 }
 
 
+def _alternation(literals: Iterable[str]) -> str:
+    """Build a regex alternation with longer literals first (``мм`` before ``м``)."""
+    return "|".join(sorted((re.escape(item) for item in literals), key=len, reverse=True))
+
+
+# Назва габаритного параметра має бути «чистою»: сам алias осі, необов'язкова
+# одиниця та службові зірочки (``Довжина, мм **``).  Збігу за префіксом
+# недостатньо: ``Довжина кабелю, м`` займав вісь ``length`` значенням 5 м =
+# 500 см і знімав надбавку через ``exceeds_limit``.
+_AXIS_NAME_RE: Final[re.Pattern[str]] = re.compile(
+    r"^(?P<alias>{aliases})(?:\s*[,(]\s*(?:{units})\s*\)?)?\s*\**$".format(
+        aliases=_alternation(
+            alias for aliases in _DIMENSION_AXES.values() for alias in aliases
+        ),
+        units=_alternation(_DIMENSION_UNIT_FACTORS),
+    )
+)
+# Одиниці з *назви* параметра можна довіряти лише як суфіксу
+# (``Розмір упаковки, см``).  Пошук будь-де в рядку перетворює
+# ``Довжина кабелю, м`` на множник 100.
+_NAME_UNIT_RE: Final[re.Pattern[str]] = re.compile(
+    r"[,(\s](?P<unit>{units})\s*\)?\s*\**$".format(
+        units=_alternation({**_DIMENSION_UNIT_FACTORS, **_WEIGHT_UNIT_FACTORS}),
+    )
+)
+
+
+def _unit_from_name(name: str) -> str:
+    """Return a trailing unit of a parameter name, or an empty string."""
+    match = _NAME_UNIT_RE.search(_normalise_label(name))
+    return match.group("unit") if match else ""
+
+
 def _factor_for_param(
     param: _ProductParam,
     factors: dict[str, Decimal],
 ) -> Decimal | None:
-    """Prefer the explicit XML unit, then a unit embedded in the value or name."""
+    """Prefer the explicit XML unit, then a unit in the value, then a name suffix."""
     return (
         _unit_factor(param.unit, factors)
         or _unit_factor(_find_unit_in_text(param.value), factors)
-        or _unit_factor(_find_unit_in_text(param.name), factors)
+        or _unit_factor(_unit_from_name(param.name), factors)
     )
 
 
@@ -354,9 +390,13 @@ def _find_composite_dimensions(
 
 
 def _dimension_axis(param: _ProductParam) -> str | None:
-    name = _normalise_label(param.name)
+    """Recognise a plain axis name only; a qualified name is not a dimension."""
+    match = _AXIS_NAME_RE.match(_normalise_label(param.name))
+    if match is None:
+        return None
+    alias = match.group("alias")
     for axis, aliases in _DIMENSION_AXES.items():
-        if any(name.startswith(alias) for alias in aliases):
+        if alias in aliases:
             return axis
     return None
 
