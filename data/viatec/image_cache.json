@@ -39658,5 +39658,35 @@
     "w": 928,
     "h": 928,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/images/prod/2024-07/DS-2CV2Q21G1-IDWWEU4mm.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2024-07%2FDS-2CV2Q21G1-IDWWEU4mm.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/kabel-sfp-10g2.webp": {
+    "w": 710,
+    "h": 710,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fkabel-sfp-10g2.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/kabel-sfp-10g.webp": {
+    "w": 939,
+    "h": 939,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fkabel-sfp-10g.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2024-01/3/157033_3378189061.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2024-01%2F3%2F157033_3378189061.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/lifepo4-litiy-zhelezo-fosfatnyy-12v-18a.webp": {
+    "w": 714,
+    "h": 714,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Flifepo4-litiy-zhelezo-fosfatnyy-12v-18a.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/yks-225.webp": {
+    "w": 949,
+    "h": 949,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fyks-225.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
