@@ -39708,5 +39708,10 @@
     "w": 1000,
     "h": 1000,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2025-04%2Fpv33.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/EZVIZ-E4p-3K-Smart-Wi-Fi-Panoramic-Fisheye-Camera-2.webp": {
+    "w": 649,
+    "h": 649,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FEZVIZ-E4p-3K-Smart-Wi-Fi-Panoramic-Fisheye-Camera-2.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
