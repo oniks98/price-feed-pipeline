@@ -305,7 +305,7 @@ def process_supplier(supplier: str, product_type: str) -> None:
     # — це ознака збою спайдера. Не обробляємо, щоб не зняти товари з продажу.
     if len(old_rows) > 0:
         ratio = len(new_rows) / len(old_rows)
-        if ratio < 0.40:
+        if ratio < 0.80:
             print(f"\n🛑 ЗАХИСТ: новий файл має лише {len(new_rows)} рядків "
                   f"vs {len(old_rows)} старих ({ratio:.0%}).")
             print(f"   Поріг: 80%. Пропускаємо обробку, щоб не зняти товари.")
