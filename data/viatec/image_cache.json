@@ -40603,5 +40603,35 @@
     "w": 600,
     "h": 600,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2024-03%2FR-LFP128V100AH.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/tsw2123.webp": {
+    "w": 642,
+    "h": 642,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Ftsw2123.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/tsw2121.webp": {
+    "w": 515,
+    "h": 515,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Ftsw2121.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/tsw2122.webp": {
+    "w": 506,
+    "h": 506,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Ftsw2122.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/tsw2124.webp": {
+    "w": 636,
+    "h": 636,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Ftsw2124.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/tsw212.webp": {
+    "w": 444,
+    "h": 444,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Ftsw212.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/tomznwifielectro.webp": {
+    "w": 542,
+    "h": 542,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Ftomznwifielectro.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
