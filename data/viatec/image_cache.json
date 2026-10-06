@@ -40853,5 +40853,35 @@
     "w": 1000,
     "h": 1000,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FEFH10DC1p.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/COMMAXCDV-50A.webp": {
+    "w": 562,
+    "h": 562,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FCOMMAXCDV-50A.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/EP-MPS-80012.webp": {
+    "w": 422,
+    "h": 422,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FEP-MPS-80012.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/EP-MPS-800121.webp": {
+    "w": 449,
+    "h": 449,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FEP-MPS-800121.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/KPB-2010FC1.webp": {
+    "w": 854,
+    "h": 854,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FKPB-2010FC1.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/KPB-2010FC3.webp": {
+    "w": 854,
+    "h": 854,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FKPB-2010FC3.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/ecoflw-adapter.webp": {
+    "w": 562,
+    "h": 562,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fecoflw-adapter.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
