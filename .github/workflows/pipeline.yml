@@ -299,8 +299,18 @@ jobs:
           else
             git commit --amend --no-edit \
               --author="${BOT_NAME} <${BOT_EMAIL}>"
-            git push origin data-latest --force
-            echo "✅ data-latest оновлено"
+            if git push origin data-latest --force; then
+              echo "✅ data-latest оновлено"
+            else
+              local_sha=$(git rev-parse HEAD)
+              if remote_sha=$(git ls-remote --exit-code origin refs/heads/data-latest | cut -f1) \
+                && [ "${remote_sha}" = "${local_sha}" ]; then
+                echo "✅ data-latest already contains ${local_sha}; treating duplicate push as success"
+              else
+                echo "::error::data-latest push failed and the remote branch is not at the local commit"
+                exit 1
+              fi
+            fi
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -362,8 +372,18 @@ jobs:
           else
             git commit --amend --no-edit \
               --author="${BOT_NAME} <${BOT_EMAIL}>"
-            git push origin data-latest --force
-            echo "✅ prom_import_status.json запушено в data-latest"
+            if git push origin data-latest --force; then
+              echo "✅ prom_import_status.json запушено в data-latest"
+            else
+              local_sha=$(git rev-parse HEAD)
+              if remote_sha=$(git ls-remote --exit-code origin refs/heads/data-latest | cut -f1) \
+                && [ "${remote_sha}" = "${local_sha}" ]; then
+                echo "✅ data-latest already contains ${local_sha}; treating duplicate push as success"
+              else
+                echo "::error::data-latest push failed and the remote branch is not at the local commit"
+                exit 1
+              fi
+            fi
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -809,8 +829,18 @@ jobs:
           else
             git commit --amend --no-edit \
               --author="${BOT_NAME} <${BOT_EMAIL}>"
-            git push origin data-latest --force
-            echo "✅ Всі фіди запушено"
+            if git push origin data-latest --force; then
+              echo "✅ Всі фіди запушено"
+            else
+              local_sha=$(git rev-parse HEAD)
+              if remote_sha=$(git ls-remote --exit-code origin refs/heads/data-latest | cut -f1) \
+                && [ "${remote_sha}" = "${local_sha}" ]; then
+                echo "✅ data-latest already contains ${local_sha}; treating duplicate push as success"
+              else
+                echo "::error::data-latest push failed and the remote branch is not at the local commit"
+                exit 1
+              fi
+            fi
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -126,8 +126,18 @@ jobs:
               git commit -m "chore: merchant feed $(date -u '+%Y-%m-%d %H:%M UTC')" \
                 --author="${BOT_NAME} <${BOT_EMAIL}>"
             fi
-            git push origin data-latest --force
-            echo "✅ merchant_feed.xml запушено в data-latest"
+            if git push origin data-latest --force; then
+              echo "✅ merchant_feed.xml запушено в data-latest"
+            else
+              local_sha=$(git rev-parse HEAD)
+              if remote_sha=$(git ls-remote --exit-code origin refs/heads/data-latest | cut -f1) \
+                && [ "${remote_sha}" = "${local_sha}" ]; then
+                echo "✅ data-latest already contains ${local_sha}; treating duplicate push as success"
+              else
+                echo "::error::data-latest push failed and the remote branch is not at the local commit"
+                exit 1
+              fi
+            fi
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
