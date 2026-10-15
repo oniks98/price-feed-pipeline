@@ -23,7 +23,7 @@ from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 
 # ── Дефолти ───────────────────────────────────────────────────────────────────
 
-DEFAULT_USD_RATE: Decimal = Decimal("45")
+DEFAULT_USD_RATE: Decimal = Decimal("45.5")
 """Курс USD за замовчуванням — якщо парсинг курсу не вдався (viatec)."""
 
 
