@@ -41843,5 +41843,30 @@
     "w": 1000,
     "h": 1000,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/2/petit-odor.webp": {
+    "w": 631,
+    "h": 631,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fpetit-odor.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/petit-odor2.webp": {
+    "w": 592,
+    "h": 592,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fpetit-odor2.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/petit-odor3.webp": {
+    "w": 800,
+    "h": 800,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/petit-odor4.webp": {
+    "w": 901,
+    "h": 901,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/petit-odor1.webp": {
+    "w": 800,
+    "h": 800,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fpetit-odor1.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
