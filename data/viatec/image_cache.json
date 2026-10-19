@@ -41828,5 +41828,20 @@
     "w": 698,
     "h": 698,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Fosclpwrmax5.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2025-03/ipcom-sn-6u-06-06-ds-1-7035.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2025-03%2Fipcom-sn-6u-06-06-ds-1-7035.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2025-03/ipcom-sn-6u-06-06-ds-1-70351.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2Fimages%2Fprod%2F2025-03%2Fipcom-sn-6u-06-06-ds-1-70351.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/images/prod/2025-03/ipcom-sn-6u-06-06-ds-1-70352.webp": {
+    "w": 1000,
+    "h": 1000,
+    "transform_url": null
   }
 }
