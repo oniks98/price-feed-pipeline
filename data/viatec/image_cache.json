@@ -42093,5 +42093,20 @@
     "w": 1000,
     "h": 1000,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/2/OUPESS1Lite.webp": {
+    "w": 411,
+    "h": 411,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FOUPESS1Lite.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/OUPESS1Lite2.webp": {
+    "w": 411,
+    "h": 411,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FOUPESS1Lite2.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/oupess1lite5.webp": {
+    "w": 411,
+    "h": 411,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2Foupess1lite5.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
