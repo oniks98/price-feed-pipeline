@@ -42338,5 +42338,35 @@
     "w": 826,
     "h": 826,
     "transform_url": null
+  },
+  "https://viatec.ua/upload/2/CW-CBPDCC098-WT_03.webp": {
+    "w": 922,
+    "h": 922,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FCW-CBPDCC098-WT_03.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/CW-CBPDCC098-WT.webp": {
+    "w": 843,
+    "h": 843,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/CW-CBPDCC098-BK_03.webp": {
+    "w": 917,
+    "h": 917,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fviatec.ua%2Fupload%2F2%2FCW-CBPDCC098-BK_03.webp&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://viatec.ua/upload/2/CW-CBPDCC098-BK.webp": {
+    "w": 844,
+    "h": 844,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/CW-CBPDCC099-WT.webp": {
+    "w": 821,
+    "h": 821,
+    "transform_url": null
+  },
+  "https://viatec.ua/upload/2/CW-CBPDCC099-BK.webp": {
+    "w": 855,
+    "h": 855,
+    "transform_url": null
   }
 }
