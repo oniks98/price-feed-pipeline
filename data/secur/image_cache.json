@@ -6683,5 +6683,10 @@
     "w": 466,
     "h": 565,
     "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2FBeHzhi57Q9YQ2ZsqP2ggZwX71ppJuVnQ7lBAAOne.png&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
+  },
+  "https://content.secur.ua/products/2nRxDBLCzCIb94UlAvP7H564rRzoh28x7IY34Mei.png": {
+    "w": 800,
+    "h": 800,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2F2nRxDBLCzCIb94UlAvP7H564rRzoh28x7IY34Mei.png&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
