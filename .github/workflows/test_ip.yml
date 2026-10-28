@@ -13,6 +13,46 @@ jobs:
           curl -s https://api.ipify.org
           echo ""
 
+      # ── Viatec login (перевірка доступу без облікових даних) ───────────────
+      # Використовує ті самі browser headers, що й suppliers/settings.py.
+      # Логуємо лише безпечні діагностичні response headers — без Set-Cookie.
+      - name: Check Viatec login (GitHub Actions egress)
+        run: |
+          echo "=== Viatec /login (без логіну) ==="
+          HEADERS_FILE="$(mktemp)"
+          trap 'rm -f "${HEADERS_FILE}"' EXIT
+
+          if ! CODE=$(curl --silent --show-error --location \
+            --connect-timeout 10 --max-time 30 \
+            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" \
+            -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" \
+            -H "Accept-Language: ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7" \
+            -H "Accept-Encoding: gzip, deflate, br" \
+            -H "Connection: keep-alive" \
+            -H "Upgrade-Insecure-Requests: 1" \
+            --dump-header "${HEADERS_FILE}" --output /dev/null --write-out "%{http_code}" \
+            "https://viatec.ua/login"); then
+            echo "❌ Не вдалося з'єднатися з viatec.ua (curl error)"
+            exit 0
+          fi
+
+          echo "HTTP ${CODE}"
+          echo "--- Diagnostic response headers ---"
+          grep -Ei '^(HTTP/|server:|date:|location:|content-type:|cf-|x-|retry-after:)' \
+            "${HEADERS_FILE}" || true
+
+          case "${CODE}" in
+            200)
+              echo "✅ /login доступний з цього GitHub runner"
+              ;;
+            403)
+              echo "❌ /login заблокований для цього GitHub runner — імовірно WAF/IP policy"
+              ;;
+            *)
+              echo "⚠️ Неочікувана відповідь Viatec: HTTP ${CODE}"
+              ;;
+          esac
+
       # ── СТОРІНКА ТОВАРУ (secur.ua — Cloudflare) ─────────────────────
       - name: Check product page (secur.ua)
         run: |
@@ -112,7 +152,9 @@ jobs:
           echo ""
           echo "════════════════════════════════════════════════════"
           echo "Ключові питання після тесту:"
-          echo "  1. Сторінка товару — 200? → Playwright працює чи ні"
-          echo "  2. Старі фіди — 403? → Cloudflare блокує (очікується)"
-          echo "  3. Нові фіди UA + RU — 200? → токен працює з GitHub Actions"
+          echo "  1. Viatec /login — 403? → GitHub runner блокується до авторизації"
+          echo "     Viatec /login — 200? → порівнюємо Scrapy/TLS profile, а не cookies"
+          echo "  2. Сторінка товару — 200? → Playwright працює чи ні"
+          echo "  3. Старі фіди — 403? → Cloudflare блокує (очікується)"
+          echo "  4. Нові фіди UA + RU — 200? → токен працює з GitHub Actions"
           echo "════════════════════════════════════════════════════"
