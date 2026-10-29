@@ -13,12 +13,13 @@ jobs:
           curl -s https://api.ipify.org
           echo ""
 
-      # ── Viatec login (перевірка доступу без облікових даних) ───────────────
+      # ── Viatec homepage (перевірка доступу без облікових даних) ────────────
+      # GET /login більше не є сторінкою входу: актуальна форма є на головній.
       # Використовує ті самі browser headers, що й suppliers/settings.py.
       # Логуємо лише безпечні діагностичні response headers — без Set-Cookie.
-      - name: Check Viatec login (GitHub Actions egress)
+      - name: Check Viatec homepage (GitHub Actions egress)
         run: |
-          echo "=== Viatec /login (без логіну) ==="
+          echo "=== Viatec / (без логіну) ==="
           HEADERS_FILE="$(mktemp)"
           trap 'rm -f "${HEADERS_FILE}"' EXIT
 
@@ -31,7 +32,7 @@ jobs:
             -H "Connection: keep-alive" \
             -H "Upgrade-Insecure-Requests: 1" \
             --dump-header "${HEADERS_FILE}" --output /dev/null --write-out "%{http_code}" \
-            "https://viatec.ua/login"); then
+            "https://viatec.ua/"); then
             echo "❌ Не вдалося з'єднатися з viatec.ua (curl error)"
             exit 0
           fi
@@ -43,10 +44,10 @@ jobs:
 
           case "${CODE}" in
             200)
-              echo "✅ /login доступний з цього GitHub runner"
+              echo "✅ Головна Viatec доступна з цього GitHub runner"
               ;;
             403)
-              echo "❌ /login заблокований для цього GitHub runner — імовірно WAF/IP policy"
+              echo "❌ Головна Viatec заблокована для цього GitHub runner — імовірно WAF/IP policy"
               ;;
             *)
               echo "⚠️ Неочікувана відповідь Viatec: HTTP ${CODE}"
@@ -152,8 +153,8 @@ jobs:
           echo ""
           echo "════════════════════════════════════════════════════"
           echo "Ключові питання після тесту:"
-          echo "  1. Viatec /login — 403? → GitHub runner блокується до авторизації"
-          echo "     Viatec /login — 200? → порівнюємо Scrapy/TLS profile, а не cookies"
+          echo "  1. Viatec / — 403? → GitHub runner блокується до авторизації"
+          echo "     Viatec / — 200? → перевіряємо оновлений AJAX-вхід паука"
           echo "  2. Сторінка товару — 200? → Playwright працює чи ні"
           echo "  3. Старі фіди — 403? → Cloudflare блокує (очікується)"
           echo "  4. Нові фіди UA + RU — 200? → токен працює з GitHub Actions"
