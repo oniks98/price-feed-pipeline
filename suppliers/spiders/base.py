@@ -418,7 +418,24 @@ class ViatecBaseSpider(BaseSupplierSpider):
     def handle_partner_login_error(self, failure: Any) -> None:
         response = getattr(getattr(failure, "value", None), "response", None)
         status = getattr(response, "status", "network error")
-        self.mark_partner_login_failure(f"Viatec authentication request failed: HTTP {status}")
+        diagnostics = self._login_error_diagnostics(response)
+        self.mark_partner_login_failure(
+            f"Viatec authentication request failed: HTTP {status}{diagnostics}"
+        )
+
+    @staticmethod
+    def _login_error_diagnostics(response: Any) -> str:
+        """Return only safe routing diagnostics from a rejected login response."""
+        if response is None:
+            return ""
+
+        safe_headers = (b"server", b"cf-ray", b"cf-mitigated", b"content-type")
+        details = []
+        for name in safe_headers:
+            value = response.headers.get(name)
+            if value:
+                details.append(f"{name.decode()}={value.decode('utf-8', 'replace')}")
+        return f" ({', '.join(details)})" if details else ""
 
     def mark_partner_login_failure(self, reason: str) -> None:
         if self._partner_login_failed:

@@ -137,6 +137,29 @@ def write_status(supplier_name: str, status: str) -> None:
         print(f"⚠️  Не вдалося записати статус: {e}")
 
 
+def finalize_run(supplier_name: str, output_file: str, crawler_exit_code: int | None) -> int:
+    """Write the final supplier status after Scrapy has stopped.
+
+    ``scrapy.cmdline.execute`` exits by raising ``SystemExit(0)`` even when a
+    crawl itself completed normally.  Keeping the decision here ensures a
+    critical status written by a spider is never overwritten with ``success``.
+    """
+    if crawler_exit_code not in (None, 0):
+        print("\n❌ Spider завершився з помилками")
+        write_status(supplier_name, "failure")
+        return 1
+
+    if RunStatusService.has_failed(PROJECT_ROOT, supplier_name):
+        print("\n❌ Spider завершився з критичною помилкою")
+        write_status(supplier_name, "failure")
+        return 1
+
+    print("\n✅ Spider виконано успішно")
+    print(f"📄 Результат збережено в: data/output/{output_file}")
+    write_status(supplier_name, "success")
+    return 0
+
+
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("❌ Використання: python scripts/ultra_clean_run.py <spider_name>")
@@ -159,26 +182,14 @@ if __name__ == '__main__':
     supplier_name = spider_name.split("_")[0]
     RunStatusService.clear(PROJECT_ROOT, supplier_name)
 
+    crawler_exit_code: int | None = 0
     try:
         execute()
-        if RunStatusService.has_failed(PROJECT_ROOT, supplier_name):
-            print("\n❌ Spider завершився з критичною помилкою")
-            write_status(supplier_name, "failure")
-            sys.exit(1)
-        print("\n✅ Spider виконано успішно")
-        print(f"📄 Результат збережено в: data/output/{output_file}")
-        write_status(supplier_name, "success")
-        sys.exit(0)
-    except SystemExit as e:
-        if e.code == 0:
-            print("\n✅ Spider виконано успішно")
-            print(f"📄 Результат збережено в: data/output/{output_file}")
-            write_status(supplier_name, "success")
-        else:
-            print("\n❌ Spider завершився з помилками")
-            write_status(supplier_name, "failure")
-        sys.exit(e.code)
+    except SystemExit as error:
+        crawler_exit_code = error.code
     except Exception as e:
         print(f"❌ ПОМИЛКА ПРИ ЗАПУСКУ SPIDER: {e}")
         write_status(supplier_name, "failure")
         sys.exit(1)
+
+    sys.exit(finalize_run(supplier_name, output_file, crawler_exit_code))

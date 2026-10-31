@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import parse_qs
 
 from scrapy.http import HtmlResponse, TextResponse
@@ -73,6 +74,32 @@ class ViatecPartnerAuthTests(unittest.TestCase):
 
                 self.assertTrue(
                     RunStatusService.has_failed(Path(temp_dir), "viatec")
+                )
+            finally:
+                if previous_root is None:
+                    os.environ.pop("PROJECT_ROOT", None)
+                else:
+                    os.environ["PROJECT_ROOT"] = previous_root
+
+    def test_http_error_marks_run_failed_and_keeps_safe_cloudflare_diagnostics(self) -> None:
+        with tempfile.TemporaryDirectory(dir=Path.cwd() / "tmp") as temp_dir:
+            previous_root = os.environ.get("PROJECT_ROOT")
+            os.environ["PROJECT_ROOT"] = temp_dir
+            try:
+                response = TextResponse(
+                    url="https://viatec.ua/login",
+                    status=403,
+                    headers={b"Server": b"cloudflare", b"CF-Ray": b"test-ray"},
+                )
+
+                self.spider.handle_partner_login_error(
+                    SimpleNamespace(value=SimpleNamespace(response=response))
+                )
+
+                self.assertTrue(RunStatusService.has_failed(Path(temp_dir), "viatec"))
+                self.assertEqual(
+                    self.spider._login_error_diagnostics(response),
+                    " (server=cloudflare, cf-ray=test-ray)",
                 )
             finally:
                 if previous_root is None:
