@@ -44,6 +44,10 @@ jobs:
     # Other suppliers keep using disposable GitHub-hosted runners.
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 175
+    # The scraper only checks out source code and reads data-latest.
+    # Publishing remains isolated in process-and-publish with contents: write.
+    permissions:
+      contents: read
 
     strategy:
       fail-fast: false
