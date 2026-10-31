@@ -40,7 +40,9 @@ jobs:
   # ═══════════════════════════════════════════════════════════
   scrape:
     name: Spider — ${{ matrix.supplier }}
-    runs-on: ubuntu-latest
+    # viatec-vps is a unique custom label on the repository self-hosted runner.
+    # Other suppliers keep using disposable GitHub-hosted runners.
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 175
 
     strategy:
@@ -49,18 +51,21 @@ jobs:
         include:
           - supplier: viatec
             spider: viatec_dealer
+            runner: viatec-vps
             timeout_minutes: 120
             max_attempts: 2
             retry_wait: 30
 
           - supplier: secur
             spider: secur_feed
+            runner: ubuntu-latest
             timeout_minutes: 15
             max_attempts: 2
             retry_wait: 30
 
           - supplier: lp
             spider: lp_api
+            runner: ubuntu-latest
             timeout_minutes: 15
             max_attempts: 2
             retry_wait: 30
