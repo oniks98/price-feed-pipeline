@@ -29,6 +29,8 @@ PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from suppliers.services.run_status_service import RunStatusService
+
 # Встановлюємо environment variables ДО всього
 os.environ['SCRAPY_SETTINGS_MODULE'] = 'suppliers.settings'
 
@@ -155,9 +157,14 @@ if __name__ == '__main__':
     sys.argv = ['scrapy', 'crawl', spider_name] + extra_args
 
     supplier_name = spider_name.split("_")[0]
+    RunStatusService.clear(PROJECT_ROOT, supplier_name)
 
     try:
         execute()
+        if RunStatusService.has_failed(PROJECT_ROOT, supplier_name):
+            print("\n❌ Spider завершився з критичною помилкою")
+            write_status(supplier_name, "failure")
+            sys.exit(1)
         print("\n✅ Spider виконано успішно")
         print(f"📄 Результат збережено в: data/output/{output_file}")
         write_status(supplier_name, "success")

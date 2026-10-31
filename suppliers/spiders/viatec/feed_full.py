@@ -137,39 +137,9 @@ class ViatecFeedFullSpider(ViatecBaseSpider, BaseDealerSpider):
     # ------------------------------------------------------------------ #
 
     async def start(self):
-        yield scrapy.Request(
-            "https://viatec.ua/login",
-            callback=self.parse_login_page,
-            dont_filter=True,
-        )
-
-    def parse_login_page(self, response):
-        csrf = response.css("input[name=_token]::attr(value)").get()
-        if not csrf:
-            self.logger.error("Не знайдено CSRF (_token) на сторінці логіну!")
-            return
-        self.logger.info(f"Знайдено CSRF: {csrf}")
-        yield scrapy.FormRequest(
-            url="https://viatec.ua/login",
-            method="POST",
-            formdata={
-                "_token": csrf,
-                "email": self.email,
-                "password": self.password,
-            },
-            callback=self.after_login,
-            dont_filter=True,
-        )
+        yield self.start_partner_login(self.after_login)
 
     def after_login(self, response):
-        if b"viatec_session" not in b" ".join(
-            response.headers.getlist("Set-Cookie")
-        ):
-            self.logger.error("Авторизація не виконана!")
-            return
-
-        self.logger.info("✅ УСПІШНИЙ ЛОГІН")
-
         # USD курс береться з фіду (вже розпарсений при старті сервісу)
         if self.feed_service.usd_rate is not None:
             self.usd_rate = self.feed_service.usd_rate

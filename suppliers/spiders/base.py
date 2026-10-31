@@ -3,10 +3,13 @@
 Мінімізує дублювання коду та забезпечує уніфікований підхід.
 """
 import scrapy
+import os
 import re
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Any, Callable, Optional, Dict, List
 from parsel import Selector
+
+from suppliers.services.run_status_service import RunStatusService
 
 
 class BaseSupplierSpider(scrapy.Spider):
@@ -340,11 +343,91 @@ class ViatecBaseSpider(BaseSupplierSpider):
     """Базовий клас для пауків Viatec (загальна логіка для retail і dealer)"""
     
     allowed_domains = ["viatec.ua"]
+    PARTNER_LOGIN_PAGE_URL = "https://viatec.ua/"
+    PARTNER_LOGIN_URL = "https://viatec.ua/login"
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.category_urls = []
         self.products_from_pagination = []
+        self._partner_login_failed = False
+
+    def start_partner_login(
+        self,
+        on_authenticated: Callable[[scrapy.http.Response], Any],
+    ) -> scrapy.Request:
+        """Start Viatec's current browser-equivalent partner authentication flow."""
+        return scrapy.Request(
+            self.PARTNER_LOGIN_PAGE_URL,
+            callback=self.parse_partner_login_page,
+            errback=self.handle_partner_login_error,
+            cb_kwargs={"on_authenticated": on_authenticated},
+            dont_filter=True,
+        )
+
+    def parse_partner_login_page(
+        self,
+        response: scrapy.http.Response,
+        on_authenticated: Callable[[scrapy.http.Response], Any],
+    ) -> scrapy.FormRequest | None:
+        """Read CSRF from the homepage and submit the same AJAX request as the site."""
+        csrf_token = response.css("meta[name='csrf-token']::attr(content)").get()
+        if not csrf_token:
+            self.mark_partner_login_failure("CSRF token is absent from Viatec homepage")
+            return None
+
+        return scrapy.FormRequest(
+            url=self.PARTNER_LOGIN_URL,
+            method="POST",
+            formdata={"email": self.email, "password": self.password},
+            headers={
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Origin": "https://viatec.ua",
+                "Referer": response.url,
+                "X-CSRF-TOKEN": csrf_token,
+                "X-Requested-With": "XMLHttpRequest",
+            },
+            callback=self.parse_partner_login_response,
+            errback=self.handle_partner_login_error,
+            cb_kwargs={"on_authenticated": on_authenticated},
+            dont_filter=True,
+        )
+
+    def parse_partner_login_response(
+        self,
+        response: scrapy.http.Response,
+        on_authenticated: Callable[[scrapy.http.Response], Any],
+    ) -> Any:
+        """Accept only Viatec's explicit JSON success response before scraping."""
+        try:
+            payload = response.json()
+        except ValueError:
+            self.mark_partner_login_failure(
+                f"Viatec login returned non-JSON HTTP {response.status}"
+            )
+            return None
+
+        if not isinstance(payload, dict) or payload.get("status") != "success":
+            status = payload.get("status", "missing") if isinstance(payload, dict) else "invalid"
+            self.mark_partner_login_failure(f"Viatec rejected partner login (status={status})")
+            return None
+
+        self.logger.info("✅ УСПІШНИЙ ЛОГІН")
+        return on_authenticated(response)
+
+    def handle_partner_login_error(self, failure: Any) -> None:
+        response = getattr(getattr(failure, "value", None), "response", None)
+        status = getattr(response, "status", "network error")
+        self.mark_partner_login_failure(f"Viatec authentication request failed: HTTP {status}")
+
+    def mark_partner_login_failure(self, reason: str) -> None:
+        if self._partner_login_failed:
+            return
+
+        self._partner_login_failed = True
+        self.logger.error("❌ Авторизація Viatec не виконана: %s", reason)
+        project_root = Path(os.environ.get("PROJECT_ROOT", Path.cwd()))
+        RunStatusService.mark_failure(project_root, self.supplier_id)
     
     def _extract_description_with_br(self, response) -> str:
         """
