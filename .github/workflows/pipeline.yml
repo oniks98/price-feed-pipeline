@@ -899,7 +899,9 @@ jobs:
           key: playwright-${{ runner.os }}
 
       - name: Install Playwright browsers
-        run: playwright install chromium --with-deps
+        # The self-hosted runner does not grant passwordless sudo. System packages
+        # are managed on the VPS; Playwright only needs its pinned Chromium here.
+        run: playwright install chromium
 
       - name: Run Epicenter import
         run: python scripts/epicenter_import_feed.py
