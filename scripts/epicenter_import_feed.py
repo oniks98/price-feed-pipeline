@@ -29,12 +29,21 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
+from dataclasses import dataclass, field
 import logging
 import os
 import sys
 from pathlib import Path
 
-from playwright.sync_api import Page, TimeoutError as PWTimeout, sync_playwright
+from playwright.sync_api import (
+    ConsoleMessage,
+    Page,
+    Request,
+    Response,
+    TimeoutError as PWTimeout,
+    sync_playwright,
+)
 
 # ---------------------------------------------------------------------------
 # Конфігурація
@@ -54,6 +63,7 @@ PAGE_TIMEOUT_MS  = 30_000   # загальний таймаут Playwright
 NAV_TIMEOUT_MS   = 15_000   # таймаут навігаційних переходів
 POST_IMPORT_MS   = 2_000    # пауза після кліку «Імпортувати» перед перевіркою
 SUCCESS_WAIT_MS  = 5_000    # додатковий таймаут очікування тегу підтвердження
+DIAGNOSTIC_EVENT_LIMIT = 30
 
 # Epicenter інколи обробляє попередній імпорт понад 2 год — віджет статусу
 # лишається на сторінці й блокує кнопку «Імпортувати». Чекаємо звільнення
@@ -71,10 +81,10 @@ IMPORT_BUSY_MAX_WAIT_MS = int(
 BUSY_CHECK_POLL_ATTEMPTS     = 3
 BUSY_CHECK_POLL_INTERVAL_MS  = 1_000
 
-# Селектори — стабільні атрибути, незалежні від динамічних Angular ID
-SEL_EMAIL_INPUT    = 'input[placeholder="E-mail або номер телефону"]'
-SEL_PASSWORD_INPUT = 'input[placeholder="Пароль"]'
-SEL_SUBMIT_BTN     = 'button[type="submit"]'
+# Селектори — test-id з поточної форми Epicenter, незалежні від тексту та Angular ID.
+SEL_EMAIL_INPUT    = '[data-testid="auth-login-identifier"] input'
+SEL_PASSWORD_INPUT = '[data-testid="auth-login-password"] input'
+SEL_SUBMIT_BTN     = '[data-testid="auth-login-submit"] button'
 SEL_TOVARY_LINK    = 'a[href="/pim/product"]'
 SEL_IMPORT_LINK    = 'a[href="/pim/product-import"]'
 SEL_RADIO_LINK     = 'input[value="link"]'
@@ -104,6 +114,24 @@ class ImportStillBusy(Exception):
     (кнопка «Імпортувати» лишилась disabled). Це не помилка автоматизації,
     а сигнал для graceful skip у main().
     """
+
+
+@dataclass
+class PageDiagnostics:
+    """Обмежений буфер подій браузера для діагностики помилок авторизації."""
+
+    console_messages: deque[str] = field(
+        default_factory=lambda: deque(maxlen=DIAGNOSTIC_EVENT_LIMIT)
+    )
+    page_errors: deque[str] = field(
+        default_factory=lambda: deque(maxlen=DIAGNOSTIC_EVENT_LIMIT)
+    )
+    failed_requests: deque[str] = field(
+        default_factory=lambda: deque(maxlen=DIAGNOSTIC_EVENT_LIMIT)
+    )
+    failed_responses: deque[str] = field(
+        default_factory=lambda: deque(maxlen=DIAGNOSTIC_EVENT_LIMIT)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -145,13 +173,79 @@ def _get_credentials() -> tuple[str, str]:
 # Playwright-кроки
 # ---------------------------------------------------------------------------
 
-def _login(page: Page, email: str, password: str) -> None:
+def _attach_page_diagnostics(page: Page) -> PageDiagnostics:
+    """Підключає обмежені буфери console, JS та мережевих помилок до сторінки."""
+    diagnostics = PageDiagnostics()
+
+    def record_console(message: ConsoleMessage) -> None:
+        if message.type in {"error", "warning"}:
+            diagnostics.console_messages.append(f"{message.type}: {message.text}")
+
+    def record_page_error(error: Exception) -> None:
+        diagnostics.page_errors.append(str(error))
+
+    def record_failed_request(request: Request) -> None:
+        failure = request.failure or "unknown failure"
+        diagnostics.failed_requests.append(
+            f"{request.resource_type}: {request.url} ({failure})"
+        )
+
+    def record_failed_response(response: Response) -> None:
+        if response.status >= 400:
+            diagnostics.failed_responses.append(
+                f"HTTP {response.status} {response.request.resource_type}: {response.url}"
+            )
+
+    page.on("console", record_console)
+    page.on("pageerror", record_page_error)
+    page.on("requestfailed", record_failed_request)
+    page.on("response", record_failed_response)
+    return diagnostics
+
+
+def _log_login_diagnostics(page: Page, diagnostics: PageDiagnostics) -> None:
+    """Логує стан сторінки до введення credentials, не зберігаючи її вміст."""
+    try:
+        log.error(
+            "Діагностика логіну | url=%s | title=%r | readyState=%s | email_inputs=%d",
+            page.url,
+            page.title(),
+            page.evaluate("document.readyState"),
+            page.locator(SEL_EMAIL_INPUT).count(),
+        )
+        for label, events in (
+            ("console", diagnostics.console_messages),
+            ("pageerror", diagnostics.page_errors),
+            ("requestfailed", diagnostics.failed_requests),
+            ("http_error", diagnostics.failed_responses),
+        ):
+            for event in events:
+                log.error("Діагностика логіну [%s]: %s", label, event)
+    except Exception:
+        log.exception("Не вдалося зібрати діагностику сторінки логіну")
+
+
+def _login(
+    page: Page,
+    email: str,
+    password: str,
+    diagnostics: PageDiagnostics,
+) -> None:
     """Авторизація: заповнення форми + клік «Увійти»."""
     log.info("Перехід на сторінку авторизації")
-    page.goto(LOGIN_URL, timeout=PAGE_TIMEOUT_MS, wait_until="domcontentloaded")
+    response = page.goto(LOGIN_URL, timeout=PAGE_TIMEOUT_MS, wait_until="domcontentloaded")
+    log.info(
+        "Сторінка авторизації завантажена: HTTP %s | URL: %s",
+        response.status if response else "n/a",
+        page.url,
+    )
 
     email_input = page.locator(SEL_EMAIL_INPUT)
-    email_input.wait_for(state="visible", timeout=PAGE_TIMEOUT_MS)
+    try:
+        email_input.wait_for(state="visible", timeout=PAGE_TIMEOUT_MS)
+    except PWTimeout:
+        _log_login_diagnostics(page, diagnostics)
+        raise
     email_input.fill(email)
     log.info("Email введено")
 
@@ -368,8 +462,9 @@ def main() -> None:
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=headless)
         page    = browser.new_page(viewport={"width": 1440, "height": 900})
+        diagnostics = _attach_page_diagnostics(page)
         try:
-            _login(page, email, password)
+            _login(page, email, password, diagnostics)
             _navigate_to_import(page)
 
             if _wait_previous_import_finished(page):
