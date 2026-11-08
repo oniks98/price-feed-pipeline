@@ -868,7 +868,9 @@ jobs:
   # ═══════════════════════════════════════════════════════════
   epicenter-import-feed:
     name: Epicenter Import Feed
-    runs-on: ubuntu-latest
+    # Використовуємо той самий self-hosted runner, що й Viatec spider:
+    # Epicenter бачить статичний IP TENET замість динамічного GitHub-hosted IP.
+    runs-on: viatec-vps
     needs: [publish-feeds]
     # publish-feeds транзитивно залежить від epicenter-feed —
     # окрема пряма залежність не потрібна і ламає UI (job виноситься в окрему колонку).
