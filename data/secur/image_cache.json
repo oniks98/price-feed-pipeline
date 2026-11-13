@@ -6803,5 +6803,10 @@
     "w": 1122,
     "h": 1402,
     "transform_url": null
+  },
+  "https://content.secur.ua/products/5XiJH9RkdsdybAGyY3SfcQfGnB3iSVjP2BhJreab.png": {
+    "w": 2671,
+    "h": 1008,
+    "transform_url": "https://wsrv.nl/?url=https%3A%2F%2Fcontent.secur.ua%2Fproducts%2F5XiJH9RkdsdybAGyY3SfcQfGnB3iSVjP2BhJreab.png&w=640&h=640&fit=contain&bg=white&cbg=white&output=jpg&q=90"
   }
 }
