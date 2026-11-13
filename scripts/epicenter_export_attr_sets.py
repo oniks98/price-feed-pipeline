@@ -42,6 +42,9 @@ HEADERS   = {
     "Authorization": f"Bearer {API_TOKEN}",
     "Content-Type": "application/json",
     "Accept": "application/json",
+    # Epicentr's CDN can occasionally return an invalid Brotli stream.  Keep
+    # compression enabled, but request encodings that requests handles reliably.
+    "Accept-Encoding": "gzip, deflate",
 }
 
 ROOT        = Path(__file__).parents[1]
